@@ -1,0 +1,762 @@
+﻿{
+    "video_id":  "MCxLovE6EdA",
+    "video_url":  "https://www.youtube.com/watch?v=MCxLovE6EdA",
+    "subject":  "Vatanda┼şl─▒k",
+    "cached":  false,
+    "notes":  [
+                  {
+                      "id":  "note_1",
+                      "title":  "Yaz─▒l─▒ ve Yaz─▒s─▒z Kurallar",
+                      "text":  "Yaz─▒l─▒ kurallar, kanun ve mevzu gibi resmi metinlerde yer al─▒r. Yaz─▒s─▒z kurallar ise ├Ârf, adet ve gelenek gibi toplumsal normlard─▒r. Pozitif hukuk, her iki t├╝r├╝ de i├ğerir. Yaz─▒l─▒ kurallar eksikse, bo┼şluk t├╝rleri ortaya ├ğ─▒kar.",
+                      "key_points":  [
+                                         "Yaz─▒l─▒ = kanun, mevzu",
+                                         "Yaz─▒s─▒z = ├Ârf, adet",
+                                         "Her ikisi pozitif hukukun par├ğas─▒"
+                                     ],
+                      "mnemonic":  "YAZILI = YAZI i├ğinde \"LI\" (Legal), YAZISIZ = \"SIZ\" (Sans) yani resmi olmadan.",
+                      "exam_tip":  "├ûSYM, yaz─▒l─▒ kurallar─▒n eksik oldu─şu durumlarda sadece yaz─▒s─▒z kurallar─▒n ge├ğerli oldu─şunu varsayabilir; bo┼şluklar─▒ unutma.",
+                      "timestamp":  1345,
+                      "timestamp_label":  "22:25",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1345s"
+                  },
+                  {
+                      "id":  "note_2",
+                      "title":  "Pozitif Hukuk ve Mevzu Hukuku",
+                      "text":  "Pozitif hukuk, yaz─▒l─▒ ve yaz─▒s─▒z kurallar─▒ kapsayan geni┼ş bir kavramd─▒r. Mevzu hukuku ise yaln─▒zca yaz─▒l─▒ kurallar─▒ i├ğerir. Pozitif hukuk i├ğinde mevzu hukuku bir alt k├╝me olarak yer al─▒r. Yaz─▒l─▒ kurallar─▒n d─▒┼ş─▒ndaki ├Ârf ve adetler de pozitif hukukun bir par├ğas─▒d─▒r.",
+                      "key_points":  [
+                                         "Pozitif hukuk = yaz─▒l─▒ + yaz─▒s─▒z kurallar",
+                                         "Mevzu hukuku = sadece yaz─▒l─▒ kurallar",
+                                         "├ûrf adetler pozitif hukuka dahildir"
+                                     ],
+                      "mnemonic":  "POZ─░T─░F = \"POZ─░T─░F\" (Pozitif) + \"YAZILI+YAZISIZ\" (Pozitif) ÔåÆ Pozitif i├ğinde Yaz─▒l─▒+Yaz─▒s─▒z.",
+                      "exam_tip":  "├ûSYM, pozitif hukuk ile sadece mevzu hukuku aras─▒ndaki fark─▒ sorarken \"yaz─▒s─▒z\" k─▒sm─▒n─▒ unutabilir, bu y├╝zden ikisini net ay─▒r.",
+                      "timestamp":  1356,
+                      "timestamp_label":  "22:36",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1356s"
+                  },
+                  {
+                      "id":  "note_3",
+                      "title":  "Tarih Hukuku (Ge├ğmi┼şte Kalan)",
+                      "text":  "Ge├ğmi┼şte y├╝r├╝rl├╝kten kalkm─▒┼ş, ├Ârne─şin 61 anayasas─▒ gibi, art─▒k uygulanmayan kurallar tarih hukukunu olu┼şturur. Bu kurallar yaz─▒l─▒d─▒r ancak ge├ğerliliklerini yitirmi┼ştir. Tarih hukuku, ideal hukukun bir par├ğas─▒ olarak kabul edilir.",
+                      "key_points":  [
+                                         "61 anayasas─▒ = tarih hukuku ├Ârne─şi",
+                                         "Yaz─▒l─▒ ama y├╝r├╝rl├╝kte de─şil",
+                                         "─░deal hukuk i├ğinde yer al─▒r"
+                                     ],
+                      "mnemonic":  "TAR─░H = \"TA\" (Tarih) + \"R─░H\" (R─▒ht─▒m) ÔåÆ R─▒ht─▒mda eski gemi gibi kal─▒r.",
+                      "exam_tip":  "├ûSYM, tarih hukukunu h├ólen ge├ğerli gibi sorabilir; tarihsel ge├ğerlili─şini kontrol et.",
+                      "timestamp":  1382,
+                      "timestamp_label":  "23:02",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1382s"
+                  },
+                  {
+                      "id":  "note_4",
+                      "title":  "─░deal ve Do─şal Hukuk",
+                      "text":  "─░deal hukuk, herkesin ya┼şama hakk─▒, d├╝┼ş├╝nce ve din ├Âzg├╝rl├╝─ş├╝ gibi olmas─▒ gereken kurallar─▒ ifade eder. Do─şal hukuk ise bu ideal kurallar─▒n do─şadan ve insan do─şas─▒ndan t├╝redi─şini savunur. ─░deal hukuk, pozitif hukukun eksiklerini tamamlayan normlard─▒r.",
+                      "key_points":  [
+                                         "─░deal = ya┼şama, d├╝┼ş├╝nce, din ├Âzg├╝rl├╝─ş├╝",
+                                         "Do─şal = insan do─şas─▒ndan kaynaklan─▒r",
+                                         "Pozitif hukukun eksiklerini doldurur"
+                                     ],
+                      "mnemonic":  "─░DEAL = \"─░DEAl\" (─░dealar) ÔåÆ Hayalindeki en iyi hukuk.",
+                      "exam_tip":  "├ûSYM, ideal hukuku do─şal hukukla kar─▒┼şt─▒rabilir; iki kavram─▒n kayna─ş─▒n─▒ ay─▒rt et.",
+                      "timestamp":  1409,
+                      "timestamp_label":  "23:29",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1409s"
+                  },
+                  {
+                      "id":  "note_5",
+                      "title":  "Bo┼şluk T├╝rleri Genel",
+                      "text":  "Hukukta kurallar─▒n eksik oldu─şu durumlar bo┼şluk olarak adland─▒r─▒l─▒r. Bo┼şluklar d├Ârt ana tipe ayr─▒l─▒r: kanun bo┼şlu─şu, kural i├ği bo┼şluk, ├Ârt├╝l├╝ bo┼şluk ve hukuk bo┼şlu─şu. Her bir bo┼şluk t├╝r├╝ farkl─▒ bir ├ğ├Âz├╝m yolu gerektirir.",
+                      "key_points":  [
+                                         "4 bo┼şluk tipi",
+                                         "Her tip farkl─▒ ├ğ├Âz├╝m yolu",
+                                         "Bo┼şluk = kural eksikli─şi"
+                                     ],
+                      "mnemonic":  "BO┼ŞLUK = \"B\" (B├╝y├╝k) + \"O┼Ş\" (O ┼Şekilde) ÔåÆ B├╝y├╝k O ┼Şekilde eksik.",
+                      "exam_tip":  "├ûSYM, bo┼şluk tiplerini kar─▒┼şt─▒rarak sorabilir; tipin tan─▒m─▒n─▒ net hat─▒rla.",
+                      "timestamp":  1428,
+                      "timestamp_label":  "23:48",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1428s"
+                  },
+                  {
+                      "id":  "note_6",
+                      "title":  "Kanun Bo┼şlu─şu",
+                      "text":  "Yaz─▒l─▒ kurallarda bir bo┼şluk oldu─şunda, yani kanunda ilgili konuya dair h├╝k├╝m bulunmad─▒─ş─▒nda kanun bo┼şlu─şu ortaya ├ğ─▒kar. Bu durum genellikle meclisin bilerek bo┼ş b─▒rakmas─▒yla olu┼şur. Hakim, en uygun mevcut maddeye at─▒f yapar.",
+                      "key_points":  [
+                                         "Yaz─▒l─▒ kurallarda eksik h├╝k├╝m",
+                                         "Meclisin bilerek bo┼ş b─▒rakmas─▒",
+                                         "Hakim at─▒f yapar"
+                                     ],
+                      "mnemonic":  "KANUN = \"KAN\" (Kan) + \"UN\" (Unut) ÔåÆ Kan unutulmu┼ş gibi.",
+                      "exam_tip":  "├ûSYM, kanun bo┼şlu─şunu \"kural i├ği bo┼şluk\" sanabilir; bilerek bo┼ş b─▒rak─▒lan─▒ hat─▒rla.",
+                      "timestamp":  1440,
+                      "timestamp_label":  "24:00",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1440s"
+                  },
+                  {
+                      "id":  "note_7",
+                      "title":  "Kural ─░├ği Bo┼şluk",
+                      "text":  "Meclisin bilerek bir konuyu d├╝zenlemedi─şi ve mevcut kurallar i├ğinde bir bo┼şluk b─▒rakt─▒─ş─▒ durum kural i├ği bo┼şluk olarak adland─▒r─▒l─▒r. ├ûrne─şin evlilik sebepleri kanunda var, ancak ni┼şanl─▒k sebepleri yoktur. Hakim, ilgili bo┼şlu─şa en uygun maddeyi at─▒f eder.",
+                      "key_points":  [
+                                         "Bilerek bo┼ş b─▒rak─▒lan konu",
+                                         "Evlilik vs ni┼şanl─▒k ├Ârne─şi",
+                                         "Hakim en uygun maddeyi se├ğer"
+                                     ],
+                      "mnemonic":  "KURAL = \"K\" (Kapsar) + \"URAL\" (Ural) ÔåÆ UralÔÇÖda bo┼şluk var.",
+                      "exam_tip":  "├ûSYM, kural i├ği bo┼şlu─şu kanun bo┼şlu─şuyla kar─▒┼şt─▒rabilir; ├Ârnekle ay─▒rt et.",
+                      "timestamp":  1453,
+                      "timestamp_label":  "24:13",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1453s"
+                  },
+                  {
+                      "id":  "note_8",
+                      "title":  "├ûrt├╝l├╝ Bo┼şluk",
+                      "text":  "Yaz─▒l─▒ kurallar mevcut ama uygulanabilir olmad─▒─ş─▒ durumlarda ortaya ├ğ─▒kan bo┼şluk ├Ârt├╝l├╝ bo┼şluk olarak adland─▒r─▒l─▒r. ├ûrne─şin bir otelin e┼şyay─▒ 100 lira ile sorumlulu─şu, g├╝ncel ko┼şullara uymad─▒─ş─▒nda bu bir ├Ârt├╝l├╝ bo┼şluktur. Bu bo┼şluk, kural─▒n g├╝ncellenmesiyle giderilir.",
+                      "key_points":  [
+                                         "Kural var ama uygulanamaz",
+                                         "├ûrnek: otel sorumlulu─şu 100 TL",
+                                         "G├╝ncelleme gerekir"
+                                     ],
+                      "mnemonic":  "├ûRT├£L├£ = \"├ûR\" (├ûrnek) + \"T├£L├£\" (T├╝l├╝) ÔåÆ ├ûrnek t├╝l├╝ gibi gizli.",
+                      "exam_tip":  "├ûSYM, ├Ârt├╝l├╝ bo┼şlu─şu \"kural i├ği bo┼şluk\" sanabilir; kural─▒n varl─▒─ş─▒n─▒ ama uygulanamazl─▒─ş─▒n─▒ vurgula.",
+                      "timestamp":  1558,
+                      "timestamp_label":  "25:58",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1558s"
+                  },
+                  {
+                      "id":  "note_9",
+                      "title":  "Hukuk Bor├ğlu─şu",
+                      "text":  "Hem yaz─▒l─▒ hem de yaz─▒s─▒z kurallarda bo┼şluk oldu─şunda hukuk bor├ğlu─şu ortaya ├ğ─▒kar. Bu durumda hakim, mevcut bo┼şluklar─▒ doldurmak i├ğin takdir yetkisini kullan─▒r. Hukuk bor├ğlu─şu, hukuk bo┼şlu─şu olarak da adland─▒r─▒l─▒r.",
+                      "key_points":  [
+                                         "Yaz─▒l─▒ + yaz─▒s─▒zda bo┼şluk",
+                                         "Takdir yetkisiyle doldurulur",
+                                         "Hukuk bo┼şlu─şu = hukuk bor├ğlu─şu"
+                                     ],
+                      "mnemonic":  "BOR├ç = \"BO\" (Bo┼ş) + \"R├ç\" (R├ğ) ÔåÆ Bo┼şluk R├ğ gibi.",
+                      "exam_tip":  "├ûSYM, hukuk bor├ğlu─şunu sadece yaz─▒l─▒ bo┼şlukla e┼şle┼ştirebilir; iki y├Ânl├╝ eksikli─şi hat─▒rla.",
+                      "timestamp":  1600,
+                      "timestamp_label":  "26:40",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1600s"
+                  },
+                  {
+                      "id":  "note_10",
+                      "title":  "Hukuk Yaratma (Hakim)",
+                      "text":  "Bo┼şluk bulundu─şunda hakim, i├ğtihat, doktrin ve ├Ânceki kararlar ─▒┼ş─▒─ş─▒nda yeni hukuk yarat─▒r. Bu s├╝re├ğ takdir yetkisiyle y├╝r├╝t├╝l├╝r. Olu┼şturulan hukuk, bo┼şlu─şu doldurur ve uygulanabilir hale getirir.",
+                      "key_points":  [
+                                         "─░├ğtihat, doktrin kaynak",
+                                         "Takdir yetkisiyle yarat─▒l─▒r",
+                                         "Bo┼şluk doldurulur"
+                                     ],
+                      "mnemonic":  "YARAT = \"YA\" (Yasa) + \"RAT\" (Rattan) ÔåÆ Yasa rattan gibi ┼şekillenir.",
+                      "exam_tip":  "├ûSYM, hakim yarat─▒m─▒n─▒ sadece i├ğtihatla s─▒n─▒rlayabilir; doktrin de kayna─ş─▒n─▒ unutma.",
+                      "timestamp":  1619,
+                      "timestamp_label":  "26:59",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1619s"
+                  },
+                  {
+                      "id":  "note_11",
+                      "title":  "Kaynaklar: ─░├ğtihat ve Doktrin",
+                      "text":  "Hakimin hukuk yarat─▒rken ba┼şvurdu─şu iki temel kaynak i├ğtihat ve doktrindir. ─░├ğtihat, ├Ânceki mahkeme kararlar─▒n─▒, doktrin ise akademik g├Âr├╝┼şleri kapsar. Bu iki kaynak, bo┼şluk doldurma s├╝recinde rehberlik eder.",
+                      "key_points":  [
+                                         "─░├ğtihat = ├Ânceki kararlar",
+                                         "Doktrin = akademik g├Âr├╝┼şler",
+                                         "Her ikisi de rehber"
+                                     ],
+                      "mnemonic":  "KAYNAK = \"KA\" (Kavram) + \"YNAK\" (Yanak) ÔåÆ Kavram yanak gibi iki tarafl─▒.",
+                      "exam_tip":  "├ûSYM, i├ğtihat─▒ tek ba┼ş─▒na sorabilir; doktrini de hat─▒rlat.",
+                      "timestamp":  1630,
+                      "timestamp_label":  "27:10",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1630s"
+                  },
+                  {
+                      "id":  "note_12",
+                      "title":  "Hukuk Dallar─▒: Kamu, ├ûzel, Karma",
+                      "text":  "Hukuk, kamu g├╝c├╝ var ise kamu hukuku, taraflar e┼şit pozisyonda ise ├Âzel hukuk, ikisinin kar─▒┼ş─▒m─▒ ise karma hukuk olarak s─▒n─▒fland─▒r─▒l─▒r. Bu s─▒n─▒fland─▒rma, hukuki ili┼şki niteli─şine g├Âre yap─▒l─▒r. Her dal─▒n ayr─▒ kurallar─▒ ve uygulama alanlar─▒ vard─▒r.",
+                      "key_points":  [
+                                         "Kamu = devlet g├╝c├╝ var",
+                                         "├ûzel = taraflar e┼şit",
+                                         "Karma = iki dal─▒n birle┼şimi"
+                                     ],
+                      "mnemonic":  "KUKA = \"KU\" (Kamu) + \"KA\" (Karma) ÔåÆ Kuka gibi ├╝├ğ katman.",
+                      "exam_tip":  "├ûSYM, karma hukuku sadece kamu veya ├Âzel olarak s─▒n─▒fland─▒rabilir; iki dal─▒n birle┼şti─şini unutma.",
+                      "timestamp":  1748,
+                      "timestamp_label":  "29:08",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1748s"
+                  },
+                  {
+                      "id":  "note_13",
+                      "title":  "Kamu Hukuku",
+                      "text":  "Kamu hukuku, devletin g├╝c├╝n├╝n do─şrudan m├╝dahalesiyle olu┼şan ili┼şkileri kapsar. ├ûrnek: bir belediye yol yapma karar─▒ al─▒rsa bu kamu hukuku kapsam─▒ndad─▒r. Kamu g├╝c├╝ olmayan, bireysel ili┼şkiler ise ├Âzel hukuk kapsam─▒na girer.",
+                      "key_points":  [
+                                         "Devlet g├╝c├╝ do─şrudan m├╝dahale",
+                                         "Belediye yol yapma ├Ârne─şi",
+                                         "Kamu g├╝c├╝ yoksa ├Âzel"
+                                     ],
+                      "mnemonic":  "KAMU = \"KA\" (Kapsar) + \"MU\" (M├╝cadele) ÔåÆ Devlet m├╝cadelesi.",
+                      "exam_tip":  "├ûSYM, kamu hukukunu sadece devlet kurumlar─▒yla s─▒n─▒rland─▒rabilir; belediye gibi yerel y├Ânetimleri de ekle.",
+                      "timestamp":  1767,
+                      "timestamp_label":  "29:27",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1767s"
+                  },
+                  {
+                      "id":  "note_14",
+                      "title":  "├ûzel Hukuk",
+                      "text":  "Taraflar─▒n e┼şit pozisyonda oldu─şu, devletin do─şrudan m├╝dahalesinin bulunmad─▒─ş─▒ ili┼şkiler ├Âzel hukuk kapsam─▒nda de─şerlendirilir. Evlilik, mal al─▒m sat─▒m─▒ gibi ├Ârnekler ├Âzel hukuk ├Ârnekleridir. E┼şitlik, ├Âzel hukukun temel ay─▒rt edici ├Âzelli─şidir.",
+                      "key_points":  [
+                                         "Taraflar e┼şit",
+                                         "Evlilik, al─▒m sat─▒m ├Ârnek",
+                                         "Devlet m├╝dahalesi yok"
+                                     ],
+                      "mnemonic":  "├ûZEL = \"├ûZ\" (├ûz) + \"EL\" (El) ÔåÆ Elini uzat, e┼şit ol.",
+                      "exam_tip":  "├ûSYM, e┼şitlik ├Âzelli─şini unutup kamu g├╝c├╝n├╝ arayabilir; e┼şitli─şi vurgula.",
+                      "timestamp":  1804,
+                      "timestamp_label":  "30:04",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1804s"
+                  },
+                  {
+                      "id":  "note_15",
+                      "title":  "Karma Hukuk",
+                      "text":  "Karma hukuk, kamu ve ├Âzel hukuk h├╝k├╝mlerinin ayn─▒ olayda bir arada bulundu─şu durumlar─▒ tan─▒mlar. ├ûrne─şin bankac─▒l─▒k i┼şlemlerinde hem ├Âzel hem de kamu hukuku h├╝k├╝mleri ge├ğerlidir. Karma hukuk, gri bir alanda iki dal─▒n birle┼şimidir.",
+                      "key_points":  [
+                                         "Kamu + ├Âzel ayn─▒ olayda",
+                                         "Bankac─▒l─▒k ├Ârne─şi",
+                                         "Gri alan, iki dal birle┼şimi"
+                                     ],
+                      "mnemonic":  "KARMA = \"KA\" (Kavram) + \"RMA\" (Rama) ÔåÆ Kavram rama gibi kar─▒┼ş─▒k.",
+                      "exam_tip":  "├ûSYM, karma hukuku sadece kamu ya da sadece ├Âzel olarak sorabilir; iki dal─▒n bir arada oldu─şunu hat─▒rla.",
+                      "timestamp":  1834,
+                      "timestamp_label":  "30:34",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1834s"
+                  },
+                  {
+                      "id":  "note_16",
+                      "title":  "Ceza Hukuku: Su├ğ ve Ceza",
+                      "text":  "Ceza hukukunda su├ğ ve cezalar mutlaka kanunla belirlenir; idari d├╝zenlemeler bu alana girmez. Kanunilik ilkesi, su├ğ ve cezan─▒n kanunla getirilmesi gerekti─şini vurgular. K─▒yas ilkesinin uygulanmad─▒─ş─▒ bir aland─▒r.",
+                      "key_points":  [
+                                         "Su├ğ ve ceza kanunla",
+                                         "Kanunilik = zorunlu kanun",
+                                         "K─▒yas yok"
+                                     ],
+                      "mnemonic":  "CEZA = \"CE\" (Ceza) + \"ZA\" (Zaman) ÔåÆ Zamanla kanun belirler.",
+                      "exam_tip":  "├ûSYM, su├ğ ve cezay─▒ idari d├╝zenlemelerle kar─▒┼şt─▒rabilir; kanunilik vurgusunu unutma.",
+                      "timestamp":  1870,
+                      "timestamp_label":  "31:10",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1870s"
+                  },
+                  {
+                      "id":  "note_17",
+                      "title":  "Kanunilik ─░lkesi",
+                      "text":  "Kanunilik, su├ğ ve cezan─▒n sadece kanunla konulabilece─şini ifade eder. ─░dari i┼şlemler bu kapsamda de─şerlendirilmez. Bu ilke, ceza hukukunda mutlak bir kurald─▒r.",
+                      "key_points":  [
+                                         "Su├ğ ve ceza sadece kanunla",
+                                         "─░dari i┼şlem d─▒┼ş─▒",
+                                         "Mutlak kural"
+                                     ],
+                      "mnemonic":  "KANUN = \"KA\" (Kapsar) + \"NUN\" (N├╝n) ÔåÆ Kapsar sadece kanun.",
+                      "exam_tip":  "├ûSYM, kanunilik ilkesini idari d├╝zenlemelerle kar─▒┼şt─▒rabilir; sadece kanunla s─▒n─▒rl─▒ oldu─şunu hat─▒rla.",
+                      "timestamp":  1885,
+                      "timestamp_label":  "31:25",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1885s"
+                  },
+                  {
+                      "id":  "note_18",
+                      "title":  "K─▒yas Yasa─ş─▒ (Ceza Hukuku)",
+                      "text":  "Ceza hukukunda ├Ânceki kararlarla k─▒yas yaparak ceza belirlemek yasakt─▒r. Bu, ceza ve su├ğun kanunla sabitlenmesi gerekti─şi ilkesine dayan─▒r. ├ûrne─şin, adam ├Âld├╝rme 20 y─▒l, yaralama 10 y─▒l gibi sabit cezalar uygulan─▒r.",
+                      "key_points":  [
+                                         "K─▒yas yap─▒lamaz",
+                                         "Sabit kanuni cezalar",
+                                         "├ûrnek: 20 y─▒l vs 10 y─▒l"
+                                     ],
+                      "mnemonic":  "K─░YAS = \"KI\" (K─▒) + \"YAS\" (Yas) ÔåÆ K─▒yas yasak!",
+                      "exam_tip":  "├ûSYM, k─▒yas yaparak ceza sorabilir; kural─▒ hat─▒rlay─▒p k─▒yas─▒n yasak oldu─şunu vurgula.",
+                      "timestamp":  1918,
+                      "timestamp_label":  "31:58",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1918s"
+                  },
+                  {
+                      "id":  "note_19",
+                      "title":  "Masumiyet Karinesi",
+                      "text":  "Masumiyet karinesi, su├ğlu oldu─şu ispatlanana kadar herkesin masum oldu─şunu kabul eder. Bu ilke, ceza hukukunda temel bir prensiptir. Su├ğlulu─şun ispat─▒ mahkeme karar─▒yla belirlenir.",
+                      "key_points":  [
+                                         "Su├ğlu ispatlanana kadar masum",
+                                         "Temel ceza hukuku prensibi",
+                                         "Mahkeme karar─▒ gerekir"
+                                     ],
+                      "mnemonic":  "MASUM = \"MA\" (Masum) + \"SUM\" (Sum) ÔåÆ Toplamda masum.",
+                      "exam_tip":  "├ûSYM, masumiyet karinesini kan─▒t y├╝k├╝ml├╝l├╝─ş├╝yle kar─▒┼şt─▒rabilir; ispat y├╝k├╝n├╝n kimde oldu─şunu hat─▒rla.",
+                      "timestamp":  1923,
+                      "timestamp_label":  "32:03",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1923s"
+                  },
+                  {
+                      "id":  "note_20",
+                      "title":  "┼Şahsilik ─░lkesi",
+                      "text":  "Ceza ve su├ğlar ┼şahsidir; yani bir ki┼şi su├ğ i┼şledi─şinde cezas─▒ o ki┼şiye ├Âzg├╝d├╝r. Ba┼şka bir ki┼şi ayn─▒ su├ğu i┼şlese farkl─▒ ceza alabilir. Bu ilke, ki┼şisel sorumlulu─şu vurgular.",
+                      "key_points":  [
+                                         "Su├ğ ve ceza ki┼şiye ├Âzg├╝",
+                                         "Ayn─▒ su├ğ farkl─▒ ceza",
+                                         "Ki┼şisel sorumluluk"
+                                     ],
+                      "mnemonic":  "┼ŞAHS─░ = \"┼ŞA\" (┼Şah) + \"HS─░\" (Hsi) ÔåÆ ┼Şah─▒n cezas─▒ kendine ait.",
+                      "exam_tip":  "├ûSYM, ┼şahsilik ilkesini toplumsal ceza kavram─▒yla kar─▒┼şt─▒rabilir; ki┼şiye ├Âzg├╝ oldu─şunu unutma.",
+                      "timestamp":  1945,
+                      "timestamp_label":  "32:25",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1945s"
+                  },
+                  {
+                      "id":  "note_21",
+                      "title":  "H├╝manizm ─░lkesi (Rehabilitasyon)",
+                      "text":  "H├╝manizm, su├ğ i┼şleyen ki┼şiyi topluma geri kazand─▒rmay─▒ ama├ğlar. Ama├ğ ceza vermek de─şil, ─▒slah ve yeniden entegrasyondur. Bu ilke, ceza infaz─▒nda rehabilitasyonun ├Ânemini vurgular.",
+                      "key_points":  [
+                                         "Ki┼şiyi topluma geri kazand─▒rma",
+                                         "Ama├ğ ─▒slah, ceza de─şil",
+                                         "Rehabilitasyon vurgusu"
+                                     ],
+                      "mnemonic":  "H├£MAN = \"H├£\" (H├╝man) + \"MAN\" (Man) ÔåÆ ─░nsan i├ğin insanl─▒k.",
+                      "exam_tip":  "├ûSYM, h├╝manizmi sadece ceza azaltma olarak g├Ârebilir; rehabilitasyon amac─▒n─▒ hat─▒rla.",
+                      "timestamp":  1974,
+                      "timestamp_label":  "32:54",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=1974s"
+                  },
+                  {
+                      "id":  "note_22",
+                      "title":  "Adalet ─░lkesi (Ceza Adil)",
+                      "text":  "Ceza adil olmal─▒; hem hakkaniyete uygun hem de toplum vicdan─▒n─▒ tatmin etmelidir. Adalet ilkesi, verilen cezan─▒n toplumsal g├╝veni sarsmamas─▒n─▒ sa─şlar. Bu ilke, ceza karar─▒n─▒n dengeyi g├Âzetmesini gerektirir.",
+                      "key_points":  [
+                                         "Hakkaniyet ve toplumsal tatmin",
+                                         "G├╝veni sarsmaz",
+                                         "Denge g├Âzetilir"
+                                     ],
+                      "mnemonic":  "ADALET = \"ADA\" (Adalet) + \"LET\" (Let) ÔåÆ Adaletle b─▒rak.",
+                      "exam_tip":  "├ûSYM, adalet ilkesini sadece hukuki prosed├╝rle kar─▒┼şt─▒rabilir; toplumsal etkisini de d├╝┼ş├╝n.",
+                      "timestamp":  2003,
+                      "timestamp_label":  "33:23",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2003s"
+                  },
+                  {
+                      "id":  "note_23",
+                      "title":  "Zorunluluk Hali (Zorunlu Durum)",
+                      "text":  "Zorunluluk hali, bir ki┼şinin tehdit alt─▒nda kalarak zararl─▒ bir eylemde bulunmas─▒d─▒r. Bu durumda ki┼şi zarar─▒ tazmin eder ancak cezai sorumlulu─şu yoktur; sadece parasal sorumluluk vard─▒r. Zorunluluk hali, ─▒st─▒ra (zorunluluk) kategorisinde de─şerlendirilir.",
+                      "key_points":  [
+                                         "Tehdit alt─▒nda zarar",
+                                         "Parasal sorumluluk, cezai yok",
+                                         "─░st─▒ra kategorisi"
+                                     ],
+                      "mnemonic":  "ZOR = \"ZO\" (Zor) + \"R\" (R) ÔåÆ Zorunlu hareket.",
+                      "exam_tip":  "├ûSYM, zorunluluk h├ólini su├ğ olarak s─▒n─▒fland─▒rabilir; cezai sorumlulu─şun olmad─▒─ş─▒n─▒ hat─▒rla.",
+                      "timestamp":  2265,
+                      "timestamp_label":  "37:45",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2265s"
+                  },
+                  {
+                      "id":  "note_24",
+                      "title":  "Kanun H├╝km├╝ Uygulama",
+                      "text":  "Kanun h├╝km├╝n├╝ uygulamak, amirin emriyle hareket etmektir; ancak bu emir su├ğ i├ğeriyorsa uygulanamaz. Su├ğ olmayan ama hukuka ayk─▒r─▒ bir emir, yaz─▒l─▒ olarak tekrarlan─▒rsa ast taraf─▒ndan yerine getirilir. Bu durum, amirin yetkisi ve hukukun s─▒n─▒rlar─▒n─▒ g├Âsterir.",
+                      "key_points":  [
+                                         "Amir emri = kanun h├╝km├╝",
+                                         "Su├ğ i├ğeren emir uygulanmaz",
+                                         "Hukuka ayk─▒r─▒ emir yaz─▒l─▒ tekrarda ge├ğerli"
+                                     ],
+                      "mnemonic":  "KANUN = \"KA\" (Kan) + \"NUN\" (Nun) ÔåÆ Kanunla y├Ânlendir.",
+                      "exam_tip":  "├ûSYM, kanun h├╝km├╝n├╝ sadece emirle ili┼şkilendirebilir; su├ğ ve hukuka ayk─▒r─▒ ayr─▒m─▒n─▒ unutma.",
+                      "timestamp":  2308,
+                      "timestamp_label":  "38:28",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2308s"
+                  },
+                  {
+                      "id":  "note_25",
+                      "title":  "Hukuka Ayk─▒r─▒ Emir vs Su├ğ Olan Emir",
+                      "text":  "Su├ğ olan emir, hapis cezas─▒ gerektiren bir emirdir ve asla yerine getirilemez. Hukuka ayk─▒r─▒ emir ise hapis cezas─▒ gerektirmeyen, fakat mevzuata ayk─▒r─▒ bir emirdir; ├Ârne─şin k─▒rm─▒z─▒ ─▒┼ş─▒kta ge├ğmek. Su├ğ olan emir yerine getirilemez, hukuka ayk─▒r─▒ emir ise yaz─▒l─▒ tekrarlan─▒rsa yerine getirilir.",
+                      "key_points":  [
+                                         "Su├ğ emir = hapis cezas─▒",
+                                         "Hukuka ayk─▒r─▒ = hapis yok",
+                                         "Yaz─▒l─▒ tekrarlarsa yerine getirilir"
+                                     ],
+                      "mnemonic":  "EM─░R = \"E\" (Emir) + \"M─░R\" (Mir) ÔåÆ Emirin iki y├╝z├╝.",
+                      "exam_tip":  "├ûSYM, iki emir tipini kar─▒┼şt─▒rarak sadece birini sorabilir; hapis cezas─▒ var m─▒ yok mu fark─▒n─▒ bil.",
+                      "timestamp":  2321,
+                      "timestamp_label":  "38:41",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2321s"
+                  },
+                  {
+                      "id":  "note_26",
+                      "title":  "Ceza Ehliyeti Ya┼ş Aral─▒klar─▒",
+                      "text":  "0ÔÇæ12 ya┼ş aral─▒─ş─▒nda ceza verilmez, sadece g├╝venlik tedbiri uygulan─▒r. 12ÔÇæ15 ya┼ş aral─▒─ş─▒ karma rejim olarak de─şerlendirilir; hem g├╝venlik tedbiri hem de s─▒n─▒rl─▒ ceza uygulanabilir. 15ÔÇæ18 ya┼ş aral─▒─ş─▒nda ise indirimli ceza uygulan─▒r.",
+                      "key_points":  [
+                                         "0ÔÇæ12 = g├╝venlik tedbiri",
+                                         "12ÔÇæ15 = karma rejim",
+                                         "15ÔÇæ18 = indirimli ceza"
+                                     ],
+                      "mnemonic":  "YA┼Ş = \"Y\" (Ya┼ş) + \"A┼Ş\" (A┼ş) ÔåÆ Ya┼ş a┼şlar─▒yla belirlenir.",
+                      "exam_tip":  "├ûSYM, 12ÔÇæ15 ya┼ş─▒n─▒ tek bir kategori olarak sorabilir; karma rejim oldu─şunu unutma.",
+                      "timestamp":  2524,
+                      "timestamp_label":  "42:04",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2524s"
+                  },
+                  {
+                      "id":  "note_27",
+                      "title":  "0ÔÇæ12 G├╝venlik Tedbiri",
+                      "text":  "0ÔÇæ12 ya┼ş aral─▒─ş─▒ndaki ├ğocuklar i├ğin ceza uygulanmaz; bunun yerine g├╝venlik tedbiri uygulan─▒r. Bu tedbir, ├ğocu─şun topluma zarar vermesini ├Ânlemeye y├Âneliktir. Ceza yerine koruyucu ├Ânlemler al─▒n─▒r.",
+                      "key_points":  [
+                                         "Ceza yok, tedbir var",
+                                         "Topluma zarar ├Ânleme",
+                                         "Koruyucu ├Ânlem"
+                                     ],
+                      "mnemonic":  "G├£VEN = \"G├£\" (G├╝) + \"VEN\" (Ven) ÔåÆ G├╝venli ortam.",
+                      "exam_tip":  "├ûSYM, bu ya┼ş grubuna ceza sorabilir; g├╝venlik tedbiri oldu─şunu hat─▒rla.",
+                      "timestamp":  2524,
+                      "timestamp_label":  "42:04",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2524s"
+                  },
+                  {
+                      "id":  "note_28",
+                      "title":  "15ÔÇæ18 ─░ndirimli Ceza",
+                      "text":  "15ÔÇæ18 ya┼ş aral─▒─ş─▒ndaki gen├ğler i├ğin ceza verilir ancak indirimli uygulan─▒r. Bu indirim, gen├ğlerin rehabilitasyon ihtiyac─▒n─▒ g├Âz ├Ân├╝nde bulundurur. Ceza h├ól├ó verilir, ancak hafifletilir.",
+                      "key_points":  [
+                                         "Ceza verilir, indirimli",
+                                         "Rehabilitasyon odakl─▒",
+                                         "Hafifletilmi┼ş ceza"
+                                     ],
+                      "mnemonic":  "─░ND─░R─░M = \"─░N\" (─░n) + \"D─░R─░M\" (Dirim) ÔåÆ ─░n dirime indirilir.",
+                      "exam_tip":  "├ûSYM, indirimli ceza yerine tam ceza sorabilir; ya┼ş grubunun indirimli oldu─şunu hat─▒rla.",
+                      "timestamp":  2544,
+                      "timestamp_label":  "42:24",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2544s"
+                  },
+                  {
+                      "id":  "note_29",
+                      "title":  "12ÔÇæ15 Karma Rejim",
+                      "text":  "12ÔÇæ15 ya┼ş aral─▒─ş─▒nda hem g├╝venlik tedbiri hem de s─▒n─▒rl─▒ ceza uygulanabilir; bu durum karma rejim olarak adland─▒r─▒l─▒r. Mahkeme, ├ğocu─şun durumuna g├Âre uygun tedbir veya ceza karar─▒n─▒ verir. Adli t─▒p raporu bu kararda etkili olabilir.",
+                      "key_points":  [
+                                         "Hem tedbir hem ceza",
+                                         "Karma rejim ad─▒",
+                                         "Adli t─▒p raporu etkili"
+                                     ],
+                      "mnemonic":  "KARMA = \"KA\" (Kapsar) + \"RMA\" (Rma) ÔåÆ Kapsar iki y├Ân.",
+                      "exam_tip":  "├ûSYM, karma rejimi sadece ceza olarak sorabilir; tedbir de oldu─şunu unutma.",
+                      "timestamp":  2566,
+                      "timestamp_label":  "42:46",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2566s"
+                  },
+                  {
+                      "id":  "note_30",
+                      "title":  "Adli T─▒p Raporu ve Ya┼ş De─şerlendirmesi",
+                      "text":  "12ÔÇæ15 ya┼ş aral─▒─ş─▒nda adli t─▒p raporu, ki┼şinin akli dengesini de─şerlendirir ve ceza karar─▒n─▒ etkiler. Raporda akli denge iyi ise 15ÔÇæ18 gibi davran─▒l─▒r, aksi takdirde 0ÔÇæ12 gibi de─şerlendirilir. Bu rapor, mahkemenin karar─▒n─▒ y├Ânlendirir.",
+                      "key_points":  [
+                                         "Akli denge raporu",
+                                         "15ÔÇæ18 gibi davran─▒rsa indirimli",
+                                         "Aksi takdirde g├╝venlik tedbiri"
+                                     ],
+                      "mnemonic":  "T─░P = \"T─░\" (T─▒p) + \"P\" (P) ÔåÆ T─▒p raporu karar verir.",
+                      "exam_tip":  "├ûSYM, adli t─▒p raporunu sadece t─▒bbi bir belge olarak g├Ârebilir; ceza etkisini unutma.",
+                      "timestamp":  2574,
+                      "timestamp_label":  "42:54",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2574s"
+                  },
+                  {
+                      "id":  "note_31",
+                      "title":  "Ceza Ehliyeti Ya┼ş─▒",
+                      "text":  "Ceza ehliyeti, ki┼şinin su├ğ i┼şleyebilme ve cezai sorumluluk ta┼ş─▒ma yetene─şidir. Altyaz─▒ya g├Âre ceza ehliyeti 12 ya┼ş─▒ndan itibaren ba┼şlar, yani 12 ya┼ş─▒nda ceza verilebilir. 18 ya┼ş─▒na gelince tam ceza uygulan─▒r ve ceza ehliyeti mutlak h├óle gelir. Ceza ehliyeti, fiil ehliyeti (sivil hak ve y├╝k├╝ml├╝l├╝k) ile kar─▒┼şt─▒r─▒lmamal─▒d─▒r.",
+                      "key_points":  [
+                                         "12 ya┼ş: ceza ehliyeti ba┼şlar",
+                                         "18 ya┼ş: tam ceza uygulan─▒r",
+                                         "Fiil ehliyeti 18\u0027de ba┼şlar, ceza ehliyeti 12\u0027de"
+                                     ],
+                      "mnemonic":  "12ÔÇæ18 CEZA = 12\u0027de su├ğ, 18\u0027de tam ceza (12ÔÇæ18 gibi bir say─▒ s─▒ras─▒ ak─▒lda kal─▒r).",
+                      "exam_tip":  "├ûSYM, ceza ehliyeti ya┼ş─▒n─▒ fiil ehliyeti ya┼ş─▒yla kar─▒┼şt─▒rabilir; soruda ya┼şlar─▒ dikkatle kontrol et.",
+                      "timestamp":  2671,
+                      "timestamp_label":  "44:31",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2671s"
+                  },
+                  {
+                      "id":  "note_32",
+                      "title":  "Fiil Ehliyeti Ya┼ş─▒",
+                      "text":  "Fiil ehliyeti, ki┼şinin hukuki i┼şlemleri (s├Âzle┼şme vb.) yapabilme yetkisidir. Altyaz─▒da fiil ehliyeti 18 ya┼şta ba┼şlar denilmi┼ştir. Bu, medeni hak ve y├╝k├╝ml├╝l├╝klerin tam olarak kullan─▒labilmesi demektir. Ceza ehliyetiyle kar─▒┼şt─▒r─▒lmamal─▒d─▒r; ceza ehliyeti 12\u0027de ba┼şlarken, fiil ehliyeti 18\u0027de ba┼şlar.",
+                      "key_points":  [
+                                         "18 ya┼ş: fiil ehliyeti ba┼şlar",
+                                         "Ceza ehliyeti 12\u0027de, fiil ehliyeti 18\u0027de",
+                                         "Sivil hak ve y├╝k├╝ml├╝l├╝kler i├ğin ge├ğerli"
+                                     ],
+                      "mnemonic":  "FIIL = 18\u0027de FIRLAR (18 rakam─▒ fiil ehliyetiyle e┼şle┼şir).",
+                      "exam_tip":  "├ûSYM, fiil ehliyeti ya┼ş─▒n─▒ ceza ehliyetiyle kar─▒┼şt─▒rabilir; soruda hangi hak i├ğin soruldu─şunu belirle.",
+                      "timestamp":  2698,
+                      "timestamp_label":  "44:58",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2698s"
+                  },
+                  {
+                      "id":  "note_33",
+                      "title":  "Kusur Yetene─şi ve Ak─▒l Hastal─▒─ş─▒",
+                      "text":  "Kusur yetene─şi, bir ki┼şinin su├ğ i┼şleyebilme kapasitesidir. Ak─▒l hastal─▒─ş─▒ durumunda bu yetenek ortadan kalkar. Tam ak─▒l hastal─▒─ş─▒ tamamen sosyal hayata devam edememe anlam─▒na gelirken, k─▒smi ak─▒l hastal─▒─ş─▒ sosyal hayat devam eder fakat ufak problemler vard─▒r ve ceza indirimi uygulanabilir.",
+                      "key_points":  [
+                                         "Tam ak─▒l hastal─▒─ş─▒: kusur yok",
+                                         "K─▒smi ak─▒l hastal─▒─ş─▒: sosyal hayat devam, ceza indirimi",
+                                         "Kusur yetene─şi ak─▒l hastal─▒─ş─▒yla kaybolur"
+                                     ],
+                      "mnemonic":  "AKIL TAM = KUSUR YOK, AKIL KISMI = KUSUR AZ (tamÔÇæk─▒smi kar┼ş─▒tl─▒─ş─▒ ak─▒lda tut).",
+                      "exam_tip":  "├ûSYM, ak─▒l hastal─▒─ş─▒n─▒n tam m─▒ k─▒smi mi oldu─şunu sorarken ceza indirimi uygulan─▒p uygulanmayaca─ş─▒n─▒ test eder.",
+                      "timestamp":  2711,
+                      "timestamp_label":  "45:11",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2711s"
+                  },
+                  {
+                      "id":  "note_34",
+                      "title":  "Tam Ak─▒l Hastal─▒─ş─▒ Tan─▒m─▒",
+                      "text":  "Tam ak─▒l hastal─▒─ş─▒, ki┼şinin sosyal hayata hi├ğbir ┼şekilde devam edememesi durumudur. Altyaz─▒da \"tam ak─▒l hastal─▒─ş─▒d─▒r\" ifadesiyle tan─▒mlanm─▒┼şt─▒r ve bu durumda kusur yetene─şi yoktur, ceza sorumlulu─şu ortadan kalkar. Sosyal hayat─▒n tamamen durmas─▒, tam ak─▒l hastal─▒─ş─▒n─▒n ay─▒rt edici ├Âzelli─şidir.",
+                      "key_points":  [
+                                         "Sosyal hayat yok",
+                                         "Kusur yetene─şi yok",
+                                         "Ceza sorumlulu─şu ortadan kalkar"
+                                     ],
+                      "mnemonic":  "Tam ak─▒l = T├╝m ya┼şam durur (\"tam\" kelimesi t├╝m├╝yle durmay─▒ hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, tam ak─▒l hastal─▒─ş─▒nda ceza uygulanmayaca─ş─▒n─▒ sorabilir; sosyal hayat─▒n yoklu─şunu hat─▒rlay─▒n.",
+                      "timestamp":  2734,
+                      "timestamp_label":  "45:34",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2734s"
+                  },
+                  {
+                      "id":  "note_35",
+                      "title":  "K─▒smi Ak─▒l Hastal─▒─ş─▒ Tan─▒m─▒",
+                      "text":  "K─▒smi ak─▒l hastal─▒─ş─▒, ki┼şinin sosyal hayat─▒na devam edebilmesi ancak ufak problemler ya┼şamas─▒ durumudur. Altyaz─▒da \"k─▒smi ak─▒l hastal─▒─ş─▒\" ifadesiyle a├ğ─▒klanm─▒┼şt─▒r; bu durumda kusur yetene─şi k─▒smen var, ceza indirimi uygulanabilir. Sosyal hayat─▒n devam etmesi, k─▒smi ak─▒l hastal─▒─ş─▒n─▒n ay─▒rt edici ├Âzelli─şidir.",
+                      "key_points":  [
+                                         "Sosyal hayat devam eder",
+                                         "Ufac─▒k problemler var",
+                                         "Ceza indirimi uygulanabilir"
+                                     ],
+                      "mnemonic":  "K─▒smi = K─▒sa ya┼şam kesiti (k─▒smi kelimesi k─▒sa, s─▒n─▒rl─▒ anlam─▒n─▒ verir).",
+                      "exam_tip":  "├ûSYM, k─▒smi ak─▒l hastal─▒─ş─▒nda ceza indirimi sorabilir; sosyal hayat─▒n devam etti─şini unutma.",
+                      "timestamp":  2753,
+                      "timestamp_label":  "45:53",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2753s"
+                  },
+                  {
+                      "id":  "note_36",
+                      "title":  "Cebir, Tehdit ve Zorunluluk",
+                      "text":  "Cebir, tehdit ve zorunluluk, ki┼şinin iradesi d─▒┼ş─▒ndaki durumlar─▒ ifade eder ve su├ğ sorumlulu─şunu hafifletebilir ya da kald─▒rabilir. Altyaz─▒da \"Cebir ve tehdit kayda de─şer olmal─▒\" denilmi┼ştir; bu durumlarda ceza ya indirilir ya da tamamen kald─▒r─▒l─▒r. Ancak bu durumlar─▒n \"kayda de─şer\" olmas─▒ gerekir.",
+                      "key_points":  [
+                                         "Kayda de─şer ise ceza indirilir/kald─▒r─▒l─▒r",
+                                         "Cebir, tehdit, zorunluluk ayn─▒ grup",
+                                         "─░rade d─▒┼ş─▒ durumlar"
+                                     ],
+                      "mnemonic":  "CTZ = Cebir, Tehdit, Zorunluluk (k─▒saltma ak─▒lda kal─▒r).",
+                      "exam_tip":  "├ûSYM, bu ├╝├ğ durumun ceza ├╝zerindeki etkisini sorarken \"kayda de─şer\" ifadesine dikkat et.",
+                      "timestamp":  2880,
+                      "timestamp_label":  "48:00",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2880s"
+                  },
+                  {
+                      "id":  "note_37",
+                      "title":  "Vergi Kamu Hukuku",
+                      "text":  "Vergi, kamu hukukunun bir dal─▒d─▒r; devletin g├╝├ğ kullanarak zorunlu olarak toplad─▒─ş─▒ bir mali kaynakt─▒r. Altyaz─▒da \"vergi bir kamu hukukudur\" denilmi┼ştir ve vergi kanunla konulur. Cumhurba┼şkanl─▒─ş─▒ kararnamesiyle vergi yarat─▒lamaz, sadece oranlar ayarlanabilir.",
+                      "key_points":  [
+                                         "Kamu hukuku dal─▒",
+                                         "Zorunlu, kanunla konulur",
+                                         "Kararnameyle vergi yarat─▒lamaz"
+                                     ],
+                      "mnemonic":  "VERGI = VErilen REGlere G─░der (kanunla ba─şda┼şt─▒r).",
+                      "exam_tip":  "├ûSYM, vergiyi ├Âzel hukukla kar─▒┼şt─▒rabilir; verginin kamu hukuku oldu─şunu hat─▒rla.",
+                      "timestamp":  2962,
+                      "timestamp_label":  "49:22",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2962s"
+                  },
+                  {
+                      "id":  "note_38",
+                      "title":  "Cumhurba┼şkanl─▒─ş─▒ Kararnamesi ve Vergi",
+                      "text":  "Cumhurba┼şkanl─▒─ş─▒ kararnamesi, vergi olu┼şturamaz ancak vergi oranlar─▒n─▒n ├╝st ve alt s─▒n─▒rlar─▒n─▒ d├╝zenleyebilir. Altyaz─▒da \"Cumhurba┼şkanl─▒─ş─▒ kararnamesiyle vergi konulmaz\" ifadesi vurgulanm─▒┼şt─▒r. Kararname sadece mevcut vergilerin oranlar─▒n─▒ de─şi┼ştirebilir.",
+                      "key_points":  [
+                                         "Vergi yaratamaz",
+                                         "Oranlar─▒ d├╝zenleyebilir",
+                                         "Alt/├╝st s─▒n─▒r ayar─▒"
+                                     ],
+                      "mnemonic":  "CAR = Cumhurba┼şkanl─▒─ş─▒ ARt─▒┼ş (kararname sadece art─▒r─▒r/azalt─▒r).",
+                      "exam_tip":  "├ûSYM, vergi yaratma yetkisinin kime ait oldu─şunu sorabilir; kararnamenin sadece oranlar─▒ ayarlad─▒─ş─▒n─▒ unutma.",
+                      "timestamp":  2995,
+                      "timestamp_label":  "49:55",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=2995s"
+                  },
+                  {
+                      "id":  "note_39",
+                      "title":  "Vergi Kar┼ş─▒l─▒ks─▒zd─▒r",
+                      "text":  "Vergi, bir kar┼ş─▒l─▒k (├Âdeme) kar┼ş─▒l─▒─ş─▒nda al─▒nmaz; gelir gibi bir sonucun sonucudur. Altyaz─▒da \"vergi kar┼ş─▒l─▒ks─▒zd─▒r\" ve \"vergi bir ┼şeyin sonucudur\" ifadeleri yer al─▒r. Bu, verginin bir hizmet kar┼ş─▒l─▒─ş─▒ olmad─▒─ş─▒n─▒ g├Âsterir.",
+                      "key_points":  [
+                                         "Kar┼ş─▒l─▒k yok",
+                                         "Gelir/sonu├ğ temelli",
+                                         "├£cret de─şil, zorunlu"
+                                     ],
+                      "mnemonic":  "VERGI = VErilen G─░derek ─░ade (kar┼ş─▒l─▒k yok, sadece gelir).",
+                      "exam_tip":  "├ûSYM, vergiyi bir hizmet kar┼ş─▒l─▒─ş─▒ gibi sorabilir; kar┼ş─▒l─▒ks─▒z oldu─şunu akl─▒nda tut.",
+                      "timestamp":  3032,
+                      "timestamp_label":  "50:32",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3032s"
+                  },
+                  {
+                      "id":  "note_40",
+                      "title":  "Vergi T├╝rleri: Gelir, Kurum, KDV, ├ûTV",
+                      "text":  "Altyaz─▒da ├ğe┼şitli vergi t├╝rleri a├ğ─▒klanm─▒┼şt─▒r: gelir vergisi (gelir elde etmenin sonucu), kurumlar vergisi (kurum ├╝zerinden al─▒nan), Katma De─şer Vergisi (KDV) rutin harcamalarda, ├ûzel T├╝ketim Vergisi (├ûTV) l├╝ks harcamalarda uygulan─▒r. Her birinin uygulanma ko┼şulu farkl─▒d─▒r.",
+                      "key_points":  [
+                                         "Gelir vergisi = gelir sonucu",
+                                         "Kurumlar vergisi = kurum ├╝zerinden",
+                                         "KDV = rutin harcamalar",
+                                         "├ûTV = l├╝ks harcamalar"
+                                     ],
+                      "mnemonic":  "G K V ├û = Gelir, Kurum, VAT, ├ûzel (her harf bir vergi t├╝r├╝n├╝ hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, vergi t├╝rlerini kar─▒┼şt─▒rabilir; harcama t├╝r├╝ne g├Âre hangi vergi uygulan─▒r sorusuna dikkat et.",
+                      "timestamp":  3060,
+                      "timestamp_label":  "51:00",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3060s"
+                  },
+                  {
+                      "id":  "note_41",
+                      "title":  "Ger├ğek Ki┼şi ve T├╝zel Ki┼şi",
+                      "text":  "Ger├ğek ki┼şi, do─şu┼ştan itibaren insan olarak var olan birey; t├╝zel ki┼şi ise kanunlar ├ğer├ğevesinde olu┼şturulan, ka─ş─▒t ├╝st├╝nde var olan kurumlard─▒r (├Âr. belediye). Altyaz─▒da \"ger├ğek ki┼şiler\" ve \"t├╝zel ki┼şi\" kavramlar─▒ net bir ┼şekilde ayr─▒lm─▒┼şt─▒r.",
+                      "key_points":  [
+                                         "Ger├ğek = insan birey",
+                                         "T├╝zel = ka─ş─▒t ├╝zerindeki kurum",
+                                         "├ûrnek: belediye = t├╝zel ki┼şi"
+                                     ],
+                      "mnemonic":  "GER├çEK = GEn├ğlik, T├£ZEL = T├╝m ├£r├╝n Zamanl─▒ (ger├ğekÔÇæinsan, t├╝zelÔÇækurum).",
+                      "exam_tip":  "├ûSYM, ger├ğek ve t├╝zel ki┼şiyi kar─▒┼şt─▒rabilir; tan─▒m ve ├Ârnekleri iyi ay─▒r.",
+                      "timestamp":  3240,
+                      "timestamp_label":  "54:00",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3240s"
+                  },
+                  {
+                      "id":  "note_42",
+                      "title":  "Hak Kavram─▒ Tan─▒m─▒",
+                      "text":  "Hak, hukuk d├╝zeninin bireye tan─▒d─▒─ş─▒ yetki ve yetkindir. Altyaz─▒da \"hak kavram─▒ nedir? Hukuk d├╝zeninin sana tan─▒d─▒─ş─▒ yetki\" denilmi┼ştir. Hak, kanunlarla korunur ve bireyin talep edebilece─şi bir yetkidir.",
+                      "key_points":  [
+                                         "Yetki tan─▒m─▒",
+                                         "Kanunla korunur",
+                                         "Bireyin talep edebilece─şi"
+                                     ],
+                      "mnemonic":  "HAK = H├╝k├╝metin A├çIK Kapsam─▒ (yetkiyi hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, hakk─▒ sadece istek olarak g├Ârebilir; yetki tan─▒m─▒ oldu─şunu unutma.",
+                      "timestamp":  3320,
+                      "timestamp_label":  "55:20",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3320s"
+                  },
+                  {
+                      "id":  "note_43",
+                      "title":  "─░yi Niyet: Subjektif ve Objektif",
+                      "text":  "─░yi niyet, subjektif (ki┼şisel inan├ğ) ve objektif (d├╝r├╝stl├╝k) olmak ├╝zere ikiye ayr─▒l─▒r. Altyaz─▒da \"subjektif iyi niyet\" ve \"objektif iyi niyet\" tan─▒mlar─▒ verilmi┼ştir. Subjektif iyi niyet, ki┼şinin kendi inanc─▒; objektif iyi niyet ise toplumun kabul etti─şi d├╝r├╝stl├╝k anlam─▒ndad─▒r.",
+                      "key_points":  [
+                                         "Subjektif = ki┼şisel inan├ğ",
+                                         "Objektif = d├╝r├╝stl├╝k",
+                                         "Hakk─▒ kullan─▒rken iki t├╝r de de─şerlendirilir"
+                                     ],
+                      "mnemonic":  "─░Y─░ = ─░├çTEN YAKIN (subjektif), OBJ = O B─░R J (objektif d├╝r├╝stl├╝k).",
+                      "exam_tip":  "├ûSYM, subjektif ve objektif iyi niyeti kar─▒┼şt─▒rabilir; farklar─▒n─▒ net tut.",
+                      "timestamp":  3398,
+                      "timestamp_label":  "56:38",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3398s"
+                  },
+                  {
+                      "id":  "note_44",
+                      "title":  "Ki┼şilik Ba┼şlang─▒c─▒: Sa─ş ve Tam Do─şum",
+                      "text":  "Ki┼şilik, sa─ş ve tam do─şumla ba┼şlar; yani ├ğocu─şun anne rahminden tamamen ayr─▒lmas─▒ gerekir. Altyaz─▒da \"tam do─şum\" v├╝cudun b├╝t├╝nl├╝─ş├╝ de─şil, do─şumun tamamen bitmi┼ş olmas─▒ olarak tan─▒mlanm─▒┼şt─▒r. Bu, hak ve ehliyetlerin do─şu┼şunu belirler.",
+                      "key_points":  [
+                                         "Sa─ş ve tam do─şum ┼şart─▒",
+                                         "Tam do─şum = do─şumun tamamen bitmi┼ş olmas─▒",
+                                         "Ki┼şilik ve haklar bundan sonra ba┼şlar"
+                                     ],
+                      "mnemonic":  "SA─Ş TAM = SOnra ANla┼ŞTIR (sa─şÔÇætam do─şum, ki┼şilik).",
+                      "exam_tip":  "├ûSYM, do─şum ├Âncesi haklar─▒ sorarken do─şumun tam ger├ğekle┼şti─şini hat─▒rlat─▒r.",
+                      "timestamp":  3495,
+                      "timestamp_label":  "58:15",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3495s"
+                  },
+                  {
+                      "id":  "note_45",
+                      "title":  "N├╝fus ─░┼şlemleri ve Do─şum Belgesi",
+                      "text":  "Ki┼şilik kan─▒t─▒ olarak n├╝fus c├╝zdan─▒ ve do─şum belgesi kullan─▒l─▒r. Altyaz─▒da \"Do─şum belgesi ne ispatl─▒yor? Sa─ş ve tam do─şumu\" denilmi┼ştir. Do─şum belgesi n├╝fus m├╝d├╝rl├╝─ş├╝nden al─▒n─▒r ve tam do─şumu kan─▒tlar.",
+                      "key_points":  [
+                                         "Do─şum belgesi = tam do─şum kan─▒t─▒",
+                                         "N├╝fus m├╝d├╝rl├╝─ş├╝nden al─▒n─▒r",
+                                         "Kimlik kart─▒ i├ğin gereklidir"
+                                     ],
+                      "mnemonic":  "DO─ŞUM = D├Âk├╝m, ONAY, G├£VENCE (belge onay─▒ hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, kimlik belgelerini kar─▒┼şt─▒rabilir; do─şum belgesinin tam do─şumu kan─▒tlad─▒─ş─▒n─▒ unutma.",
+                      "timestamp":  3514,
+                      "timestamp_label":  "58:34",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3514s"
+                  },
+                  {
+                      "id":  "note_46",
+                      "title":  "K├╝rtaj ve Hak Sahibi Olma",
+                      "text":  "Altyaz─▒da \"k├╝rtaj yasak\" ifadesiyle, belirli bir gebelik s├╝resinden sonra ├ğocu─şun ya┼şam hakk─▒ kazand─▒─ş─▒ belirtilmi┼ştir. Bu hak, do─şmadan ├Ânce miras hakk─▒ kazanmaz, ancak do─şduktan sonra haklar─▒ ge├ğerli olur.",
+                      "key_points":  [
+                                         "Belirli ay sonras─▒ k├╝rtaj yasak",
+                                         "Do─şumla ya┼şam hakk─▒ kazan─▒r",
+                                         "Do─şmadan miras hakk─▒ yok"
+                                     ],
+                      "mnemonic":  "K├£RTAJ = K─▒s─▒tl─▒ ├£reme, R─░T├£EL A─ŞIR (yasak sonras─▒ hak hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, k├╝rtaj sonras─▒ ├ğocu─şun haklar─▒n─▒ sorarken do─şumun ger├ğekle┼şti─şini vurgular.",
+                      "timestamp":  3554,
+                      "timestamp_label":  "59:14",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3554s"
+                  },
+                  {
+                      "id":  "note_47",
+                      "title":  "├ûl├╝m Karinesi",
+                      "text":  "├ûl├╝m karinesi, belirli kesin durumlarda (├Âr. u├ğak kazas─▒) ki┼şinin ├Âl├╝m├╝n├╝n kabul edildi─şi hukuki kavramd─▒r. Altyaz─▒da \"├Âl├╝m karinesi\" tan─▒m─▒ ve ├Ârnekleri verilmi┼ştir. Bu karine, ├Âl├╝m├╝n kesin oldu─şu durumlarda uygulan─▒r.",
+                      "key_points":  [
+                                         "Kesin ├Âl├╝m durumlar─▒",
+                                         "U├ğak kazas─▒ gibi ├Ârnekler",
+                                         "Karine ile ├Âl├╝m kabul edilir"
+                                     ],
+                      "mnemonic":  "├ûLME = OLAYLARLA L─░STELENEN M├£TENE (kesin olaylar hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, ├Âl├╝m karinesini her kay─▒ps─▒z durumla kar─▒┼şt─▒rabilir; kesin olaylar─▒ akla getir.",
+                      "timestamp":  3592,
+                      "timestamp_label":  "59:52",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3592s"
+                  },
+                  {
+                      "id":  "note_48",
+                      "title":  "Gaiplik T├╝rleri",
+                      "text":  "Gaiplik, iki ┼şekilde ortaya ├ğ─▒kar: ├Âl├╝m├╝ne olas─▒ g├Âzle bakma (muhtemel ├Âl├╝m) ve uzun s├╝redir haber al─▒namama (kay─▒p). Altyaz─▒da bu iki durum ayr─▒nt─▒l─▒ olarak a├ğ─▒klanm─▒┼şt─▒r. Her iki durumda da farkl─▒ yasal prosed├╝rler uygulan─▒r.",
+                      "key_points":  [
+                                         "Olas─▒ ├Âl├╝m = muhtemel g├Âzlem",
+                                         "Uzun s├╝re haber al─▒namama = kay─▒p",
+                                         "Farkl─▒ mahkeme kararlar─▒"
+                                     ],
+                      "mnemonic":  "GAIP = G├Âzlem A─░t P─░ras (olas─▒ ve uzun s├╝reli ayr─▒m─▒ hat─▒rlat─▒r).",
+                      "exam_tip":  "├ûSYM, gaiplik ile ├Âl├╝m karinesini kar─▒┼şt─▒rabilir; g├Âzlem ve s├╝re fark─▒n─▒ bil.",
+                      "timestamp":  3643,
+                      "timestamp_label":  "1:00:43",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3643s"
+                  },
+                  {
+                      "id":  "note_49",
+                      "title":  "100 Ya┼ş Kural─▒",
+                      "text":  "100 ya┼ş kural─▒, gaip olan ki┼şinin 100 ya┼ş─▒na ula┼şmas─▒ durumunda miras─▒n─▒n hazineye kalaca─ş─▒n─▒ d├╝zenler. Altyaz─▒da \"100 ya┼ş kural─▒n─▒\" ve \"miras─▒ hazineye kal─▒┼ş\" ifadeleri bulunur. Bu kural, miras├ğ─▒lar─▒n olmamas─▒ durumunda uygulan─▒r.",
+                      "key_points":  [
+                                         "Gaip ki┼şi 100 ya┼ş─▒na ula┼ş─▒rsa",
+                                         "Miras hazineye ge├ğer",
+                                         "Miras├ğ─▒ yoksa uygulan─▒r"
+                                     ],
+                      "mnemonic":  "100 = Y├£ZDE Y├£Z (y├╝z y─▒l = 100 ya┼ş, miras hazine).",
+                      "exam_tip":  "├ûSYM, 100 ya┼ş kural─▒n─▒ daha gen├ğ gaip ki┼şilerle kar─▒┼şt─▒rabilir; sadece 100 ya┼şa ula┼şt─▒─ş─▒nda ge├ğerli.",
+                      "timestamp":  3757,
+                      "timestamp_label":  "1:02:37",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3757s"
+                  },
+                  {
+                      "id":  "note_50",
+                      "title":  "Ki┼şi Toplulu─şu vs Mal Toplulu─şu",
+                      "text":  "Ki┼şi toplulu─şu, bireylerin varl─▒─ş─▒na, mal toplulu─şu ise varl─▒klar─▒n toplam─▒na odaklan─▒r. Altyaz─▒da bu iki kavram─▒n fark─▒ vurgulanm─▒┼şt─▒r; ki┼şi toplulu─şunda birey, mal toplulu─şunda varl─▒k ├Ânemlidir. ├ûrne─şin belediye bir ki┼şi toplulu─şu, sermaye bir mal toplulu─şudur.",
+                      "key_points":  [
+                                         "Ki┼şi toplulu─şu = bireyler ├Ânemli",
+                                         "Mal toplulu─şu = varl─▒klar ├Ânemli",
+                                         "Belediye = ki┼şi toplulu─şu ├Ârne─şi"
+                                     ],
+                      "mnemonic":  "K─░┼Ş─░ = Ki┼şi ─░lgili ┼ŞAH─░S, MAL = M├£LK ARA L─░ST (k─▒sa kar┼ş─▒la┼şt─▒rma).",
+                      "exam_tip":  "├ûSYM, ki┼şi ve mal toplulu─şunu kar─▒┼şt─▒rabilir; hangi durumda kim ├Ân planda sorulur, ona bak.",
+                      "timestamp":  3795,
+                      "timestamp_label":  "1:03:15",
+                      "video_url_with_t":  "https://www.youtube.com/watch?v=MCxLovE6EdA\u0026t=3795s"
+                  }
+              ],
+    "questions":  [
+
+                  ]
+}

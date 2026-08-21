@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #f4f4f5;
+}
+
+html.dark,
+html.dark body {
+  background: #09090b;
+}
+
+body {
+  @apply min-h-screen bg-zinc-100 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+}
+
+.note-paper {
+  background-color: rgb(255 251 235 / 0.92);
+  background-image:
+    repeating-linear-gradient(
+      transparent 0,
+      transparent 31px,
+      rgb(180 83 9 / 0.14) 32px
+    ),
+    radial-gradient(ellipse at 12% 0%, rgb(255 255 255 / 0.55), transparent 46%),
+    radial-gradient(ellipse at 88% 100%, rgb(180 83 9 / 0.12), transparent 42%);
+  background-size: 100% 32px, 100% 100%, 100% 100%;
+}
+
+.dark .note-paper-sepia {
+  background-color: #2c2218;
+  background-image:
+    repeating-linear-gradient(
+      transparent 0,
+      transparent 31px,
+      rgb(212 165 116 / 0.12) 32px
+    ),
+    radial-gradient(ellipse at 18% 8%, rgb(90 68 42 / 0.55), transparent 50%);
+  color: #f3e6c8;
+}
+
+.highlighter-mark {
+  background-color: rgb(253 224 71 / 0.6);
+  border-radius: 2px;
+  padding: 0 0.2rem;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.note-hand {
+  font-family: var(--font-kalam), var(--font-caveat), cursive !important;
+}
+
+.note-scribble {
+  font-family: var(--font-caveat), cursive !important;
+}
+
+.glow-orange {
+  box-shadow:
+    0 0 0 1px rgb(251 146 60 / 0.55),
+    0 0 22px rgb(251 146 60 / 0.35),
+    inset 0 0 18px rgb(251 146 60 / 0.12);
+}
+
+.protect-copy,
+.protect-copy * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.badge-alfa {
+  background: linear-gradient(135deg, rgb(251 146 60 / 0.95), rgb(234 88 12 / 0.85));
+  color: #1c1008;
+  box-shadow:
+    0 0 18px rgb(251 146 60 / 0.65),
+    0 0 4px rgb(255 237 213 / 0.8) inset;
+}

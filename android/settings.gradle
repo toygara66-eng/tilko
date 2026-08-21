@@ -1,0 +1,26 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "Tilko"
+include ":app"
+include ":capacitor-cordova-android-plugins"
+project(":capacitor-cordova-android-plugins").projectDir = new File("./capacitor-cordova-android-plugins/")
+
+def capSettings = new File(settingsDir, "capacitor.settings.gradle")
+if (capSettings.exists()) {
+    apply from: "capacitor.settings.gradle"
+}
+

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>TİLKO</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #09090b;
+      color: #fff;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(ellipse at top, rgba(249,115,22,0.28), transparent 55%),
+        #09090b;
+    }
+    .card {
+      width: min(440px, 100%);
+      border: 1px solid rgba(251,146,60,0.55);
+      border-radius: 28px;
+      padding: 28px 24px 24px;
+      background: rgba(24,24,27,0.72);
+      backdrop-filter: blur(18px);
+      text-align: center;
+    }
+    .fox {
+      width: 112px;
+      height: 112px;
+      margin: 0 auto 16px;
+      filter: drop-shadow(0 0 22px rgba(249,115,22,0.75));
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 1.45rem;
+      line-height: 1.25;
+      color: #fb923c;
+    }
+    p {
+      margin: 0 0 22px;
+      color: #d4d4d8;
+      line-height: 1.55;
+      font-size: 0.98rem;
+    }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #09090b;
+      background: #f97316;
+      box-shadow: 0 0 24px rgba(249,115,22,0.55);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <svg class="fox" viewBox="0 0 120 120" aria-hidden="true">
+      <circle cx="60" cy="60" r="56" fill="#18181b" stroke="#f97316" stroke-width="3"/>
+      <path d="M22 48 L42 18 L52 46 Z" fill="#f97316"/>
+      <path d="M98 48 L78 18 L68 46 Z" fill="#f97316"/>
+      <ellipse cx="60" cy="68" rx="32" ry="28" fill="#fb923c"/>
+      <ellipse cx="60" cy="78" rx="16" ry="12" fill="#fff7ed"/>
+      <circle cx="48" cy="64" r="5" fill="#09090b"/>
+      <circle cx="72" cy="64" r="5" fill="#09090b"/>
+      <path d="M60 72 L56 78 L64 78 Z" fill="#ea580c"/>
+    </svg>
+    <h1>Uf, Sazan Gibi Atladın Yavru Kurt! 🦊</h1>
+    <p>Kaçak yollardan ormana girmeye çalıştığını fark ettik. Bu APK bayat çıktı! Tilko'nun tüm yapay zeka güçlerinden güvenle yararlanmak için resmi Google Play kovanımıza dön.</p>
+    <button type="button" id="go">Google Play'e Git</button>
+  </main>
+  <script>
+    document.getElementById("go").onclick = function () {
+      try {
+        if (window.TilkoIntegrity && window.TilkoIntegrity.openPlayStore) {
+          window.TilkoIntegrity.openPlayStore();
+          return;
+        }
+      } catch (e) {}
+      location.href = "https://play.google.com/store/apps/details?id=com.tilko.app";
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "kpss_lisans": {
+    "years": "2016-2025",
+    "stems": [
+      "Aşağıdakilerden hangisi yanlıştır?",
+      "Aşağıdakilerden hangisi ... kapsamında değildir?",
+      "Hangisi I. Meşrutiyet / Tanzimat / Anayasa yılı tuzağıdır?",
+      "1982 Anayasası’na göre yasama yetkisi kime aittir?"
+    ],
+    "traps": [
+      "Yıl kaydırma: 1839 Tanzimat ≠ 1856 Islahat ≠ 1876 Kanun-i Esasi ≠ 1908 II. Meşrutiyet",
+      "23 Nisan Meclis / 19 Mayıs Samsun / 29 Ekim Cumhuriyet / 1 Kasım saltanat / 3 Mart halifelik",
+      "Organ yetkisi: yasama TBMM, yürütme CB sistemi, yargı bağımsız mahkemeler",
+      "2017 değişiklik yılı ≠ Anayasa kabul yılı (1982)"
+    ],
+    "topics": ["Tanzimat", "Anayasa", "TBMM", "vatandaşlık", "coğrafya", "inkılap"]
+  },
+  "kpss_onlisans": {
+    "years": "2016-2025",
+    "stems": ["Aşağıdakilerden hangisi doğrudur?", "Hangisi temel vatandaşlık bilgisi dışındadır?"],
+    "traps": ["Lisans derinliği yok; tanım ve yıl. Yakın ferman/yıl çeldiricisi."],
+    "topics": ["Anayasa", "tarih", "coğrafya"]
+  },
+  "kpss_ortaogretim": {
+    "years": "2016-2025",
+    "stems": ["Hangisi doğrudur?", "Hangisi yanlıştır?"],
+    "traps": ["Sade dil. Yakın yıl ve benzer kurum adları."],
+    "topics": ["inkılap", "Anayasa", "coğrafya"]
+  },
+  "yks": {
+    "years": "2016-2025",
+    "stems": [
+      "I, II ve III numaralı ifadelerden hangileri doğrudur?",
+      "Parçada anlamca çelişen cümle hangisidir?",
+      "Limit var diye türev vardır, yargısı için ne söylenebilir?"
+    ],
+    "traps": [
+      "Yakın anlamlıyı zıt sanmak (Türkçe)",
+      "Süreklilik ≠ türev (AYT matematik)",
+      "Öncül çeldiricisi: doğru sanılan yanlış kavram yanılgısı (Fen I-II-III)",
+      "Kütle ile yoğunluğu karıştırmak"
+    ],
+    "topics": ["Türkçe", "matematik", "fizik", "kimya", "biyoloji"]
+  },
+  "oabt": {
+    "years": "2016-2025",
+    "stems": ["Bloom taksonomisinde analiz basamağı hangisidir?"],
+    "traps": ["Uygulama ≠ analiz ≠ değerlendirme"],
+    "topics": ["ölçme", "öğrenme kuramı", "alan bilgisi"]
+  },
+  "lgs": {
+    "years": "2016-2025",
+    "stems": ["Yoğunluk karşılaştırmasında en sık düşülen tuzak nedir?"],
+    "traps": ["Ağır olan yoğundur sanmak. Yoğunluk = kütle / hacim."],
+    "topics": ["fen", "Türkçe", "matematik"]
+  },
+  "other": {
+    "years": "2016-2025",
+    "stems": ["Aşağıdakilerden hangisi yanlıştır?"],
+    "traps": ["ÖSYM klasik: yakın kavram, yıl, tanım kaydırması."],
+    "topics": ["genel"]
+  }
+}

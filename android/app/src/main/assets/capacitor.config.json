@@ -1,0 +1,11 @@
+{
+	"appId": "com.tilko.app",
+	"appName": "TILKO",
+	"webDir": "out",
+	"android": {
+		"path": "../android"
+	},
+	"server": {
+		"androidScheme": "https"
+	}
+}

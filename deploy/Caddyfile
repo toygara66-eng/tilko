@@ -1,0 +1,9 @@
+{$DOMAIN:tilko.app} {
+	encode gzip
+	reverse_proxy api:8000
+}
+
+api.{$DOMAIN:tilko.app} {
+	encode gzip
+	reverse_proxy api:8000
+}

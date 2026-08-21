@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TİLKO</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a222c;
+      --panel2: #12181f;
+      --line: #2b3644;
+      --text: #e8eef4;
+      --muted: #8b9aab;
+      --accent: #d4a017;
+      --ok: #3d9a6a;
+      --bad: #c45c5c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 5rem;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(15, 20, 25, 0.96);
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid var(--line);
+      padding: 0.9rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; font-weight: 650; flex: 1; }
+    .back {
+      background: none;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 0.35rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      width: auto;
+    }
+    main { max-width: 780px; margin: 0 auto; padding: 1.25rem; }
+    .page[hidden] { display: none; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.1rem;
+      margin-bottom: 1rem;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input, select {
+      width: 100%;
+      padding: 0.75rem 0.8rem;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      color: var(--text);
+      margin-bottom: 0.9rem;
+      font-size: 0.95rem;
+    }
+    .row { display: grid; grid-template-columns: 1fr 130px; gap: 0.75rem; }
+    button {
+      background: var(--accent);
+      color: #1a1404;
+      border: 0;
+      border-radius: 10px;
+      padding: 0.8rem 1rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      width: 100%;
+    }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    button.ghost {
+      background: var(--panel2);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    .error { color: #ffb4b4; white-space: pre-wrap; margin: 0.9rem 0 0; }
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      width: 100%;
+      text-align: left;
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.85rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .menu-item .big { font-size: 1.5rem; }
+    .menu-item small { display: block; color: var(--muted); font-weight: 400; margin-top: 0.15rem; }
+    .menu-item span.txt { flex: 1; font-size: 1rem; font-weight: 650; }
+    .stamp {
+      display: inline-block;
+      background: #2a2414;
+      color: var(--accent);
+      border: 1px solid #5a4a18;
+      border-radius: 999px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .note {
+      padding: 1.1rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .note:first-child { border-top: 0; padding-top: 0; }
+    .note-head {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      margin-bottom: 0.55rem;
+    }
+    .note-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+    .note-detail { line-height: 1.6; margin: 0; }
+    .points { margin: 0.7rem 0 0; padding-left: 1.1rem; }
+    .points li { margin: 0.3rem 0; line-height: 1.5; }
+    .box {
+      margin-top: 0.75rem;
+      padding: 0.65rem 0.8rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      border-left: 3px solid;
+    }
+    .box b { display: block; font-size: 0.75rem; letter-spacing: 0.04em; margin-bottom: 0.2rem; }
+    .box.mnemonic {
+      background: #15251c;
+      border-color: var(--ok);
+    }
+    .box.mnemonic b { color: #6fd3a0; }
+    .box.tip {
+      background: #2a2117;
+      border-color: var(--accent);
+    }
+    .box.tip b { color: var(--accent); }
+    .tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .tag {
+      font-size: 0.72rem;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.15rem 0.55rem;
+    }
+    .opts { margin: 0.9rem 0 0; padding: 0; list-style: none; }
+    .opts li {
+      margin: 0.45rem 0;
+      padding: 0.7rem 0.8rem;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      cursor: pointer;
+    }
+    .opts li.correct { border-color: var(--ok); background: #163024; }
+    .opts li.wrong { border-color: var(--bad); background: #2a1717; }
+    .explain {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-top: 0.9rem;
+      padding-top: 0.8rem;
+      border-top: 1px solid var(--line);
+    }
+    .qmeta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 0.7rem;
+    }
+    .qtext { font-size: 1.02rem; font-weight: 600; line-height: 1.5; }
+    .nav { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .bar { height: 4px; background: var(--panel2); border-radius: 999px; overflow: hidden; margin-bottom: 1rem; }
+    .bar > div { height: 100%; background: var(--accent); width: 0; transition: width 0.2s; }
+    .score { text-align: center; }
+    .score .num { font-size: 2rem; font-weight: 700; color: var(--accent); }
+    h2 { font-size: 1.05rem; margin: 0 0 0.9rem; }
+    .hint { color: var(--muted); font-size: 0.9rem; margin: 0 0 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="back" id="back" hidden>Geri</button>
+    <h1 id="title">TİLKO</h1>
+  </header>
+  <main>
+    <section class="page" id="page-form">
+      <p class="hint">
+        YouTube ders videosunu bölüm bölüm işler; her kavram için detaylı not, hafıza tekniği
+        ve ÖSYM tuzağı uyarısı çıkarır, ardından sınav kalitesinde soru üretir.
+      </p>
+      <form class="card" id="form">
+        <label for="url">YouTube bağlantısı</label>
+        <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
+        <div class="row">
+          <div>
+            <label for="subject">Konu (isteğe bağlı)</label>
+            <input id="subject" placeholder="Anayasa, Tarih, Coğrafya..." />
+          </div>
+          <div>
+            <label for="count">Soru sayısı</label>
+            <select id="count">
+              <option>10</option>
+              <option selected>20</option>
+              <option>30</option>
+              <option>40</option>
+              <option>60</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" id="go">Analiz et</button>
+        <p class="error" id="error" hidden></p>
+      </form>
+    </section>
+
+    <section class="page" id="page-menu" hidden>
+      <p class="hint" id="menu-subtitle"></p>
+      <button class="menu-item" id="open-notes">
+        <span class="big">📝</span>
+        <span class="txt">Çalışma notları<small id="notes-count"></small></span>
+        <span>›</span>
+      </button>
+      <button class="menu-item" id="open-quiz">
+        <span class="big">🎯</span>
+        <span class="txt">Sorular<small id="quiz-count"></small></span>
+        <span>›</span>
+      </button>
+      <button class="ghost" id="new-video">Başka video analiz et</button>
+    </section>
+
+    <section class="page" id="page-notes" hidden>
+      <div class="card" id="notes-list"></div>
+      <p class="hint">
+        Saniye etiketine dokununca video o andan açılır. Notları ilk gün, 1 gün sonra ve
+        1 hafta sonra tekrar et; hafıza teknikleri bu tekrarlarda kalıcı hâle gelir.
+      </p>
+    </section>
+
+    <section class="page" id="page-quiz" hidden>
+      <div class="bar"><div id="progress"></div></div>
+      <div class="card" id="quiz-card"></div>
+      <div class="nav">
+        <button class="ghost" id="prev">Önceki</button>
+        <button id="next">Sonraki</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    const pages = {
+      form: el("page-form"),
+      menu: el("page-menu"),
+      notes: el("page-notes"),
+      quiz: el("page-quiz"),
+    };
+    const titles = {
+      form: "TİLKO",
+      menu: "Analiz hazır",
+      notes: "Çalışma notları",
+      quiz: "Sorular",
+    };
+
+    let data = null;
+    let index = 0;
+    const answers = {};
+
+    function show(name) {
+      Object.entries(pages).forEach(([key, node]) => (node.hidden = key !== name));
+      el("title").textContent = titles[name];
+      el("back").hidden = name === "form";
+      el("back").dataset.target = name === "menu" ? "form" : "menu";
+      window.scrollTo({ top: 0 });
+    }
+
+    el("back").addEventListener("click", () => show(el("back").dataset.target));
+    el("new-video").addEventListener("click", () => show("form"));
+    el("open-notes").addEventListener("click", () => {
+      renderNotes();
+      show("notes");
+    });
+    el("open-quiz").addEventListener("click", () => {
+      index = 0;
+      renderQuestion();
+      show("quiz");
+    });
+
+    el("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const go = el("go");
+      el("error").hidden = true;
+      go.disabled = true;
+      go.textContent = "Video bölümlere ayrılıyor, notlar çıkarılıyor...";
+      try {
+        const body = {
+          video_url: el("url").value.trim(),
+          question_count: Number(el("count").value),
+        };
+        const subject = el("subject").value.trim();
+        if (subject) body.subject = subject;
+
+        const res = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await res.json();
+        if (!res.ok) {
+          throw new Error(
+            typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail)
+          );
+        }
+        data = payload;
+        index = 0;
+        Object.keys(answers).forEach((k) => delete answers[k]);
+        const base = data.subject
+          ? `${data.subject} — analiz tamamlandı`
+          : "Analiz tamamlandı";
+        el("menu-subtitle").textContent = data.cached
+          ? `${base} (önbellekten geldi, kota harcanmadı)`
+          : base;
+        el("notes-count").textContent = `${data.notes.length} madde`;
+        el("quiz-count").textContent = `${data.questions.length} soru`;
+        show("menu");
+      } catch (err) {
+        el("error").hidden = false;
+        el("error").textContent = err.message || String(err);
+      } finally {
+        go.disabled = false;
+        go.textContent = "Analiz et";
+      }
+    });
+
+    function renderNotes() {
+      el("notes-list").innerHTML = data.notes.length
+        ? data.notes.map(noteCard).join("")
+        : "<p>Not üretilmedi.</p>";
+    }
+
+    function noteCard(n) {
+      const points = (n.key_points || []).length
+        ? `<ul class="points">${n.key_points.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>`
+        : "";
+      const mnemonic = n.mnemonic
+        ? `<div class="box mnemonic"><b>HAFIZA TEKNİĞİ</b>${escapeHtml(n.mnemonic)}</div>`
+        : "";
+      const tip = n.exam_tip
+        ? `<div class="box tip"><b>ÖSYM TUZAĞI</b>${escapeHtml(n.exam_tip)}</div>`
+        : "";
+      return `
+        <div class="note">
+          <div class="note-head">
+            <a class="stamp" href="${n.video_url_with_t}" target="_blank" rel="noopener">${n.timestamp_label}</a>
+            <h3>${escapeHtml(n.title || "Not")}</h3>
+          </div>
+          <p class="note-detail">${escapeHtml(n.text)}</p>
+          ${points}
+          ${mnemonic}
+          ${tip}
+        </div>`;
+    }
+
+    function renderQuestion() {
+      const total = data.questions.length;
+      if (!total) {
+        el("quiz-card").innerHTML = "<p>Soru üretilmedi.</p>";
+        return;
+      }
+      if (index >= total) {
+        renderScore();
+        return;
+      }
+
+      const q = data.questions[index];
+      const picked = answers[q.id];
+      const keys = Object.keys(q.options).sort();
+      el("progress").style.width = `${((index + 1) / total) * 100}%`;
+      const tags = [q.topic, q.difficulty]
+        .filter(Boolean)
+        .map((t) => `<span class="tag">${escapeHtml(t)}</span>`)
+        .join("");
+      el("quiz-card").innerHTML = `
+        <div class="qmeta">
+          <span>Soru ${index + 1} / ${total}</span>
+          <a class="stamp" href="${q.video_url_with_t}" target="_blank" rel="noopener">${q.timestamp_label}</a>
+        </div>
+        <div class="tags" style="margin-bottom:0.7rem">${tags}</div>
+        <div class="qtext">${escapeHtml(q.text)}</div>
+        <ul class="opts">
+          ${keys
+            .map((k) => {
+              let cls = "";
+              if (picked) {
+                if (k === q.correct) cls = "correct";
+                else if (k === picked) cls = "wrong";
+              }
+              return `<li data-key="${k}" class="${cls}">${k}) ${escapeHtml(q.options[k])}</li>`;
+            })
+            .join("")}
+        </ul>
+        <div class="explain" ${picked ? "" : "hidden"}>${escapeHtml(q.explanation)}</div>`;
+
+      el("quiz-card").querySelectorAll(".opts li").forEach((li) => {
+        li.addEventListener("click", () => {
+          if (answers[q.id]) return;
+          answers[q.id] = li.dataset.key;
+          renderQuestion();
+        });
+      });
+
+      el("prev").disabled = index === 0;
+      el("next").textContent = index === total - 1 ? "Sonucu gör" : "Sonraki";
+    }
+
+    function renderScore() {
+      const total = data.questions.length;
+      const correct = data.questions.filter((q) => answers[q.id] === q.correct).length;
+      el("progress").style.width = "100%";
+      el("quiz-card").innerHTML = `
+        <div class="score">
+          <div class="num">${correct} / ${total}</div>
+          <p class="hint">Doğru cevap sayın. Yanlışlarını saniye etiketinden tekrar izleyebilirsin.</p>
+        </div>`;
+      el("next").textContent = "Baştan çöz";
+    }
+
+    el("prev").addEventListener("click", () => {
+      if (index > 0) index -= 1;
+      renderQuestion();
+    });
+
+    el("next").addEventListener("click", () => {
+      const total = data.questions.length;
+      if (index >= total) {
+        index = 0;
+        Object.keys(answers).forEach((k) => delete answers[k]);
+      } else {
+        index += 1;
+      }
+      renderQuestion();
+    });
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+  </script>
+</body>
+</html>

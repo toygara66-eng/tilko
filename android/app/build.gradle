@@ -1,0 +1,75 @@
+plugins {
+    id "com.android.application"
+}
+
+def playCerts = (project.findProperty("TILKO_PLAY_CERT_SHA256") ?: "").toString().replace("\"", "")
+def webUrl = (project.findProperty("TILKO_WEB_URL") ?: "https://localhost").toString().replace("\"", "")
+
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.tilko.app"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.tilko.app"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+        buildConfigField "String", "TILKO_PLAY_CERT_SHA256", "\"${playCerts}\""
+        buildConfigField "String", "TILKO_WEB_URL", "\"${webUrl}\""
+        buildConfigField "String", "TILKO_PLAY_PACKAGE", "\"com.tilko.app\""
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties["keyAlias"]
+                keyPassword keystoreProperties["keyPassword"]
+                storeFile rootProject.file(keystoreProperties["storeFile"])
+                storePassword keystoreProperties["storePassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            debuggable true
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            debuggable false
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "androidx.webkit:webkit:1.11.0"
+}
+
+def capBuild = file("capacitor.build.gradle")
+if (capBuild.exists()) {
+    apply from: "capacitor.build.gradle"
+}

@@ -1,0 +1,1297 @@
+import { ensureAuth, isAuthPublic, setToken } from "@/lib/auth";
+import { getUserId } from "@/lib/user";
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...((init?.headers as Record<string, string>) || {}),
+    };
+    if (!isAuthPublic(path)) {
+      const token = await ensureAuth(API_BASE, getUserId());
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+    });
+    if (response.status === 401 && !isAuthPublic(path)) {
+      setToken("");
+      const token = await ensureAuth(API_BASE, getUserId());
+      headers.Authorization = `Bearer ${token}`;
+      const retry = await fetch(`${API_BASE}${path}`, { ...init, headers });
+      return await readJson<T>(retry);
+    }
+    return await readJson<T>(response);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (
+      (typeof DOMException !== "undefined" &&
+        err instanceof DOMException &&
+        (err.name === "AbortError" || err.name === "TimeoutError")) ||
+      /aborted|timeout|timed out/i.test(message)
+    ) {
+            throw new Error(
+              "Analiz hâlâ sürüyor olabilir. 15 saniye bekleyip tek sefer daha dene; üst üste basma.",
+            );
+    }
+    if (
+      err instanceof TypeError ||
+      /failed to fetch|networkerror|load failed/i.test(message)
+    ) {
+      throw new Error("API'ye ulaşılamadı. Backend çalışıyor mu?");
+    }
+    if (err instanceof Error) throw err;
+    throw new Error("Bağlantı koptu. API'ye ulaşılamadı.");
+  }
+}
+
+function formatApiDetail(detail: unknown): string {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const row = item as { msg?: unknown; message?: unknown; loc?: unknown };
+          const where = Array.isArray(row.loc)
+            ? row.loc.filter((part) => part !== "body").join(".")
+            : "";
+          const msg = String(row.msg || row.message || "").trim();
+          if (msg && where) return `${where}: ${msg}`;
+          return msg;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (typeof detail === "object") {
+    const row = detail as { message?: unknown; msg?: unknown; detail?: unknown };
+    if (typeof row.message === "string") return row.message;
+    if (typeof row.msg === "string") return row.msg;
+    if (typeof row.detail === "string") return row.detail;
+  }
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return "";
+  }
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = formatApiDetail((data as { detail?: unknown }).detail);
+    throw new Error(detail || `İstek başarısız (${response.status})`);
+  }
+  return data as T;
+}
+
+export type TeacherPersona = {
+  catchphrases: string[];
+  tone: string;
+};
+
+export type NoteItem = {
+  id: string;
+  title: string;
+  text: string;
+  key_points: string[];
+  mnemonic: string;
+  exam_tip: string;
+  timestamp_label: string;
+  video_url_with_t: string;
+};
+
+export type PremiseItem = {
+  id: string;
+  text: string;
+  is_correct: boolean;
+  why: string;
+};
+
+export type QuestionItem = {
+  id: string;
+  text: string;
+  options: Record<string, string>;
+  correct: string;
+  explanation: string;
+  trap_explanation: string;
+  topic: string;
+  difficulty: string;
+  timestamp_label: string;
+  video_url_with_t: string;
+  subject_type?: string;
+  is_yks_fen_question?: boolean;
+  fen_branch?: string;
+  misconception_tag?: string;
+  step_by_step_solution?: string[];
+  shortcut_tactic?: string;
+  premises?: PremiseItem[];
+};
+
+export type AnalyzeResponse = {
+  notes: NoteItem[];
+  questions: QuestionItem[];
+  cached: boolean;
+  teacher_persona: TeacherPersona;
+  video_id?: string;
+  video_url?: string;
+  subject?: string | null;
+  job_id?: string;
+  job_status?: "running" | "done" | "error" | string;
+  chunks_done?: number;
+  chunks_total?: number;
+  ai_credits_left: number;
+  ai_credit_limit: number;
+  is_premium: boolean;
+  is_in_trial_period: boolean;
+  is_ad_tier: boolean;
+  daily_ad_credits: number;
+  daily_ad_limit: number;
+  trial_days_left: number;
+};
+
+export type TrapItem = {
+  id: number;
+  question_id?: string;
+  question_text: string;
+  options: Record<string, string>;
+  correct: string;
+  chosen: string;
+  explanation: string;
+  distractor_analysis: string;
+  teacher_note: string;
+  topic: string;
+  time_spent_seconds: number;
+  time_trap_triggered: boolean;
+  review_count: number;
+  next_review_date: string | null;
+  subject_type?: string;
+  shortcut_tactic?: string;
+  step_by_step_solution?: string[];
+  premises?: PremiseItem[];
+  misconception_tag?: string;
+  fen_branch?: string;
+  is_yks_fen?: boolean;
+};
+
+export type PrizeSlice = {
+  monthly_rank: number | null;
+  is_free_next_month: boolean;
+  discount_percentage: number;
+  badge: string | null;
+  tier: string | null;
+  source_month: string | null;
+  projected: boolean;
+  correct_count?: number;
+  avg_time_ms?: number;
+};
+
+export type PrizeView = {
+  live: PrizeSlice;
+  settled: PrizeSlice;
+  badge: string | null;
+  discount_percentage: number;
+  is_free_next_month: boolean;
+  monthly_rank: number | null;
+  total_active_users?: number;
+  prize_stage?: string;
+  prize_banner?: string;
+};
+
+export type RecommendedVideo = {
+  title: string;
+  topic: string;
+  url: string;
+};
+
+export type Progress = {
+  display_name: string;
+  xp: number;
+  level: number;
+  title: string;
+  title_emoji: string;
+  xp_to_next: number;
+  current_streak: number;
+  longest_streak: number;
+  traps_logged: number;
+  traps_cleared: number;
+  prize: PrizeView;
+  ai_credits_left: number;
+  ai_credit_limit: number;
+  is_premium: boolean;
+  is_in_trial_period: boolean;
+  is_ad_tier: boolean;
+  daily_ad_credits: number;
+  daily_ad_limit: number;
+  trial_days_left: number;
+  is_tested: boolean;
+  baseline_score: number;
+  checkup_due: boolean;
+  weak_topics: string[];
+  analysis_summary: string;
+  recommended_videos: RecommendedVideo[];
+  exam_target: string;
+  exam_label: string;
+  is_onboarded: boolean;
+  target_score: number;
+  target_is_set: boolean;
+  current_score: number;
+  progress_pct: number;
+  days_until_exam: number;
+  exam_date: string;
+  exam_date_label?: string;
+  today?: string;
+  today_label?: string;
+  countdown_headline?: string;
+  subscription_status?: string;
+  subscription_product_id?: string;
+  subscription_expires_at?: string | null;
+  role?: string;
+  teacher_id?: string;
+  teacher_name?: string;
+  dashboard?: string;
+};
+
+export type DiagnosticQuestion = {
+  id: string;
+  topic: string;
+  question_text: string;
+  options: Record<string, string>;
+};
+
+export type DiagnosticReport = {
+  is_tested: boolean;
+  score: number;
+  correct_count: number;
+  total: number;
+  weak_topics: string[];
+  strong_topics: string[];
+  analysis_summary: string;
+  net_range: string;
+  topic_breakdown: Record<string, { correct: number; total: number; ratio: number }>;
+  recommended_videos: RecommendedVideo[];
+};
+
+export type CheckupReport = {
+  score: number;
+  correct_count: number;
+  total: number;
+  weak_topics: string[];
+  improvement_summary: string;
+  score_delta: number | null;
+  previous_score: number | null;
+  checkup_date: string;
+  topic_breakdown: Record<string, { correct: number; total: number; ratio: number }>;
+  recommended_videos: RecommendedVideo[];
+};
+
+export type ProgressPoint = {
+  date: string;
+  score: number;
+  weak_topics: string[];
+  improvement_summary: string;
+};
+
+export function analyzeVideo(payload: {
+  video_url: string;
+  user_id: string;
+  subject?: string;
+  question_count: number;
+  ad_watched?: boolean;
+  subject_type?: string;
+  is_yks_fen_question?: boolean;
+}) {
+  return request<AnalyzeResponse>("/analyze", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(75_000),
+  });
+}
+
+export function getAnalyzeJob(jobId: string) {
+  return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`, {
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+
+export type SavedNoteItem = NoteItem & {
+  saved_id: number;
+  subject: string;
+  video_url: string;
+};
+
+export type SavedQuestionItem = QuestionItem & {
+  saved_id: number;
+  subject: string;
+  video_url: string;
+  teacher_persona?: TeacherPersona;
+};
+
+export type NotebookResponse = {
+  user_id: string;
+  subject: string | null;
+  subjects: { name: string; note_count: number; question_count: number }[];
+  notes: SavedNoteItem[];
+  questions: SavedQuestionItem[];
+};
+
+export function listNotebook(userId: string, subject?: string) {
+  const query = subject ? `?subject=${encodeURIComponent(subject)}` : "";
+  return request<NotebookResponse>(`/notebook/${userId}${query}`);
+}
+
+export function unlockAd(userId: string) {
+  return request<{
+    ok: boolean;
+    is_ad_tier: boolean;
+    daily_ad_credits: number;
+    daily_ad_limit: number;
+    is_in_trial_period: boolean;
+  }>("/ads/unlock", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
+export function listTraps(userId: string) {
+  return request<{ traps: TrapItem[] }>(`/traps/${userId}`);
+}
+
+export function dailyMissions(userId: string) {
+  return request<{ due_count: number; traps: TrapItem[] }>(
+    `/daily_missions/${userId}`,
+  );
+}
+
+export function saveTrap(payload: {
+  user_id: string;
+  question_text: string;
+  chosen: string;
+  correct: string;
+  explanation: string;
+  trap_explanation?: string;
+  teacher_persona?: TeacherPersona;
+  topic: string;
+  question_id: string;
+  options: Record<string, string>;
+  time_spent_seconds: number;
+  subject_type?: string;
+  shortcut_tactic?: string;
+  step_by_step_solution?: string[];
+  premises?: PremiseItem[];
+  misconception_tag?: string;
+  fen_branch?: string;
+  is_yks_fen_question?: boolean;
+}) {
+  return request<{
+    warning: string;
+    time_trap_triggered: boolean;
+    trap: TrapItem;
+  }>(
+    "/save_trap",
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function completeTrap(payload: {
+  user_id: string;
+  trap_id: number;
+  chosen: string;
+}) {
+  return request<{
+    correct: boolean;
+    message: string;
+    game: { xp_gained: number; streak: number; notebook_cleared: boolean };
+  }>("/complete_trap", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getProgress(userId: string) {
+  return request<Progress>(`/progress/${userId}`);
+}
+
+export type ExamTargetResult = {
+  user_id: string;
+  exam_target: string;
+  exam_label: string;
+  is_onboarded: boolean;
+  is_tested?: boolean;
+  reset?: boolean;
+  title: string;
+  message: string;
+  days_left?: number;
+  headline?: string;
+  exam_date?: string;
+  exam_date_label?: string;
+  today?: string;
+  today_label?: string;
+};
+
+export function setExamTarget(userId: string, examTarget: string) {
+  return request<ExamTargetResult>("/user/set-exam-target", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, exam_target: examTarget }),
+  });
+}
+
+export type ExamCountdown = {
+  exam_target: string;
+  exam_label: string;
+  exam_date: string;
+  exam_date_label?: string;
+  today?: string;
+  today_label?: string;
+  days_left: number;
+  headline: string;
+};
+
+export function getExamCountdown(userId: string) {
+  return request<ExamCountdown>(
+    `/user/exam-countdown?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export type TargetScoreResult = {
+  user_id: string;
+  target_score: number;
+  title: string;
+  message: string;
+};
+
+export function setTargetScore(userId: string, targetScore: number) {
+  return request<TargetScoreResult>("/user/set-target-score", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, target_score: targetScore }),
+  });
+}
+
+export type MotivationalQuote = {
+  user_id: string;
+  quote: string;
+  title: string;
+  exam_target: string;
+  exam_label: string;
+  date: string;
+};
+
+export function getMotivationalQuote(userId: string) {
+  return request<MotivationalQuote>(
+    `/motivational-quote?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export type PenaltyStatus = {
+  user_id: string;
+  is_penalized: boolean;
+  penalty_clear_count: number;
+  needed: number;
+  trap: TrapItem | null;
+  message?: string;
+};
+
+export type PenaltyAnswer = {
+  correct: boolean;
+  streak: number;
+  unlocked: boolean;
+  is_penalized: boolean;
+  needed: number;
+  trap: TrapItem | null;
+  message: string;
+};
+
+export function applyPenalty(userId: string, elapsedSeconds = 0) {
+  return request<PenaltyStatus>("/api/penalty", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, elapsed_seconds: elapsedSeconds }),
+  });
+}
+
+export function getPenaltyStatus(userId: string) {
+  return request<PenaltyStatus>(`/api/penalty/${userId}`);
+}
+
+export function answerPenalty(payload: {
+  user_id: string;
+  trap_id: number;
+  chosen: string;
+}) {
+  return request<PenaltyAnswer>("/api/penalty/answer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function clearPenalty(userId: string) {
+  return request<PenaltyStatus>("/api/clear_penalty", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
+export type KurnazEntry = {
+  rank: number;
+  user_id: string;
+  display_name: string;
+  time_spent_ms: number;
+  title: string;
+  emoji: string;
+  badge: string;
+  prize_badge: string | null;
+  monthly_rank: number | null;
+};
+
+export type DailyChallenge = {
+  id: number;
+  question_text: string;
+  options: Record<string, string>;
+  date: string | null;
+  already_attempted: boolean;
+  result: DailyChallengeResult | null;
+  subject_type?: string;
+  is_yks_fen_question?: boolean;
+  fen_branch?: string;
+  premises?: PremiseItem[];
+};
+
+export type DailyChallengeResult = {
+  challenge_id: number;
+  is_correct: boolean;
+  already_attempted: boolean;
+  time_spent_ms: number;
+  trap_explanation: string;
+  wrong_count: number;
+  wrong_message: string | null;
+  rank: number | null;
+  leaderboard: KurnazEntry[];
+  xp_gained: number;
+  xp: number;
+  title: string;
+  title_emoji: string;
+  is_suspicious: boolean;
+  is_cheated: boolean;
+  eligible: boolean;
+  suspicious_reason: string | null;
+  subject_type?: string;
+  shortcut_tactic?: string;
+  step_by_step_solution?: string[];
+  premises?: PremiseItem[];
+  misconception_tag?: string;
+  fen_branch?: string;
+  is_yks_fen_question?: boolean;
+};
+
+export type DailyChallengeLeaderboard = {
+  challenge_id: number;
+  date: string | null;
+  title: string;
+  entries: KurnazEntry[];
+  viewer_rank: number | null;
+  total_active_users: number;
+  prize_stage: string;
+  prize_banner: string;
+};
+
+export function getDailyChallenge(userId: string) {
+  return request<DailyChallenge>(
+    `/daily-challenge?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function startDailyChallenge(payload: {
+  user_id: string;
+  challenge_id: number;
+  device_id: string;
+}) {
+  return request<{
+    challenge_id: number;
+    started_at: string | null;
+    already_attempted: boolean;
+  }>("/daily-challenge/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitDailyChallenge(payload: {
+  user_id: string;
+  chosen: string;
+  challenge_id: number;
+  device_id: string;
+}) {
+  return request<DailyChallengeResult>("/daily-challenge/submit", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getKurnazLeaderboard(userId: string) {
+  return request<DailyChallengeLeaderboard>(
+    `/daily-challenge/leaderboard?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function completePomodoro(userId: string, sessionId: string) {
+  return request<{
+    xp_gained: number;
+    xp: number;
+    level: number;
+    title: string;
+    title_emoji: string;
+    already: boolean;
+  }>("/api/pomodoro/complete", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, session_id: sessionId }),
+  });
+}
+
+export function getDiagnosticExam(userId: string, kind: "baseline" | "checkup") {
+  return request<{ kind: string; questions: DiagnosticQuestion[] }>(
+    `/diagnostic/exam?kind=${kind}&user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function submitDiagnostic(
+  userId: string,
+  answers: { question_id: string; chosen: string }[],
+) {
+  return request<DiagnosticReport>("/diagnostic/submit", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, answers }),
+  });
+}
+
+export function submitCheckup(
+  userId: string,
+  answers: { question_id: string; chosen: string }[],
+) {
+  return request<CheckupReport>("/diagnostic/checkup-submit", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, answers }),
+  });
+}
+
+export type DynamicExamQuestion = DiagnosticQuestion & {
+  difficulty?: string;
+  subject_type?: string;
+  is_yks_fen_question?: boolean;
+  fen_branch?: string;
+  premises?: PremiseItem[];
+};
+
+export type DynamicExamCatalog = {
+  user_id: string;
+  exam_target: string;
+  exam_label: string;
+  family: string;
+  subjects: string[];
+  question_counts: number[];
+  seconds_per_question: number;
+};
+
+export type DynamicExamSession = {
+  exam_id: number;
+  status: string;
+  exam_target: string;
+  exam_label: string;
+  subjects: string[];
+  question_count: number;
+  duration_seconds: number;
+  remaining_seconds: number;
+  started_at: string | null;
+  questions: DynamicExamQuestion[];
+  trap_blend: boolean;
+  osym_dna: boolean;
+  report: DynamicExamReport | null;
+};
+
+export type DynamicExamReview = {
+  question_id: string;
+  topic: string;
+  question_text: string;
+  options: Record<string, string>;
+  chosen: string;
+  correct: string;
+  is_correct: boolean;
+  explanation: string;
+  trap_explanation: string;
+  subject_type?: string;
+  is_yks_fen_question?: boolean;
+  fen_branch?: string;
+  misconception_tag?: string;
+  step_by_step_solution?: string[];
+  shortcut_tactic?: string;
+  premises?: PremiseItem[];
+};
+
+export type DynamicExamReport = {
+  exam_id: number;
+  already: boolean;
+  score: number;
+  correct_count: number;
+  total: number;
+  weak_topics: string[];
+  strong_topics: string[];
+  topic_breakdown: Record<string, { correct: number; total: number; ratio: number }>;
+  net_range: string;
+  coach_summary: string;
+  weakness_analysis: string;
+  prescription: string;
+  traps_hit: string[];
+  reviews: DynamicExamReview[];
+  recommended_videos: RecommendedVideo[];
+  is_cheated: boolean;
+  traps_saved: number;
+  time_spent_seconds: number;
+  exam_target: string;
+  exam_label: string;
+  subjects: string[];
+  xp_gained: number;
+  xp: number;
+  level: number;
+  title: string;
+  title_emoji: string;
+};
+
+export function getDynamicExamCatalog(userId: string, examTarget?: string) {
+  const extra = examTarget ? `&exam_target=${encodeURIComponent(examTarget)}` : "";
+  return request<DynamicExamCatalog>(
+    `/exam/catalog?user_id=${encodeURIComponent(userId)}${extra}`,
+  );
+}
+
+export function generateDynamicExam(payload: {
+  user_id: string;
+  exam_target?: string;
+  subjects: string[];
+  question_count: number;
+}) {
+  return request<DynamicExamSession>("/exam/generate-dynamic", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDynamicExam(userId: string, examId: number) {
+  return request<DynamicExamSession>(
+    `/exam/dynamic/${examId}?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function submitDynamicExam(payload: {
+  user_id: string;
+  exam_id: number;
+  answers: { question_id: string; chosen: string }[];
+  time_spent_seconds?: number;
+}) {
+  return request<DynamicExamReport>("/exam/submit-dynamic", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getProgressHistory(userId: string) {
+  return request<{ user_id: string; points: ProgressPoint[] }>(
+    `/diagnostic/progress-history?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export type QuestionReport = {
+  id: number;
+  question_id: string;
+  status: string;
+  message: string;
+};
+
+export function reportQuestion(payload: {
+  user_id: string;
+  question_id: string;
+  reason_text: string;
+}) {
+  return request<QuestionReport>("/questions/report", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type MistakeTypeShare = {
+  type: string;
+  count: number;
+  rate: number;
+};
+
+export type MistakeDoctorReport = {
+  user_id: string;
+  title: string;
+  trap_count: number;
+  types: MistakeTypeShare[];
+  dominant: string | null;
+  summary: string;
+  prescription: string;
+  weak_topics: string[];
+  source: string;
+};
+
+export function getMistakeDoctor(userId: string) {
+  return request<MistakeDoctorReport>(
+    `/analytics/mistake-doctor?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export type FeedbackCategory = "feature" | "ui_ux" | "general";
+
+export type FeedbackSubmit = {
+  id: number;
+  category: FeedbackCategory;
+  status: string;
+  message: string;
+};
+
+export function submitFeedback(payload: {
+  user_id: string;
+  category: FeedbackCategory;
+  message: string;
+}) {
+  return request<FeedbackSubmit>("/feedback/submit", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type SubscriptionPlan = {
+  id: string;
+  label: string;
+  period: string;
+  days: number;
+  price_try: number;
+  price_label: string;
+};
+
+export type SubscriptionStatus = {
+  ok: boolean;
+  is_premium: boolean;
+  subscription_status: string;
+  product_id: string;
+  expires_at: string | null;
+  sandbox: boolean;
+  package_name: string;
+  plans: SubscriptionPlan[];
+  message: string;
+};
+
+export function getSubscriptionStatus(userId: string) {
+  return request<SubscriptionStatus>(
+    `/subscription/status?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function verifySubscription(payload: {
+  user_id: string;
+  product_id: string;
+  purchase_token: string;
+  order_id?: string;
+  platform?: string;
+}) {
+  return request<SubscriptionStatus>("/subscription/verify", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type RagStatus = {
+  docs: number;
+  chunks: number;
+  highlights: number;
+  archive_dir: string;
+  style: {
+    stems: string[];
+    traps: string[];
+    topics: string[];
+    years: string;
+    revision: number;
+  };
+  topic_signals: { topic: string; weight: number; source: string }[];
+};
+
+export type ArchiveFeedResult = {
+  ok: boolean;
+  processed: number;
+  results: {
+    filename?: string;
+    source_url?: string;
+    skipped?: boolean;
+    chunks?: number;
+    error?: string;
+    exam_year?: number;
+  }[];
+  style_revision: number;
+  signals: { topic: string; weight: number; source: string }[];
+};
+
+function adminHeaders(secret: string, json = true): Promise<Record<string, string>> {
+  return ensureAuth(API_BASE, getUserId()).then((token) => {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      "X-Admin-Secret": secret,
+    };
+    if (json) headers["Content-Type"] = "application/json";
+    return headers;
+  });
+}
+
+export type ExamScheduleItem = {
+  exam_target: string;
+  label: string;
+  exam_date: string;
+  exam_date_label?: string;
+  days_remaining: number;
+  message?: string;
+};
+
+export type ExamScheduleList = {
+  exams: ExamScheduleItem[];
+  count: number;
+  today: string;
+  today_label: string;
+  today_override: boolean;
+  real_today: string;
+  real_today_label: string;
+  message?: string;
+};
+
+export async function listExamSchedules(secret: string) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/exams/list`, { headers });
+  return readJson<ExamScheduleList>(response);
+}
+
+export async function updateExamToday(
+  secret: string,
+  payload: { exam_date?: string; reset?: boolean },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/exams/today`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<ExamScheduleList>(response);
+}
+
+export async function updateExamSchedule(
+  secret: string,
+  payload: { exam_target: string; exam_date: string },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/exams/update`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<ExamScheduleItem>(response);
+}
+
+export async function getRagStatus(secret: string, examTarget = "") {
+  const headers = await adminHeaders(secret);
+  const query = examTarget
+    ? `?exam_target=${encodeURIComponent(examTarget)}`
+    : "";
+  const response = await fetch(`${API_BASE}/admin/rag-status${query}`, { headers });
+  return readJson<RagStatus>(response);
+}
+
+export async function feedOsymArchives(
+  secret: string,
+  payload: {
+    exam_target?: string;
+    exam_year?: number;
+    files?: File[];
+    urls?: string[];
+    scan_inbox?: boolean;
+  },
+) {
+  const files = payload.files || [];
+  const urls = (payload.urls || []).map((item) => item.trim()).filter(Boolean);
+  if (files.length) {
+    const headers = await adminHeaders(secret, false);
+    const form = new FormData();
+    if (payload.exam_target) form.append("exam_target", payload.exam_target);
+    if (payload.exam_year) form.append("exam_year", String(payload.exam_year));
+    form.append("scan_inbox", payload.scan_inbox ? "true" : "false");
+    if (urls.length) form.append("urls", urls.join("\n"));
+    for (const file of files) form.append("files", file);
+    const response = await fetch(`${API_BASE}/admin/feed-osym-archives`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    return readJson<ArchiveFeedResult>(response);
+  }
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/feed-osym-archives`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      exam_target: payload.exam_target || "",
+      exam_year: payload.exam_year || 0,
+      urls,
+      scan_inbox: Boolean(payload.scan_inbox),
+    }),
+  });
+  return readJson<ArchiveFeedResult>(response);
+}
+
+export type PromoQuote = {
+  ok: boolean;
+  code: string;
+  discount_type: string;
+  value: number;
+  product_id: string;
+  original_price: number;
+  discount_amount: number;
+  payable_amount: number;
+  message: string;
+  classroom_joined?: boolean;
+  teacher_id?: string;
+  teacher_name?: string;
+  join_message?: string;
+};
+
+export type PromoRedemption = {
+  user_id: string;
+  product_id: string;
+  original_price: number;
+  discount_amount: number;
+  payable_amount: number;
+  used_at: string | null;
+};
+
+export type PromoCoupon = {
+  id: number;
+  code: string;
+  discount_type: string;
+  value: number;
+  max_uses: number;
+  used_count: number;
+  remaining: number | null;
+  used_by?: string[];
+  expires_at: string | null;
+  created_at: string | null;
+  status: string;
+  created_by_teacher_id?: string;
+  enroll_to_class?: boolean;
+  redemptions: PromoRedemption[];
+};
+
+export type PromoCreateResult = {
+  ok: boolean;
+  count: number;
+  coupons: PromoCoupon[];
+  message: string;
+};
+
+export function applyPromo(payload: {
+  user_id: string;
+  code: string;
+  product_id?: string;
+}) {
+  return request<PromoQuote>("/billing/apply-promo", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createPromo(
+  secret: string,
+  payload: {
+    code: string;
+    discount_type: string;
+    value: number;
+    max_uses: number;
+    quantity?: number;
+    expires_at?: string;
+    created_by_teacher_id?: string;
+    enroll_to_class?: boolean;
+  },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/promo/create`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<PromoCreateResult>(response);
+}
+
+export async function listPromos(secret: string) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/promo/list`, { headers });
+  return readJson<{ coupons: PromoCoupon[]; count: number }>(response);
+}
+
+export type AuthSession = {
+  access_token: string;
+  token_type: string;
+  user_id: string;
+  role: string;
+  display_name: string;
+  dashboard: string;
+};
+
+export function loginAccount(payload: {
+  user_id: string;
+  password: string;
+  role?: string;
+  display_name?: string;
+}) {
+  return request<AuthSession>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function registerAccount(payload: {
+  user_id: string;
+  password: string;
+  role?: string;
+  display_name?: string;
+}) {
+  return request<AuthSession>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type TeacherStudentCard = {
+  user_id: string;
+  display_name: string;
+  baseline_score: number;
+  net_range: string;
+  is_tested: boolean;
+  trap_count: number;
+  traps_cleared: number;
+  xp: number;
+  weak_topics: string[];
+  exam_target: string;
+  analysis_summary: string;
+  rank: number;
+};
+
+export type TeacherClassroom = {
+  teacher_id: string;
+  teacher_name: string;
+  role: string;
+  student_count: number;
+  class_average: number;
+  students: TeacherStudentCard[];
+  ranking: TeacherStudentCard[];
+  hot_topics: { topic: string; hits: number; intensity: number }[];
+};
+
+export type TeacherStudentAnalysis = {
+  student: TeacherStudentCard;
+  doctor: MistakeDoctorReport;
+  traps: {
+    id: number;
+    question_text: string;
+    topic: string;
+    chosen: string;
+    correct: string;
+    teacher_note: string;
+    distractor_analysis: string;
+    time_trap_triggered: boolean;
+  }[];
+  baseline: Record<string, unknown>;
+  weak_topics: string[];
+  analysis_summary: string;
+};
+
+export type TeacherAssignment = {
+  id: number;
+  teacher_id: string;
+  title: string;
+  topic: string;
+  question_text: string;
+  options: Record<string, string>;
+  correct?: string;
+  explanation?: string;
+  assigned_count?: number;
+  completed_count?: number;
+  created_at: string | null;
+  completed?: boolean;
+};
+
+export function getTeacherClassroom() {
+  return request<TeacherClassroom>("/teacher/students");
+}
+
+export function getTeacherStudentAnalysis(studentId: string) {
+  return request<TeacherStudentAnalysis>(
+    `/teacher/student-analysis/${encodeURIComponent(studentId)}`,
+  );
+}
+
+export function shareTeacherResource(payload: {
+  title?: string;
+  topic?: string;
+  question_text: string;
+  options: Record<string, string>;
+  correct?: string;
+  explanation?: string;
+  student_ids?: string[];
+}) {
+  return request<TeacherAssignment>("/teacher/share-resource", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createTeacherPromo(payload: {
+  code: string;
+  discount_type: string;
+  value: number;
+  max_uses: number;
+  quantity?: number;
+  expires_at?: string;
+  enroll_to_class?: boolean;
+}) {
+  return request<PromoCreateResult>("/teacher/promo/create", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listTeacherPromos() {
+  return request<{ coupons: PromoCoupon[]; count: number }>("/teacher/promo/list");
+}
+
+export function listStudentAssignments() {
+  return request<{
+    assignments: TeacherAssignment[];
+    count: number;
+    teacher_id: string;
+    teacher_name: string;
+  }>("/student/assignments");
+}
+
+export function submitStudentAssignment(assignmentId: number, chosen: string) {
+  return request<{
+    ok: boolean;
+    correct: boolean;
+    message: string;
+    answer: string;
+    explanation: string;
+  }>("/student/assignments/submit", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: getUserId(),
+      assignment_id: assignmentId,
+      chosen,
+    }),
+  });
+}
