@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     play_service_account_file: str = ""
     admin_api_secret: str = "tilko-admin-dev"
     cors_origins: str = "*"
+    database_path: str = ""
 
     @property
     def is_local(self) -> bool:

@@ -5,10 +5,13 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-DB_PATH = DATA_DIR / "kpss.db"
+_default_db = Path(__file__).resolve().parents[2] / "data" / "kpss.db"
+DB_PATH = Path(settings.database_path) if settings.database_path.strip() else _default_db
+DATA_DIR = DB_PATH.parent
 
 
 class Base(DeclarativeBase):
