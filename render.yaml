@@ -17,7 +17,7 @@ services:
       - key: LLM_FALLBACK
         value: groq
       - key: OPENROUTER_MODEL
-        value: openai/gpt-oss-120b
+        value: google/gemma-4-31b-it:free
       - key: OPENROUTER_API_KEY
         sync: false
       - key: GROQ_API_KEY

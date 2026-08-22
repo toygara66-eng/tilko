@@ -801,14 +801,11 @@ def _fetch_via_llm_youtube(
     openrouter_key = (settings.openrouter_api_key or "").strip()
     gemini_key = (settings.gemini_api_key or "").strip()
     if openrouter_key:
-        models = []
-        for name in (
-            "google/gemini-3.6-flash",
-            "google/gemini-2.5-flash-lite",
-            "google/gemini-2.5-flash",
-        ):
-            if name not in models:
-                models.append(name)
+        models = [
+            "google/gemma-4-31b-it:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "nvidia/nemotron-nano-12b-v2-vl:free",
+        ]
         for model in models:
             try:
                 text = _openrouter_text_from_youtube(

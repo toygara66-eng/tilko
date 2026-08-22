@@ -35,7 +35,14 @@ RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
-ANALYZE_FAST_MODEL = "openai/gpt-oss-20b"
+ANALYZE_FAST_MODEL = "google/gemma-4-31b-it:free"
+OPENROUTER_FREE_MODELS = (
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-nano-9b-v2:free",
+)
 _groq_gate = threading.Lock()
 _groq_next_ok = 0.0
 _provider_lock = threading.Lock()
@@ -128,9 +135,9 @@ def _client() -> tuple[OpenAI, str]:
                 "OPENROUTER_API_KEY tanımlı değil. openrouter.ai/keys adresinden "
                 "bir anahtar alıp backend/.env dosyasına yazın."
             )
-        model = settings.openrouter_model
-        if _openrouter_free_only and not (model or "").endswith(":free"):
-            model = "openai/gpt-oss-20b:free"
+        model = (settings.openrouter_model or "").strip() or ANALYZE_FAST_MODEL
+        if not model.endswith(":free"):
+            model = ANALYZE_FAST_MODEL
         return (
             _openai_client(
                 api_key=settings.openrouter_api_key,
@@ -381,21 +388,48 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
 
 def _openrouter_fast_model() -> str:
     model = (settings.openrouter_model or "").strip() or ANALYZE_FAST_MODEL
-    if _openrouter_free_only and not model.endswith(":free"):
-        return "openai/gpt-oss-20b:free"
-    if "gpt-oss-120b" in model:
-        return model.replace("gpt-oss-120b", "gpt-oss-20b")
-    return model
+    if model.endswith(":free"):
+        return model
+    return ANALYZE_FAST_MODEL
+
+
+def _openrouter_models_to_try(preferred: str) -> list[str]:
+    ordered: list[str] = []
+    if preferred:
+        ordered.append(preferred)
+    for name in OPENROUTER_FREE_MODELS:
+        if name not in ordered:
+            ordered.append(name)
+    return ordered
+
+
+def _is_openrouter_client(client: OpenAI) -> bool:
+    base = str(getattr(client, "base_url", "") or "")
+    return "openrouter.ai" in base
+
+
+def _rotate_openrouter(exc: Exception) -> bool:
+    raw = str(exc).lower()
+    return (
+        "unavailable for free" in raw
+        or "no endpoints found" in raw
+        or "model_not_found" in raw
+        or "temporarily rate-limited" in raw
+        or "error code: 404" in raw
+        or "error code: 429" in raw
+    )
 
 
 def _activate_credit_fallback() -> bool:
     """Kota bitince OpenRouter :free, sonra Groq, en sonda Gemini dene."""
     global _skip_openrouter, _openrouter_free_only, _skip_gemini
-    if settings.openrouter_api_key and not _openrouter_free_only:
+    already_free = (settings.openrouter_model or "").endswith(":free")
+    if settings.openrouter_api_key and not _openrouter_free_only and not already_free:
         _openrouter_free_only = True
         _skip_gemini = True
         logger.warning("Ücretli model reddedildi; OpenRouter ücretsiz model deneniyor.")
         return True
+    _openrouter_free_only = True
     if _groq_fast_client():
         _skip_gemini = True
         _skip_openrouter = True
@@ -478,6 +512,18 @@ def _openai_create(messages: list[dict], temperature: float, json_mode: bool):
             kwargs.pop("extra_body", None)
             logger.warning("Reasoning parametresi reddedildi, sade çağrı.")
             return client.chat.completions.create(**kwargs)
+        if _is_openrouter_client(client) and _rotate_openrouter(exc):
+            last = exc
+            for candidate in _openrouter_models_to_try(str(kwargs.get("model") or ""))[1:]:
+                kwargs["model"] = candidate
+                logger.warning("OpenRouter ücretsiz model kaydırıldı: %s", candidate)
+                try:
+                    return client.chat.completions.create(**kwargs)
+                except Exception as retry_exc:
+                    last = retry_exc
+                    if not _rotate_openrouter(retry_exc):
+                        raise
+            raise last
         raise
 
 
