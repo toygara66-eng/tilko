@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { analyzeVideo, getAnalyzeJob, type AnalyzeResponse } from "@/lib/api";
+import { fetchCaptionsForVideo } from "@/lib/captions";
 import { getUserId } from "@/lib/user";
 import { useProfile } from "@/components/profile/profile-context";
 
@@ -183,6 +184,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
       setSubject(input.subject || "");
       const topic = input.subject || "";
       try {
+        const transcript_lines = await fetchCaptionsForVideo(input.video_url);
         const data = await analyzeVideo({
           video_url: input.video_url,
           user_id: getUserId(),
@@ -191,6 +193,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           ad_watched: input.ad_watched,
           subject_type: input.subject_type,
           is_yks_fen_question: input.is_yks_fen_question,
+          transcript_lines: transcript_lines.length ? transcript_lines : undefined,
         });
         if (token !== job.current) return;
         remember(data, input.video_url, topic);

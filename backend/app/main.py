@@ -120,6 +120,7 @@ from app.services.youtube import (
     extract_video_id,
     fetch_transcript_lines,
     format_timestamp_label,
+    normalize_transcript_lines,
     slice_transcript,
     transcript_duration_seconds,
 )
@@ -235,7 +236,11 @@ def analyze_video(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    lines = None
+    lines = normalize_transcript_lines(
+        [item.model_dump() for item in payload.transcript_lines]
+        if payload.transcript_lines
+        else None
+    )
     user = penalty_service.get_or_create_user(db, user_id)
     from app.services.exams import exam_of
 
@@ -250,7 +255,8 @@ def analyze_video(
                 detail=str(AdRequiredError(title=gamification.address_for(db, user_id))),
             )
         try:
-            lines = fetch_transcript_lines(video_id)
+            if lines is None:
+                lines = fetch_transcript_lines(video_id)
             if not lines:
                 raise ValueError("Bu video için altyazı bulunamadı.")
             credit_service.enforce_duration(

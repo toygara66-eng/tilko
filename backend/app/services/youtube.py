@@ -15,7 +15,10 @@ WATCH_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
-PLAYER_URL = "https://www.youtube.com/youtubei/v1/player"
+PLAYER_URL = (
+    "https://www.youtube.com/youtubei/v1/player"
+    "?key=AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc&prettyPrint=false"
+)
 
 
 def extract_video_id(video_url: str) -> str:
@@ -64,33 +67,74 @@ def _snippet_field(snippet, name: str, default):
     return default if value is None else value
 
 
+def normalize_transcript_lines(raw: list | None) -> list[dict] | None:
+    if not raw:
+        return None
+    lines: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").replace("\n", " ").strip()
+        if not text:
+            continue
+        try:
+            start = int(float(item.get("start") or 0))
+        except (TypeError, ValueError):
+            start = 0
+        if start < 0:
+            start = 0
+        lines.append({"start": start, "text": text[:800]})
+        if len(lines) >= 20000:
+            break
+    return lines if len(lines) >= 3 else None
+
+
 def fetch_transcript_lines(video_id: str) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker (TR tercih, yoksa mevcut ilk dil)."""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+    import time
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     errors: list[str] = []
-    fetchers = (
-        (_fetch_via_innertube, 18),
-        (_fetch_via_ytdlp, 20),
-        (_fetch_via_invidious, 12),
-        (_fetch_transcript_lines_inner, 8),
-        (_fetch_via_gemini_youtube, 28),
+
+    def run_group(group: tuple, budget: float) -> list[dict] | None:
+        with ThreadPoolExecutor(max_workers=len(group)) as pool:
+            fmap = {pool.submit(fn, video_id): fn for fn in group}
+            pending = set(fmap)
+            deadline = time.monotonic() + budget
+            while pending:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    errors.append(
+                        ", ".join(f"{fmap[item].__name__}: timeout" for item in pending)
+                    )
+                    break
+                done, pending = wait(
+                    pending, timeout=remaining, return_when=FIRST_COMPLETED
+                )
+                for future in done:
+                    fn = fmap[future]
+                    try:
+                        lines = future.result()
+                    except Exception as exc:  # noqa: BLE001
+                        errors.append(f"{fn.__name__}: {exc}")
+                        continue
+                    if lines:
+                        logger.info(
+                            "Altyazı %s ile geldi (%s satır)", fn.__name__, len(lines)
+                        )
+                        return lines
+                    errors.append(f"{fn.__name__}: boş")
+        return None
+
+    lines = run_group(
+        (_fetch_via_innertube, _fetch_via_invidious, _fetch_transcript_lines_inner),
+        10,
     )
-    for fetcher, limit in fetchers:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(fetcher, video_id)
-            try:
-                lines = future.result(timeout=limit)
-            except FuturesTimeout:
-                errors.append(f"{fetcher.__name__}: timeout")
-                continue
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{fetcher.__name__}: {exc}")
-                continue
-        if lines:
-            logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
-            return lines
-        errors.append(f"{fetcher.__name__}: boş")
+    if lines:
+        return lines
+    lines = run_group((_fetch_via_gemini_youtube, _fetch_via_ytdlp), 22)
+    if lines:
+        return lines
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
     raise ValueError(
         "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
@@ -370,6 +414,24 @@ _IOS_CLIENTS = (
     {
         "client": {
             "clientName": "IOS",
+            "clientVersion": "20.10.38",
+            "deviceMake": "Apple",
+            "deviceModel": "iPhone16,2",
+            "osName": "iOS",
+            "osVersion": "17.5.1.21F90",
+            "hl": "tr",
+            "gl": "TR",
+        },
+        "headers": {
+            "User-Agent": "com.google.ios.youtube/20.10.38 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
+            "X-YouTube-Client-Name": "5",
+            "X-YouTube-Client-Version": "20.10.38",
+            "Content-Type": "application/json",
+        },
+    },
+    {
+        "client": {
+            "clientName": "IOS",
             "clientVersion": "20.10.4",
             "deviceMake": "Apple",
             "deviceModel": "iPhone16,2",
@@ -382,24 +444,6 @@ _IOS_CLIENTS = (
             "User-Agent": "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
             "X-YouTube-Client-Name": "5",
             "X-YouTube-Client-Version": "20.10.4",
-            "Content-Type": "application/json",
-        },
-    },
-    {
-        "client": {
-            "clientName": "IOS",
-            "clientVersion": "19.45.4",
-            "deviceMake": "Apple",
-            "deviceModel": "iPhone16,2",
-            "osName": "iOS",
-            "osVersion": "17.5.1.21F90",
-            "hl": "tr",
-            "gl": "TR",
-        },
-        "headers": {
-            "User-Agent": "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
-            "X-YouTube-Client-Name": "5",
-            "X-YouTube-Client-Version": "19.45.4",
             "Content-Type": "application/json",
         },
     },

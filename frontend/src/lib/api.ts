@@ -307,6 +307,7 @@ export function analyzeVideo(payload: {
   ad_watched?: boolean;
   subject_type?: string;
   is_yks_fen_question?: boolean;
+  transcript_lines?: { start: number; text: string }[];
 }) {
   return request<AnalyzeResponse>("/analyze", {
     method: "POST",

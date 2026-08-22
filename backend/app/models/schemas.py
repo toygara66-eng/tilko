@@ -6,6 +6,11 @@ class TeacherPersona(BaseModel):
     tone: str = "öğretici, net"
 
 
+class TranscriptLineIn(BaseModel):
+    start: int = 0
+    text: str = ""
+
+
 class AnalyzeRequest(BaseModel):
     video_url: HttpUrl = Field(..., description="YouTube video bağlantısı")
     user_id: str = Field(..., min_length=1, description="Kota takibi için aday kimliği")
@@ -25,6 +30,11 @@ class AnalyzeRequest(BaseModel):
     is_yks_fen_question: bool = Field(
         default=False,
         description="TYT/AYT Fen ise öncüllü (I, II, III) soru üret",
+    )
+    transcript_lines: list[TranscriptLineIn] | None = Field(
+        default=None,
+        description="İstemcinin çektiği altyazı; doluysa sunucu YouTube'a gitmez",
+        max_length=20000,
     )
 
 
