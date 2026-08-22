@@ -17,7 +17,7 @@ services:
       - key: LLM_FALLBACK
         value: groq
       - key: OPENROUTER_MODEL
-        value: google/gemma-4-31b-it:free
+        value: nvidia/nemotron-3-nano-30b-a3b:free
       - key: OPENROUTER_API_KEY
         sync: false
       - key: GROQ_API_KEY

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemma-4-31b-it:free"
+    openrouter_model: str = "nvidia/nemotron-3-nano-30b-a3b:free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "gemma2:9b"

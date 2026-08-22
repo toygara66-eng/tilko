@@ -35,13 +35,13 @@ RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
-ANALYZE_FAST_MODEL = "google/gemma-4-31b-it:free"
+ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 OPENROUTER_FREE_MODELS = (
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
     "nvidia/nemotron-3-nano-30b-a3b:free",
     "nvidia/nemotron-3.5-lightning:free",
     "nvidia/nemotron-nano-9b-v2:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
 )
 _groq_gate = threading.Lock()
 _groq_next_ok = 0.0
@@ -135,9 +135,7 @@ def _client() -> tuple[OpenAI, str]:
                 "OPENROUTER_API_KEY tanımlı değil. openrouter.ai/keys adresinden "
                 "bir anahtar alıp backend/.env dosyasına yazın."
             )
-        model = (settings.openrouter_model or "").strip() or ANALYZE_FAST_MODEL
-        if not model.endswith(":free"):
-            model = ANALYZE_FAST_MODEL
+        model = ANALYZE_FAST_MODEL
         return (
             _openai_client(
                 api_key=settings.openrouter_api_key,
@@ -285,24 +283,133 @@ def _dicts(value: object) -> list[dict]:
     return []
 
 
+_TRAILING_COMMA_RE = re.compile(r",\s*(?=[}\]])")
+
+
+def _message_text(message: object) -> str:
+    content = getattr(message, "content", None)
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                parts.append(str(part.get("text") or ""))
+            else:
+                parts.append(str(part or ""))
+        return " ".join(parts).strip()
+    return str(content or "").strip()
+
+
+def _close_truncated_json(text: str) -> str:
+    blob = text.rstrip()
+    in_str = False
+    escape = False
+    stack: list[str] = []
+    for char in blob:
+        if in_str:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_str = False
+            continue
+        if char == '"':
+            in_str = True
+        elif char == "{":
+            stack.append("}")
+        elif char == "[":
+            stack.append("]")
+        elif char in "}]" and stack:
+            stack.pop()
+    if in_str:
+        blob += '"'
+    blob += "".join(reversed(stack))
+    return blob
+
+
+def _loads_json_lenient(text: str):
+    blobs = [text]
+    cleaned = _TRAILING_COMMA_RE.sub("", text)
+    if cleaned not in blobs:
+        blobs.append(cleaned)
+    closed = _close_truncated_json(cleaned)
+    if closed not in blobs:
+        blobs.append(closed)
+    last_error: Exception | None = None
+    for blob in blobs:
+        try:
+            return json.loads(blob)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            try:
+                parsed, _ = json.JSONDecoder().raw_decode(blob.lstrip())
+                return parsed
+            except json.JSONDecodeError as inner:
+                last_error = inner
+    if last_error:
+        raise last_error
+    raise json.JSONDecodeError("JSON yok", text, 0)
+
+
+def _pick_note_field(item: dict, *keys: str) -> str:
+    for key in keys:
+        value = item.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _coerce_notes(result: dict) -> list[dict]:
+    raw = (
+        _dicts(result.get("notes"))
+        or _dicts(result.get("notlar"))
+        or _dicts(result.get("study_notes"))
+    )
+    notes: list[dict] = []
+    for item in raw:
+        title = _pick_note_field(item, "title", "baslik", "başlık", "name", "konu")
+        detail = _pick_note_field(
+            item, "detail", "text", "detay", "icerik", "içerik", "aciklama", "açıklama"
+        )
+        if not title and not detail:
+            continue
+        notes.append(
+            {
+                **item,
+                "title": title or detail[:48],
+                "detail": detail or title,
+            }
+        )
+    return notes
+
+
 def _extract_json(raw: str) -> dict:
     text = raw.strip()
     fenced = JSON_FENCE_RE.search(text)
     if fenced:
         text = fenced.group(1).strip()
     try:
-        parsed = json.loads(text)
+        parsed = _loads_json_lenient(text)
     except json.JSONDecodeError:
         stripped = text.lstrip()
         if stripped.startswith("["):
             start, end = text.find("["), text.rfind("]")
-            parsed = json.loads(text[start : end + 1])
+            parsed = _loads_json_lenient(text[start : end + 1] if end > start else stripped)
         else:
             start, end = text.find("{"), text.rfind("}")
-            if start < 0 or end <= start:
+            if start < 0:
                 raise
-            parsed = json.loads(text[start : end + 1])
-    return _as_dict(parsed)
+            chunk = text[start : end + 1] if end > start else text[start:]
+            parsed = _loads_json_lenient(chunk)
+    data = _as_dict(parsed)
+    if "notes" not in data and isinstance(parsed, dict):
+        alt = parsed.get("notlar") or parsed.get("study_notes")
+        if alt:
+            data["notes"] = alt
+    return data
 
 
 def _chat_ollama(system_prompt: str, user_prompt: str, temperature: float) -> dict:
@@ -387,9 +494,6 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
 
 
 def _openrouter_fast_model() -> str:
-    model = (settings.openrouter_model or "").strip() or ANALYZE_FAST_MODEL
-    if model.endswith(":free"):
-        return model
     return ANALYZE_FAST_MODEL
 
 
@@ -500,7 +604,7 @@ def _openai_create(messages: list[dict], temperature: float, json_mode: bool):
     }
     if fast:
         kwargs["max_tokens"] = 7000
-    if json_mode:
+    if json_mode and not str(model or "").endswith(":free"):
         kwargs["response_format"] = {"type": "json_object"}
     if extra:
         kwargs["extra_body"] = extra
@@ -537,8 +641,12 @@ def _chat_openai_compatible(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
+    free = str(_openrouter_fast_model() if settings.llm_provider == "openrouter" else "").endswith(
+        ":free"
+    )
+    use_json = not free
     try:
-        response = _openai_create(messages, temperature, json_mode=True)
+        response = _openai_create(messages, temperature, json_mode=use_json)
     except Exception as exc:
         if _is_timeout(exc):
             raise RuntimeError(
@@ -550,7 +658,14 @@ def _chat_openai_compatible(
             raise
         logger.info("JSON modu tutmadı, düz metinle deneniyor.")
         response = _openai_create(messages, temperature, json_mode=False)
-    return _extract_json(response.choices[0].message.content or "{}")
+        use_json = False
+    parsed = _extract_json(_message_text(response.choices[0].message) or "{}")
+    notes = _coerce_notes(parsed)
+    if use_json and not notes:
+        logger.warning("JSON modu boş şablon döndü, düz metinle tekrar.")
+        response = _openai_create(messages, temperature, json_mode=False)
+        parsed = _extract_json(_message_text(response.choices[0].message) or "{}")
+    return parsed
 
 
 def _throttle_groq() -> None:
@@ -687,7 +802,7 @@ def generate_notes(
     notes: list[dict] = []
     empty = 0
     for result in results:
-        chunk_notes = _dicts(result.get("notes") if isinstance(result, dict) else result)
+        chunk_notes = _coerce_notes(result if isinstance(result, dict) else {})
         if not chunk_notes:
             empty += 1
         notes.extend(chunk_notes)
@@ -1009,9 +1124,26 @@ def _analyze_combined(
             task="analyze",
         )
     )
-    notes = _dicts(result.get("notes"))
+    notes = _coerce_notes(result)
     if not notes:
-        raise RuntimeError("Model not üretemedi.")
+        logger.warning("Birleşik analiz boş not döndü; kısa not denemesi.")
+        result = _as_dict(
+            _chat(
+                "Kısa Türkçe sınav notu yaz. Sadece JSON. notes boş olamaz.",
+                (
+                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{chunk[:4000]}\n\n"
+                    "En az 3 not yaz. Şema: "
+                    '{"notes":[{"title":"...","detail":"...","key_points":["..."],'
+                    '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
+                ),
+                task="analyze",
+            )
+        )
+        notes = _coerce_notes(result)
+    if not notes:
+        raise RuntimeError(
+            "Model not yazamadı. Ücretsiz model boş yanıt verdi; bir kez daha dene."
+        )
     questions: list[dict] = []
     seen: set[str] = set()
     _collect([result], questions, seen, count)
