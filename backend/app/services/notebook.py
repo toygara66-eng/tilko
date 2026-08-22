@@ -96,7 +96,78 @@ def ingest(
             db.commit()
         except IntegrityError:
             db.rollback()
-            return 0
+            # Yarış: aynı not iki kez yazıldıysa satır satır dene, hepsini kaybetme.
+            return _upsert_many_safe(
+                db,
+                user_id=uid,
+                kind="note",
+                subject=label,
+                video_id=vid,
+                video_url=watch,
+                items=notes or [],
+                extra={},
+            ) + _upsert_many_safe(
+                db,
+                user_id=uid,
+                kind="question",
+                subject=label,
+                video_id=vid,
+                video_url=watch,
+                items=questions or [],
+                extra={"teacher_persona": persona or {}},
+            )
+    return added
+
+
+def _upsert_many_safe(
+    db: Session,
+    *,
+    user_id: str,
+    kind: str,
+    subject: str,
+    video_id: str,
+    video_url: str,
+    items: list,
+    extra: dict,
+) -> int:
+    added = 0
+    for item in items:
+        payload = _dump(item)
+        if not payload:
+            continue
+        payload.update(extra)
+        fp = _fingerprint(kind, video_id, payload)
+        exists = db.scalar(
+            select(SavedNotebookItem.id).where(
+                SavedNotebookItem.user_id == user_id,
+                SavedNotebookItem.fingerprint == fp,
+            )
+        )
+        if exists:
+            continue
+        title = str(payload.get("title") or payload.get("text") or "")[:256]
+        try:
+            stamp = int(float(payload.get("timestamp") or 0))
+        except (TypeError, ValueError):
+            stamp = 0
+        try:
+            db.add(
+                SavedNotebookItem(
+                    user_id=user_id,
+                    kind=kind,
+                    subject=subject,
+                    video_id=video_id,
+                    video_url=video_url,
+                    fingerprint=fp,
+                    title=title,
+                    timestamp=stamp,
+                    payload_json=json.dumps(payload, ensure_ascii=False),
+                )
+            )
+            db.commit()
+            added += 1
+        except IntegrityError:
+            db.rollback()
     return added
 
 

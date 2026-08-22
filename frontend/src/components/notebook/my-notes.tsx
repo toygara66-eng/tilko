@@ -49,22 +49,33 @@ export function MyNotes() {
 
   useEffect(() => {
     let live = true;
-    setBusy(true);
-    listNotebook(getUserId(), subject === ALL ? undefined : subject)
-      .then((payload) => {
-        if (!live) return;
-        setData(payload);
-        setError("");
-      })
-      .catch((err) => {
-        if (!live) return;
-        setError(err instanceof Error ? err.message : "Notlar yüklenemedi");
-      })
-      .finally(() => {
-        if (live) setBusy(false);
-      });
+    function load() {
+      setBusy(true);
+      listNotebook(getUserId(), subject === ALL ? undefined : subject)
+        .then((payload) => {
+          if (!live) return;
+          setData(payload);
+          setError("");
+        })
+        .catch((err) => {
+          if (!live) return;
+          setError(err instanceof Error ? err.message : "Notlar yüklenemedi");
+        })
+        .finally(() => {
+          if (live) setBusy(false);
+        });
+    }
+    load();
+    const onBump = () => load();
+    window.addEventListener("tilko-notebook-bump", onBump);
+    window.addEventListener("storage", onBump);
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
     return () => {
       live = false;
+      window.removeEventListener("tilko-notebook-bump", onBump);
+      window.removeEventListener("storage", onBump);
+      window.removeEventListener("focus", onFocus);
     };
   }, [subject]);
 

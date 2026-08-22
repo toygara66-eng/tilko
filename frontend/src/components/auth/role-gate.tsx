@@ -11,7 +11,11 @@ export function RoleGate() {
   const { profile, ready } = useProfile();
   const path = usePathname();
   const router = useRouter();
-  const role = profile.role || getStoredRole();
+  const role = (() => {
+    const stored = getStoredRole();
+    if (stored === "teacher" || stored === "admin") return stored;
+    return profile.role || stored;
+  })();
 
   useEffect(() => {
     if (!ready) return;

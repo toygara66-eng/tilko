@@ -1636,20 +1636,26 @@ def _persist_notebook(
         dumped = persona
         if hasattr(persona, "model_dump"):
             dumped = persona.model_dump()
-        notebook_service.ingest(
-            session,
-            user_id=user_id,
-            subject=subject,
-            video_id=video_id,
-            video_url=video_url,
-            notes=notes,
-            questions=questions,
-            persona=dumped if isinstance(dumped, dict) else None,
-            exam_target=exam_target,
-        )
-    except Exception as exc:
-        session.rollback()
-        logger.warning("Not defteri kaydı atlandı: %s", exc)
+        for attempt in range(2):
+            try:
+                notebook_service.ingest(
+                    session,
+                    user_id=user_id,
+                    subject=subject,
+                    video_id=video_id,
+                    video_url=video_url,
+                    notes=notes,
+                    questions=questions,
+                    persona=dumped if isinstance(dumped, dict) else None,
+                    exam_target=exam_target,
+                )
+                break
+            except Exception as exc:
+                session.rollback()
+                if attempt == 0:
+                    logger.warning("Not defteri kaydı yeniden denenecek: %s", exc)
+                    continue
+                logger.warning("Not defteri kaydı atlandı: %s", exc)
     finally:
         session.close()
 

@@ -122,7 +122,13 @@ export default function GirisPage() {
       </p>
 
       <div className="mt-5">
-        <GoogleSignInButton onCredential={onGoogle} disabled={busy} />
+        {mode === "student" ? (
+          <GoogleSignInButton onCredential={onGoogle} disabled={busy} />
+        ) : (
+          <p className="rounded-xl border border-dashed border-zinc-300 px-3 py-3 text-center text-xs text-zinc-500 dark:border-zinc-700">
+            Hoca girişi kullanıcı adı + şifre ile. Google yalnızca öğrenci hesaplarında.
+          </p>
+        )}
       </div>
 
       <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-zinc-400">

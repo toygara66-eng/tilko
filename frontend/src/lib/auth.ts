@@ -28,6 +28,9 @@ export function setAuthSecret(password: string) {
 export function setAuthMode(mode: "password" | "google") {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(MODE_KEY, mode);
+  if (mode === "google") {
+    window.localStorage.removeItem(SECRET_KEY);
+  }
 }
 
 export function getAuthMode(): "password" | "google" {

@@ -129,7 +129,7 @@ export async function launchPlayPurchase(
   const allowSandbox =
     process.env.NEXT_PUBLIC_PLAY_BILLING_SANDBOX !== "false" &&
     process.env.NODE_ENV !== "production";
-  if (!allowSandbox && process.env.NEXT_PUBLIC_PLAY_BILLING_SANDBOX === "false") {
+  if (!allowSandbox) {
     throw new Error(
       "Tilko Pro ödemesi Google Play üzerinden yapılır. Android uygulamasını Play Store’dan aç.",
     );

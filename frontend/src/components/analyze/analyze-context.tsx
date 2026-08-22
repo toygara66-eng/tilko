@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { analyzeVideo, getAnalyzeJob, type AnalyzeResponse } from "@/lib/api";
 import {
   fetchCaptionsForVideo,
@@ -20,6 +20,7 @@ import { getUserId } from "@/lib/user";
 import { useProfile } from "@/components/profile/profile-context";
 
 const STORAGE_KEY = "tilko_last_analyze";
+const NOTEBOOK_BUMP_KEY = "tilko_notebook_bump";
 
 export type AnalyzeStartInput = {
   video_url: string;
@@ -73,6 +74,15 @@ function writeStored(payload: StoredAnalyze) {
   }
 }
 
+function bumpNotebook() {
+  try {
+    window.localStorage.setItem(NOTEBOOK_BUMP_KEY, String(Date.now()));
+    window.dispatchEvent(new Event("tilko-notebook-bump"));
+  } catch {
+    /* ignore */
+  }
+}
+
 function stillRunning(data: AnalyzeResponse) {
   return Boolean(data.job_id) && (data.job_status || "done") === "running";
 }
@@ -83,6 +93,7 @@ function sleep(ms: number) {
 
 export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { apply, refresh } = useProfile();
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [url, setUrl] = useState("");
@@ -94,10 +105,15 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const job = useRef(0);
   const busyRef = useRef(false);
   const resumed = useRef(false);
+  const pathRef = useRef(pathname);
+  pathRef.current = pathname;
 
   const goNotebook = useCallback(
     (data: AnalyzeResponse) => {
-      if ((data.notes?.length || 0) > 0 && !stillRunning(data)) {
+      if ((data.notes?.length || 0) === 0 || stillRunning(data)) return;
+      bumpNotebook();
+      // Sadece analiz sayfasındayken Notlarım'a geç; panelde okumayı bozma.
+      if (pathRef.current === "/analiz") {
         router.push("/notlarim");
       }
     },
@@ -129,12 +145,14 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
 
   const pollUntilDone = useCallback(
     async (jobId: string, token: number, videoUrl: string, topic: string) => {
+      let fails = 0;
       while (token === job.current) {
-        await sleep(2500);
+        await sleep(Math.min(2500 + fails * 1000, 8000));
         if (token !== job.current) return;
         try {
           const next = await getAnalyzeJob(jobId);
           if (token !== job.current) return;
+          fails = 0;
           if ((next.job_status || "") === "error") {
             setError(
               next.job_error ||
@@ -148,17 +166,18 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
             goNotebook(next);
             return;
           }
-        } catch {
-          const saved = readStored();
-          if (saved?.result?.job_id === jobId) {
-            remember(
-              { ...saved.result, job_status: "done" },
-              videoUrl,
-              topic,
+        } catch (err) {
+          fails += 1;
+          if (fails >= 8) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Analiz durumu alınamadı. Biraz bekleyip tekrar dene.",
             );
-            goNotebook({ ...saved.result, job_status: "done" });
+            void refresh();
+            return;
           }
-          return;
+          // Ağ hatasında running kal; sahte "done" yazma.
         }
       }
     },
