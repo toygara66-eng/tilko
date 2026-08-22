@@ -124,6 +124,7 @@ from app.services.youtube import (
     normalize_transcript_lines,
     slice_transcript,
     transcript_duration_seconds,
+    transcript_off_subject,
 )
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -1480,6 +1481,9 @@ def _analyze_with_lines(
 
     if not lines:
         raise ValueError("Bu video için altyazı bulunamadı.")
+    mismatch = transcript_off_subject(lines, subject)
+    if mismatch:
+        raise ValueError(mismatch)
     slices = slice_transcript(lines, SLICE_SECONDS)
     if not slices:
         raise ValueError("Bu video için altyazı bulunamadı.")
@@ -1617,7 +1621,7 @@ def _fetch_then_analyze_job(
 
     db = SessionLocal()
     try:
-        lines = fetch_transcript_lines(video_id)
+        lines = fetch_transcript_lines(video_id, subject=subject)
         if not lines:
             raise ValueError("Bu video için altyazı bulunamadı.")
         user = penalty_service.get_or_create_user(db, user_id)

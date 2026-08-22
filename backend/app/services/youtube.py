@@ -89,7 +89,7 @@ def normalize_transcript_lines(raw: list | None) -> list[dict] | None:
     return lines if len(lines) >= 3 else None
 
 
-def fetch_transcript_lines(video_id: str) -> list[dict]:
+def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker.
 
     YouTube, Render/Vercel IP'lerini kestiği için asıl yol Gemini/OpenRouter:
@@ -98,27 +98,42 @@ def fetch_transcript_lines(video_id: str) -> list[dict]:
     from app.config import settings
 
     errors: list[str] = []
+    lines: list[dict] = []
     if not settings.is_production:
         try:
             lines = _fetch_via_innertube(video_id)
             if lines:
                 logger.info("Altyazı InnerTube ile geldi (%s satır)", len(lines))
-                return lines
-            errors.append("innertube: boş")
         except Exception as exc:  # noqa: BLE001
             errors.append(f"innertube: {exc}")
-    try:
-        lines = _fetch_via_llm_youtube(video_id)
-        if lines:
-            logger.info("Altyazı LLM ile geldi (%s satır)", len(lines))
-            return lines
-        errors.append("llm: boş")
-    except Exception as exc:  # noqa: BLE001
-        errors.append(f"llm: {exc}")
-    logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
-    raise ValueError(
-        "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
-    )
+            lines = []
+    from_llm = False
+    if not lines:
+        try:
+            lines = _fetch_via_llm_youtube(video_id, subject=subject)
+            from_llm = True
+            if lines:
+                logger.info("Altyazı LLM ile geldi (%s satır)", len(lines))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"llm: {exc}")
+            lines = []
+    if not lines:
+        logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
+        raise ValueError(
+            "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
+        )
+    mismatch = transcript_off_subject(lines, subject)
+    if mismatch:
+        if from_llm:
+            try:
+                retry = _fetch_via_llm_youtube(video_id, subject=subject, strict=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Sıkı yazıya dökme başarısız: %s", exc)
+                retry = []
+            if retry and not transcript_off_subject(retry, subject):
+                return retry
+        raise ValueError(mismatch)
+    return lines
 
 
 def _fetch_transcript_lines_inner(video_id: str) -> list[dict]:
@@ -477,16 +492,89 @@ _STAMP_LINE = re.compile(
     r"^[\[\(]?\s*(?:(\d{1,2}):)?(\d{1,3}):(\d{2})\s*[\]\)]?\s*[-–.]?\s*(.+)$"
 )
 _STAMP_SECONDS = re.compile(r"^\[(\d+)\]\s*(.+)$")
-_TRANSCRIBE_PROMPT = (
-    "Bu YouTube ders videosunun konuşmasını Türkçe yazıya dök. "
-    "Her satır tam olarak [SANIYE] cümle formatında olsun. "
-    "SANIYE tam sayı saniye olsun (dakika:saniye yazma). "
-    "Videonun başından sonuna kadar mümkün olduğunca çok satır yaz. "
-    "Giriş, özet başlığı veya markdown yazma."
+_UNWATCHED_MARKERS = (
+    "video_okunamadi",
+    "videoyu izleyemedim",
+    "videoyu göremedim",
+    "cannot watch the video",
+    "i can't access the video",
+    "unable to watch",
+)
+_CODING_MARKERS = (
+    "python",
+    "visual studio code",
+    "vs code",
+    "print fonksiyon",
+    "print(",
+    ".py uzant",
+    "değişken atama",
+    "degisken atama",
+    "kod editör",
+    "kod editor",
+    "pycharm",
+    "javascript",
+    "console.log",
+)
+_EXAM_VERBAL = (
+    "coğrafya",
+    "cografya",
+    "tarih",
+    "vatandaşlık",
+    "vatandaslik",
+    "türkçe",
+    "turkce",
+    "anayasa",
+    "felsefe",
+    "edebiyat",
+    "inkılap",
+    "inkilap",
+    "coğrafi",
 )
 
 
+def _transcribe_prompt(subject: str | None = None, *, strict: bool = False) -> str:
+    konu = (subject or "").strip() or "sınav dersi"
+    extra = (
+        " Python, VS Code, print, değişken, kod editörü, .py dosyası KESİNLİKLE uydurma. "
+        if strict
+        else ""
+    )
+    return (
+        f"Bu YouTube videosu bir {konu} ders kaydı. Konuşmayı Türkçe yazıya dök. "
+        "Videoyu gerçekten izle. İzleyemiyorsan ilk satıra yalnızca VIDEO_OKUNAMADI yaz. "
+        f"{extra}"
+        "Kod dersi, programlama veya yazılım uydurma. "
+        "Her satır tam olarak [SANIYE] cümle formatında olsun. "
+        "SANIYE tam sayı saniye olsun (dakika:saniye yazma). "
+        "Yalnızca videoda duyulan cümleleri yaz. Giriş, özet veya markdown yazma."
+    )
+
+
+def transcript_off_subject(lines: list[dict], subject: str | None) -> str | None:
+    """Seçilen sınav dersi ile yazıya dökülen konuşma bariz kopuksa uyarı döner."""
+    sub = (subject or "").strip().casefold()
+    if not sub or not any(name in sub for name in _EXAM_VERBAL):
+        return None
+    blob = " ".join(str(item.get("text") or "") for item in (lines or [])[:80]).casefold()
+    if not blob:
+        return None
+    hits = [marker for marker in _CODING_MARKERS if marker in blob]
+    if len(hits) < 2:
+        return None
+    return (
+        f"Videonun konuşması {subject} değil, yazılım/kod dersi gibi duruyor. "
+        "Seçtiğin dersi anlatan bir kayıt yapıştır veya doğru dersi seç."
+    )
+
+
+def _text_says_unwatched(text: str) -> bool:
+    blob = (text or "").casefold()
+    return any(marker in blob for marker in _UNWATCHED_MARKERS)
+
+
 def _lines_from_model_transcript(text: str) -> list[dict]:
+    if _text_says_unwatched(text):
+        raise ValueError("Model videoyu izleyemedi.")
     lines: list[dict] = []
     for raw in (text or "").splitlines():
         row = raw.strip().lstrip("-* ").strip()
@@ -514,7 +602,9 @@ def _lines_from_model_transcript(text: str) -> list[dict]:
     return [{"start": index * 20, "text": part[:800]} for index, part in enumerate(paras[:400])]
 
 
-def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
+def _gemini_text_from_youtube(
+    video_id: str, api_key: str, model: str, prompt: str
+) -> str:
     watch = f"https://www.youtube.com/watch?v={video_id}"
     response = httpx.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
@@ -524,7 +614,7 @@ def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
                 {
                     "role": "user",
                     "parts": [
-                        {"text": _TRANSCRIBE_PROMPT},
+                        {"text": prompt},
                         {"file_data": {"file_uri": watch}},
                     ],
                 }
@@ -537,6 +627,15 @@ def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
     if not response.is_success:
         raise ValueError(f"{model}: {response.status_code} {response.text[:180]}")
     data = response.json()
+    usage = data.get("usageMetadata") or {}
+    try:
+        prompt_tokens = int(usage.get("promptTokenCount") or 0)
+    except (TypeError, ValueError):
+        prompt_tokens = 0
+    if prompt_tokens:
+        logger.info("Gemini youtube prompt_tokens=%s model=%s", prompt_tokens, model)
+    if 0 < prompt_tokens < 800:
+        raise ValueError(f"{model}: video modele girmedi")
     chunks: list[str] = []
     for candidate in data.get("candidates") or []:
         parts = ((candidate.get("content") or {}).get("parts")) or []
@@ -544,10 +643,14 @@ def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
     text = "\n".join(chunk for chunk in chunks if chunk).strip()
     if not text:
         raise ValueError(f"{model}: boş yanıt")
+    if _text_says_unwatched(text):
+        raise ValueError(f"{model}: video okunamadı")
     return text
 
 
-def _openrouter_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
+def _openrouter_text_from_youtube(
+    video_id: str, api_key: str, model: str, prompt: str
+) -> str:
     watch = f"https://www.youtube.com/watch?v={video_id}"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -559,7 +662,7 @@ def _openrouter_text_from_youtube(video_id: str, api_key: str, model: str) -> st
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": _TRANSCRIBE_PROMPT},
+                {"type": "text", "text": prompt},
                 {"type": "video_url", "video_url": {"url": watch}},
             ],
         }
@@ -612,9 +715,12 @@ def _openrouter_text_from_youtube(video_id: str, api_key: str, model: str) -> st
     raise ValueError(last or "openrouter boş yanıt")
 
 
-def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
+def _fetch_via_llm_youtube(
+    video_id: str, subject: str | None = None, *, strict: bool = False
+) -> list[dict]:
     from app.config import settings
 
+    prompt = _transcribe_prompt(subject, strict=strict)
     errors: list[str] = []
     openrouter_key = (settings.openrouter_api_key or "").strip()
     gemini_key = (settings.gemini_api_key or "").strip()
@@ -626,7 +732,7 @@ def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
                 models.append(name)
         for model in models:
             try:
-                text = _gemini_text_from_youtube(video_id, gemini_key, model)
+                text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
                 lines = _lines_from_model_transcript(text)
                 if lines:
                     return lines
@@ -645,7 +751,9 @@ def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
                 models.append(name)
         for model in models:
             try:
-                text = _openrouter_text_from_youtube(video_id, openrouter_key, model)
+                text = _openrouter_text_from_youtube(
+                    video_id, openrouter_key, model, prompt
+                )
                 lines = _lines_from_model_transcript(text)
                 if lines:
                     return lines

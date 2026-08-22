@@ -12,6 +12,7 @@ Kurallar:
 - Yalnızca verilen altyazıdaki bilgiye dayan. Altyazıda olmayan mevzuat, tarih, rakam, organ,
   makam veya yetki adı ekleme. Kurum adlarını altyazıda geçtiği şekliyle tam yaz, kısaltma uydurma.
 - Altyazı bilgiyi eksik veriyorsa notu o kadarıyla yaz; boşluğu tahminle doldurma.
+- Altyazı seçilen dersin konusu değilse (ör. Python, kod, VS Code) o derse ait uydurma not yazma.
 - Her not, konunun anlatılmaya başladığı saniyeye bağlanır (tam sayı).
 - Dil: Türkçe, sade ve öğretici. Öğrenciye "sen" diye hitap edebilirsin.
 - Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.
@@ -145,6 +146,7 @@ def build_combined_analyze_prompt(
 Konu / ders: {konu}
 {window}
 timestamp altyazıdaki gerçek saniye olsun.
+Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 {rag}
 Zaman damgalı altyazı:
 ---
