@@ -35,10 +35,12 @@ RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
-ANALYZE_FAST_MODEL = "google/gemini-2.5-flash"
+ANALYZE_FAST_MODEL = "google/gemini-3.6-flash"
 _groq_gate = threading.Lock()
 _groq_next_ok = 0.0
 _provider_lock = threading.Lock()
+_skip_openrouter = False
+_openrouter_free_only = False
 RETRY_AFTER_RE = re.compile(
     r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<mins>\d+)m(?!s))?\s*(?P<num>[\d.]+)\s*(?P<unit>ms|s)",
     re.IGNORECASE,
@@ -114,21 +116,28 @@ def _client() -> tuple[OpenAI, str]:
         )
 
     if settings.llm_provider == "openrouter":
+        if _skip_openrouter:
+            pair = _gemini_client(timeout=LLM_HTTP_TIMEOUT) or _groq_fast_client()
+            if pair:
+                return pair
         if not settings.openrouter_api_key:
             raise ConfigurationError(
                 "OPENROUTER_API_KEY tanımlı değil. openrouter.ai/keys adresinden "
                 "bir anahtar alıp backend/.env dosyasına yazın."
             )
+        model = settings.openrouter_model
+        if _openrouter_free_only and not (model or "").endswith(":free"):
+            model = "openai/gpt-oss-20b:free"
         return (
             _openai_client(
                 api_key=settings.openrouter_api_key,
                 base_url=settings.openrouter_base_url,
                 default_headers={
-                    "HTTP-Referer": "http://127.0.0.1:8000",
+                    "HTTP-Referer": "https://tilko.site",
                     "X-Title": _ascii_header("TILKO"),
                 },
             ),
-            settings.openrouter_model,
+            model,
         )
 
     if not settings.openai_api_key:
@@ -154,13 +163,25 @@ def _fatal_message(raw: str) -> str | None:
             "LLM_PROVIDER=ollama yaparak yerel modele geç (ücretsiz, yavaş), "
             "LLM_PROVIDER=gemini yaz (günde 20 istek) veya HF PRO'ya abone ol."
         )
-    if "insufficient credits" in text or (
-        "credit" in text and settings.llm_provider == "openrouter"
+    if (
+        "insufficient credits" in text
+        or "requires at least" in text
+        or (
+            ("credit" in text or "balance" in text)
+            and (
+                settings.llm_provider == "openrouter"
+                or "openrouter" in text
+            )
+        )
     ):
+        if not (settings.gemini_api_key or "").strip():
+            return (
+                "OpenRouter kredin bitmiş. Para yatırma: Render ortamına "
+                "GEMINI_API_KEY ekle (Google AI Studio, ücretsiz katman yeter)."
+            )
         return (
-            "OpenRouter kredin bitmiş. openrouter.ai/settings/credits adresinden "
-            "birkaç dolar yükle veya OPENROUTER_MODEL sonuna :free ekle "
-            "(ör. openai/gpt-oss-20b:free). Ücretsiz modellerin kendi hız sınırı vardır."
+            "OpenRouter kredin bitmiş. Gemini yedeği de yanıt vermedi. "
+            "GEMINI_MODEL=gemini-3.6-flash olduğundan emin ol."
         )
     if "tokens per day" in text or ("per day" in text and settings.llm_provider == "groq"):
         # Rolling TPD: 'try again in 5m' ise beklemek yeterli; saatlerceyse gerçekten bitti.
@@ -316,20 +337,77 @@ def _reasoning_extra() -> dict:
     return {"reasoning": {"effort": "minimal", "exclude": True}}
 
 
+def _gemini_client(timeout=None) -> tuple[OpenAI, str] | None:
+    key = (settings.gemini_api_key or "").strip()
+    if not key:
+        return None
+    model = (settings.gemini_model or "").strip() or "gemini-3.6-flash"
+    return (
+        _openai_client(
+            api_key=key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            timeout=timeout or ANALYZE_HTTP_TIMEOUT,
+        ),
+        model,
+    )
+
+
+def _groq_fast_client() -> tuple[OpenAI, str] | None:
+    key = (settings.groq_api_key or "").strip()
+    if not key:
+        return None
+    model = settings.groq_model or "openai/gpt-oss-20b"
+    if "gpt-oss-120b" in model:
+        model = model.replace("gpt-oss-120b", "gpt-oss-20b")
+    return (
+        _openai_client(
+            api_key=key,
+            base_url=settings.groq_base_url,
+            timeout=ANALYZE_HTTP_TIMEOUT,
+        ),
+        model,
+    )
+
+
+def _activate_credit_fallback() -> bool:
+    """OpenRouter 402 sonrası Gemini, Groq veya :free model ile bir kez daha dene."""
+    global _skip_openrouter, _openrouter_free_only
+    if not _skip_openrouter and (_gemini_client() or _groq_fast_client()):
+        _skip_openrouter = True
+        logger.warning("OpenRouter kredisi yok; Gemini/Groq yedeğine geçiliyor.")
+        return True
+    if settings.openrouter_api_key and not _openrouter_free_only:
+        _openrouter_free_only = True
+        logger.warning("OpenRouter ücretli model reddedildi; ücretsiz model deneniyor.")
+        return True
+    return False
+
+
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
     """Video analizi düşünme modeli kullanmaz; flash saniyeler içinde biter."""
-    if settings.openrouter_api_key:
+    pair = _gemini_client()
+    if pair:
+        return pair
+    pair = _groq_fast_client()
+    if pair:
+        return pair
+    if settings.openrouter_api_key and not _skip_openrouter:
+        model = (
+            "openai/gpt-oss-20b:free"
+            if _openrouter_free_only
+            else ANALYZE_FAST_MODEL
+        )
         return (
             _openai_client(
                 api_key=settings.openrouter_api_key,
                 base_url=settings.openrouter_base_url,
                 timeout=ANALYZE_HTTP_TIMEOUT,
                 default_headers={
-                    "HTTP-Referer": "http://127.0.0.1:8000",
+                    "HTTP-Referer": "https://tilko.site",
                     "X-Title": _ascii_header("TILKO"),
                 },
             ),
-            ANALYZE_FAST_MODEL,
+            settings.openrouter_model,
         )
     if settings.openai_api_key:
         return (
@@ -448,6 +526,8 @@ def _chat(
             except Exception as exc:
                 fatal = _fatal_message(str(exc))
                 if fatal:
+                    if _activate_credit_fallback():
+                        continue
                     raise QuotaExhaustedError(fatal) from exc
                 last_error = exc
                 if isinstance(exc, UnicodeEncodeError):

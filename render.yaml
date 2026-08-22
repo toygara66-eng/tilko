@@ -15,7 +15,7 @@ services:
       - key: LLM_PROVIDER
         value: openrouter
       - key: LLM_FALLBACK
-        value: ""
+        value: gemini
       - key: OPENROUTER_MODEL
         value: openai/gpt-oss-120b
       - key: OPENROUTER_API_KEY
