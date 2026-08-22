@@ -147,6 +147,8 @@ Konu / ders: {konu}
 {window}
 timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
+Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
+Boşluğu genel kültürle doldurma. Hocanın söylemediği tuzak/istisna uydurma.
 {rag}
 Zaman damgalı altyazı:
 ---

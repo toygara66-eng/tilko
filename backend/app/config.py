@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     hf_model: str = "openai/gpt-oss-120b"
     hf_base_url: str = "https://router.huggingface.co/v1"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.1-8b-instant"
+    groq_model: str = "llama-3.3-70b-versatile"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     cerebras_api_key: str = ""
     cerebras_model: str = "gemma-4-31b"

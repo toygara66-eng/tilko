@@ -415,6 +415,30 @@ def _coerce_notes(result: dict) -> list[dict]:
     return notes
 
 
+def _content_tokens(text: str) -> set[str]:
+    return {part.lower() for part in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü0-9]{5,}", text or "")}
+
+
+def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
+    """Altyazıyla hiç örtüşmeyen uydurma notları atar."""
+    source = _content_tokens(transcript)
+    if not source or not notes:
+        return notes
+    kept: list[dict] = []
+    for note in notes:
+        blob = " ".join(
+            [
+                str(note.get("title") or ""),
+                str(note.get("detail") or ""),
+                " ".join(str(p) for p in (note.get("key_points") or [])),
+            ]
+        )
+        overlap = _content_tokens(blob) & source
+        if len(overlap) >= 2:
+            kept.append(note)
+    return kept or notes
+
+
 def _extract_json(raw: str) -> dict:
     text = raw.strip()
     fenced = JSON_FENCE_RE.search(text)
@@ -617,7 +641,7 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
     key = (settings.groq_api_key or "").strip()
     if not key:
         return None
-    model = (settings.groq_model or "").strip() or "llama-3.1-8b-instant"
+    model = (settings.groq_model or "").strip() or "llama-3.3-70b-versatile"
     if "gpt-oss-120b" in model:
         model = model.replace("gpt-oss-120b", "gpt-oss-20b")
     return (
@@ -810,9 +834,14 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
     }
     if fast:
         kwargs["max_tokens"] = 7000
-    if json_mode and not str(model or "").endswith(":free"):
-        if not _is_cerebras_client(client):
-            kwargs["response_format"] = {"type": "json_object"}
+    model_id = str(model or "")
+    if (
+        json_mode
+        and not model_id.endswith(":free")
+        and "8b" not in model_id
+        and not _is_cerebras_client(client)
+    ):
+        kwargs["response_format"] = {"type": "json_object"}
     if extra:
         kwargs["extra_body"] = extra
     if _is_gemini_client(client) or str(model or "").startswith("gemini-"):
@@ -842,13 +871,15 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         ):
             last = exc
             for candidate in (
-                "llama-3.1-8b-instant",
                 "llama-3.3-70b-versatile",
                 "openai/gpt-oss-20b",
+                "llama-3.1-8b-instant",
             ):
                 if candidate == kwargs.get("model"):
                     continue
                 kwargs["model"] = candidate
+                if "8b" in candidate:
+                    kwargs.pop("response_format", None)
                 logger.warning("Groq model kaydırıldı: %s", candidate)
                 try:
                     return client.chat.completions.create(**kwargs)
@@ -1033,8 +1064,11 @@ def generate_notes(
     results = _run_parallel(jobs)
     notes: list[dict] = []
     empty = 0
-    for result in results:
-        chunk_notes = _coerce_notes(result if isinstance(result, dict) else {})
+    for result, block in zip(results, chunks):
+        chunk_notes = _ground_notes(
+            _coerce_notes(result if isinstance(result, dict) else {}),
+            block,
+        )
         if not chunk_notes:
             empty += 1
         notes.extend(chunk_notes)
@@ -1332,8 +1366,9 @@ def _analyze_combined(
 
     count = max(2, min(int(question_count or 4), 6))
     system = (
-        "Kısa Türkçe sınav notu ve 5 şıklı soru yaz. Sadece JSON. "
-        "Markdown, kod çiti ve uzun düşünme yok.\n\n"
+        NOTES_SYSTEM_PROMPT
+        + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
+        "not, şık veya açıklamaya yazma. Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,
@@ -1353,25 +1388,29 @@ def _analyze_combined(
                 window_label,
                 note_count,
             ),
+            temperature=0.2,
             task="analyze",
         )
     )
-    notes = _coerce_notes(result)
+    notes = _ground_notes(_coerce_notes(result), chunk)
     if not notes:
         logger.warning("Birleşik analiz boş not döndü; kısa not denemesi.")
         result = _as_dict(
             _chat(
-                "Kısa Türkçe sınav notu yaz. Sadece JSON. notes boş olamaz.",
+                NOTES_SYSTEM_PROMPT
+                + "\nKısa Türkçe sınav notu yaz. Sadece JSON. notes boş olamaz. "
+                "Altyazıda yoksa uydurma.",
                 (
                     f"Ders: {subject or 'KPSS'}\nAltyazı:\n{chunk[:4000]}\n\n"
                     "En az 3 not yaz. Şema: "
                     '{"notes":[{"title":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
                 ),
+                temperature=0.2,
                 task="analyze",
             )
         )
-        notes = _coerce_notes(result)
+        notes = _ground_notes(_coerce_notes(result), chunk)
     if not notes:
         raise RuntimeError(
             "Model not yazamadı. Ücretsiz model boş yanıt verdi; bir kez daha dene."

@@ -17,7 +17,7 @@ services:
       - key: LLM_FALLBACK
         value: cerebras
       - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
+        value: llama-3.3-70b-versatile
       - key: OPENROUTER_MODEL
         value: nvidia/nemotron-3-nano-30b-a3b:free
       - key: OPENROUTER_API_KEY
