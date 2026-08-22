@@ -90,51 +90,33 @@ def normalize_transcript_lines(raw: list | None) -> list[dict] | None:
 
 
 def fetch_transcript_lines(video_id: str) -> list[dict]:
-    """Altyazıyı saniye damgasıyla çeker (TR tercih, yoksa mevcut ilk dil)."""
-    import time
-    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+    """Altyazıyı saniye damgasıyla çeker.
+
+    YouTube, Render/Vercel IP'lerini kestiği için önce Gemini/OpenRouter
+    (Google videoyu kendisi çeker) denenir.
+    """
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
     errors: list[str] = []
-
-    def run_group(group: tuple, budget: float) -> list[dict] | None:
-        with ThreadPoolExecutor(max_workers=len(group)) as pool:
-            fmap = {pool.submit(fn, video_id): fn for fn in group}
-            pending = set(fmap)
-            deadline = time.monotonic() + budget
-            while pending:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    errors.append(
-                        ", ".join(f"{fmap[item].__name__}: timeout" for item in pending)
-                    )
-                    break
-                done, pending = wait(
-                    pending, timeout=remaining, return_when=FIRST_COMPLETED
-                )
-                for future in done:
-                    fn = fmap[future]
-                    try:
-                        lines = future.result()
-                    except Exception as exc:  # noqa: BLE001
-                        errors.append(f"{fn.__name__}: {exc}")
-                        continue
-                    if lines:
-                        logger.info(
-                            "Altyazı %s ile geldi (%s satır)", fn.__name__, len(lines)
-                        )
-                        return lines
-                    errors.append(f"{fn.__name__}: boş")
-        return None
-
-    lines = run_group(
-        (_fetch_via_innertube, _fetch_via_invidious, _fetch_transcript_lines_inner),
-        10,
+    fetchers = (
+        (_fetch_via_llm_youtube, 28),
+        (_fetch_via_innertube, 8),
     )
-    if lines:
-        return lines
-    lines = run_group((_fetch_via_gemini_youtube, _fetch_via_ytdlp), 22)
-    if lines:
-        return lines
+    for fetcher, limit in fetchers:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(fetcher, video_id)
+            try:
+                lines = future.result(timeout=limit)
+            except FuturesTimeout:
+                errors.append(f"{fetcher.__name__}: timeout")
+                continue
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{fetcher.__name__}: {exc}")
+                continue
+        if lines:
+            logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
+            return lines
+        errors.append(f"{fetcher.__name__}: boş")
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
     raise ValueError(
         "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
@@ -493,34 +475,60 @@ def _fetch_via_innertube(video_id: str) -> list[dict]:
     raise ValueError(last)
 
 
-def _fetch_via_gemini_youtube(video_id: str) -> list[dict]:
-    from app.config import settings
+_STAMP_LINE = re.compile(
+    r"^[\[\(]?\s*(?:(\d{1,2}):)?(\d{1,3}):(\d{2})\s*[\]\)]?\s*[-–.]?\s*(.+)$"
+)
+_STAMP_SECONDS = re.compile(r"^\[(\d+)\]\s*(.+)$")
+_TRANSCRIBE_PROMPT = (
+    "Bu YouTube ders videosunun konuşmasını Türkçe yazıya dök. "
+    "Her satır tam olarak [SANIYE] cümle formatında olsun. "
+    "SANIYE tam sayı saniye olsun (dakika:saniye yazma). "
+    "Videonun başından sonuna kadar mümkün olduğunca çok satır yaz. "
+    "Giriş, özet başlığı veya markdown yazma."
+)
 
-    key = (settings.gemini_api_key or "").strip()
-    if not key:
-        raise ValueError("Gemini anahtarı yok.")
-    model = (settings.gemini_model or "gemini-2.5-flash").strip()
-    if model.startswith("gemini-3"):
-        model = "gemini-2.5-flash"
-    prompt = (
-        "Bu YouTube ders videosunun konuşmasını Türkçe yazıya dök. "
-        "Her satır tam olarak [SANIYE] metin formatında olsun. "
-        "SANIYE tam sayı saniye olsun. Başka açıklama yazma."
-    )
+
+def _lines_from_model_transcript(text: str) -> list[dict]:
+    lines: list[dict] = []
+    for raw in (text or "").splitlines():
+        row = raw.strip().lstrip("-* ").strip()
+        if not row:
+            continue
+        sec = _STAMP_SECONDS.match(row)
+        if sec:
+            body = sec.group(2).strip()
+            if body:
+                lines.append({"start": int(sec.group(1)), "text": body[:800]})
+            continue
+        stamp = _STAMP_LINE.match(row)
+        if stamp:
+            hours, minutes, seconds, body = stamp.groups()
+            body = (body or "").strip()
+            if not body:
+                continue
+            total = int(seconds) + int(minutes) * 60 + int(hours or 0) * 3600
+            lines.append({"start": total, "text": body[:800]})
+    if len(lines) >= 3:
+        return lines
+    paras = [part.strip() for part in re.split(r"\n+", text or "") if len(part.strip()) > 24]
+    if len(paras) < 3:
+        return []
+    return [{"start": index * 20, "text": part[:800]} for index, part in enumerate(paras[:400])]
+
+
+def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
+    watch = f"https://www.youtube.com/watch?v={video_id}"
     response = httpx.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        params={"key": key},
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
         json={
             "contents": [
                 {
+                    "role": "user",
                     "parts": [
-                        {
-                            "file_data": {
-                                "file_uri": f"https://www.youtube.com/watch?v={video_id}"
-                            }
-                        },
-                        {"text": prompt},
-                    ]
+                        {"text": _TRANSCRIBE_PROMPT},
+                        {"file_data": {"file_uri": watch}},
+                    ],
                 }
             ],
             "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192},
@@ -528,20 +536,109 @@ def _fetch_via_gemini_youtube(video_id: str) -> list[dict]:
         timeout=26,
         follow_redirects=True,
     )
-    response.raise_for_status()
+    if not response.is_success:
+        raise ValueError(f"{model}: {response.status_code} {response.text[:180]}")
     data = response.json()
-    text = ""
+    chunks: list[str] = []
     for candidate in data.get("candidates") or []:
         parts = ((candidate.get("content") or {}).get("parts")) or []
-        text += "".join(str(part.get("text") or "") for part in parts)
-    lines: list[dict] = []
-    for match in re.finditer(r"\[(\d+)\]\s*(.+)", text):
-        body = match.group(2).strip()
-        if body:
-            lines.append({"start": int(match.group(1)), "text": body})
-    if not lines:
-        raise ValueError("Gemini transkript üretemedi.")
-    return lines
+        chunks.extend(str(part.get("text") or "") for part in parts)
+    text = "\n".join(chunk for chunk in chunks if chunk).strip()
+    if not text:
+        raise ValueError(f"{model}: boş yanıt")
+    return text
+
+
+def _openrouter_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
+    watch = f"https://www.youtube.com/watch?v={video_id}"
+    response = httpx.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://tilko.site",
+            "X-Title": "TILKO",
+        },
+        json={
+            "model": model,
+            "temperature": 0.1,
+            "max_tokens": 8192,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": _TRANSCRIBE_PROMPT},
+                        {"type": "image_url", "image_url": {"url": watch}},
+                    ],
+                }
+            ],
+        },
+        timeout=26,
+        follow_redirects=True,
+    )
+    if not response.is_success:
+        raise ValueError(f"openrouter {model}: {response.status_code} {response.text[:180]}")
+    data = response.json()
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError("openrouter boş yanıt")
+    message = (choices[0].get("message") or {}).get("content") or ""
+    if isinstance(message, list):
+        message = " ".join(
+            str(part.get("text") or "") for part in message if isinstance(part, dict)
+        )
+    text = str(message).strip()
+    if not text:
+        raise ValueError("openrouter boş metin")
+    return text
+
+
+def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
+    from app.config import settings
+
+    errors: list[str] = []
+    gemini_key = (settings.gemini_api_key or "").strip()
+    if gemini_key:
+        models = []
+        preferred = (settings.gemini_model or "").strip()
+        for name in (preferred, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.6-flash"):
+            if name and name not in models:
+                models.append(name)
+        for model in models:
+            try:
+                text = _gemini_text_from_youtube(video_id, gemini_key, model)
+                lines = _lines_from_model_transcript(text)
+                if lines:
+                    return lines
+                errors.append(f"{model}: satır yok")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(str(exc))
+
+    openrouter_key = (settings.openrouter_api_key or "").strip()
+    if openrouter_key:
+        models = []
+        for name in (
+            "google/gemini-2.5-flash",
+            (settings.openrouter_model or "").strip(),
+            "google/gemini-2.0-flash-001",
+        ):
+            if name and name.startswith("google/") and name not in models:
+                models.append(name)
+        for model in models:
+            try:
+                text = _openrouter_text_from_youtube(video_id, openrouter_key, model)
+                lines = _lines_from_model_transcript(text)
+                if lines:
+                    return lines
+                errors.append(f"{model}: satır yok")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(str(exc))
+
+    raise ValueError(" | ".join(errors) or "LLM ile altyazı alınamadı.")
+
+
+def _fetch_via_gemini_youtube(video_id: str) -> list[dict]:
+    return _fetch_via_llm_youtube(video_id)
 
 
 def _fetch_via_watch_html(video_id: str) -> list[dict]:

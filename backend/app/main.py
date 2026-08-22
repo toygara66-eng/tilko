@@ -116,6 +116,7 @@ from app.services.llm import QuotaExhaustedError, analyze_slice
 from app.security.auth import actor, jwt_guard, login_user, play_webhook_ok, register_user
 from app.security.rate_limit import limiter
 from app.services.youtube import (
+    YOUTUBE_ID_RE,
     build_watch_url,
     extract_video_id,
     fetch_transcript_lines,
@@ -180,6 +181,20 @@ def health() -> dict[str, str]:
         "provider": settings.llm_provider,
         "model": settings.active_model,
     }
+
+
+@app.get("/captions/{video_id}")
+@limiter.limit("12/minute")
+def captions_lookup(request: Request, video_id: str) -> dict:
+    if not YOUTUBE_ID_RE.match(video_id or ""):
+        raise HTTPException(status_code=400, detail="Geçerli bir YouTube video kimliği bulunamadı.")
+    try:
+        lines = fetch_transcript_lines(video_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"video_id": video_id, "lines": lines}
 
 
 @app.post("/auth/register", response_model=AuthResponse)

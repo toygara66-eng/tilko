@@ -1,14 +1,18 @@
 export type CaptionLine = { start: number; text: string };
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || "https://tilko-api.onrender.com";
 
-function captionsEndpoint(): string {
-  if (typeof window === "undefined") return "https://tilko.site/api/captions";
-  const host = window.location.hostname;
-  if (host === "tilko.site" || host.endsWith(".vercel.app")) {
-    return "/api/captions";
+function captionUrls(id: string): string[] {
+  const urls = [`${API_BASE.replace(/\/$/, "")}/captions/${encodeURIComponent(id)}`];
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "tilko.site" || host.endsWith(".vercel.app")) {
+      urls.push(`/api/captions/?v=${encodeURIComponent(id)}`);
+    }
   }
-  return "https://tilko.site/api/captions";
+  return urls;
 }
 
 export function extractYoutubeId(raw: string): string {
@@ -38,27 +42,34 @@ export function extractYoutubeId(raw: string): string {
   return "";
 }
 
+function parseLines(data: unknown): CaptionLine[] {
+  const rows = data && typeof data === "object" ? (data as { lines?: CaptionLine[] }).lines : [];
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(
+    (row) =>
+      row &&
+      typeof row.text === "string" &&
+      row.text.trim() &&
+      Number.isFinite(Number(row.start)),
+  );
+}
+
 export async function fetchCaptionsForVideo(
   videoUrl: string,
 ): Promise<CaptionLine[]> {
   const id = extractYoutubeId(videoUrl);
   if (!id) return [];
-  const endpoint = `${captionsEndpoint()}?v=${encodeURIComponent(id)}`;
-  try {
-    const response = await fetch(endpoint, {
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) return [];
-    const data = (await response.json()) as { lines?: CaptionLine[] };
-    const lines = Array.isArray(data.lines) ? data.lines : [];
-    return lines.filter(
-      (row) =>
-        row &&
-        typeof row.text === "string" &&
-        row.text.trim() &&
-        Number.isFinite(Number(row.start)),
-    );
-  } catch {
-    return [];
+  for (const endpoint of captionUrls(id)) {
+    try {
+      const response = await fetch(endpoint, {
+        signal: AbortSignal.timeout(35_000),
+      });
+      if (!response.ok) continue;
+      const lines = parseLines(await response.json());
+      if (lines.length >= 3) return lines;
+    } catch {
+      /* sonraki kaynak */
+    }
   }
+  return [];
 }

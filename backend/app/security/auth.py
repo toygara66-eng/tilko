@@ -28,7 +28,7 @@ PUBLIC_PATHS = {
     "/login",
     "/subscription/webhook",
 }
-PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi")
+PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi", "/captions")
 ALGORITHM = "HS256"
 
 
