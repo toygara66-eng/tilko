@@ -1050,8 +1050,15 @@ def complete_trap(
 
 
 @app.get("/progress/{user_id}", response_model=ProgressResponse)
-def progress(user_id: str, db: Session = Depends(get_db)) -> ProgressResponse:
-    return ProgressResponse.model_validate(gamification.public_progress(db, user_id))
+def progress(
+    request: Request, user_id: str, db: Session = Depends(get_db)
+) -> ProgressResponse:
+    from app.services import anti_cheat
+
+    ip_hash = anti_cheat.hash_ip(anti_cheat.client_ip(request))
+    return ProgressResponse.model_validate(
+        gamification.public_progress(db, user_id, ip_hash=ip_hash)
+    )
 
 
 @app.post("/user/set-exam-target", response_model=SetExamTargetResponse)
@@ -1332,13 +1339,18 @@ def diagnostic_exam(
 
 @app.post("/diagnostic/submit", response_model=DiagnosticReport)
 def diagnostic_submit(
-    payload: DiagnosticSubmitRequest, db: Session = Depends(get_db)
+    request: Request,
+    payload: DiagnosticSubmitRequest,
+    db: Session = Depends(get_db),
 ) -> DiagnosticReport:
+    from app.services import anti_cheat
+
     try:
         result = diagnostic_service.submit_baseline(
             db,
             payload.user_id,
             [item.model_dump() for item in payload.answers],
+            ip_hash=anti_cheat.hash_ip(anti_cheat.client_ip(request)),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -11,7 +11,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import DiagnosticTest, ProgressCheckup, User, UserBaseline
+from app.database.models import (
+    DiagnosticIpMark,
+    DiagnosticTest,
+    ProgressCheckup,
+    User,
+    UserBaseline,
+)
 from app.services.penalty import get_or_create_user
 from app.services.ranks import RANK_ACEMI, address_for
 
@@ -21,6 +27,73 @@ ISTANBUL_OFFSET = timezone(timedelta(hours=3))
 CHECKUP_DAYS = 7
 BASELINE_COUNT = 8
 CHECKUP_COUNT = 5
+
+
+def is_registered_account(user: User) -> bool:
+    """Şifreli hesap = başka kullanıcı; IP atlaması uygulanmaz."""
+    return bool((getattr(user, "password_hash", "") or "").strip())
+
+
+def mark_diagnostic_ip(db: Session, ip_hash: str, user_id: str) -> None:
+    digest = (ip_hash or "").strip()
+    if not digest or not user_id:
+        return
+    row = db.get(DiagnosticIpMark, digest)
+    if row:
+        row.source_user_id = user_id
+        row.completed_at = datetime.now(timezone.utc)
+        return
+    db.add(
+        DiagnosticIpMark(
+            ip_hash=digest,
+            source_user_id=user_id,
+            completed_at=datetime.now(timezone.utc),
+        )
+    )
+
+
+def _adopt_baseline_from_source(db: Session, user: User, source_user_id: str) -> bool:
+    source = get_baseline(db, source_user_id)
+    donor = db.get(User, source_user_id)
+    if source is None and not (donor and donor.is_tested):
+        return False
+    user.is_tested = True
+    if donor:
+        user.baseline_score = float(donor.baseline_score or 0)
+        if not float(getattr(user, "target_score", 0) or 0):
+            user.target_score = float(getattr(donor, "target_score", 0) or 0)
+    if source is None:
+        return True
+    user.baseline_score = float(source.score or user.baseline_score or 0)
+    baseline = get_baseline(db, user.user_id)
+    if baseline is None:
+        baseline = UserBaseline(user_id=user.user_id)
+        db.add(baseline)
+    baseline.score = float(source.score or 0)
+    baseline.weak_topics = source.weak_topics or "[]"
+    baseline.strong_topics = source.strong_topics or "[]"
+    baseline.analysis_summary = source.analysis_summary or ""
+    baseline.net_range = source.net_range or ""
+    baseline.topic_breakdown = source.topic_breakdown or "{}"
+    return True
+
+
+def maybe_skip_diagnostic_for_ip(db: Session, user: User, ip_hash: str) -> bool:
+    """Aynı IP'den teşhis geçmişse misafir oturumu tekrar sorma."""
+    if user.is_tested:
+        return True
+    if is_registered_account(user):
+        return False
+    digest = (ip_hash or "").strip()
+    if not digest:
+        return False
+    mark = db.get(DiagnosticIpMark, digest)
+    if mark is None or not mark.source_user_id:
+        return False
+    if mark.source_user_id == user.user_id:
+        user.is_tested = True
+        return True
+    return _adopt_baseline_from_source(db, user, mark.source_user_id)
 
 
 def diagnostic_system(title: str, exam_target: str | None = None) -> str:
@@ -893,8 +966,10 @@ def baseline_payload(row: UserBaseline | None) -> dict | None:
     }
 
 
-def status(db: Session, user_id: str) -> dict:
+def status(db: Session, user_id: str, ip_hash: str = "") -> dict:
     user = get_or_create_user(db, user_id)
+    if not user.is_tested and ip_hash:
+        maybe_skip_diagnostic_for_ip(db, user, ip_hash)
     base = get_baseline(db, user_id)
     last = last_checkup(db, user_id)
     due = checkup_due_for(user, last, base)
@@ -987,7 +1062,12 @@ def _save_checkup_row(
     return row
 
 
-def submit_baseline(db: Session, user_id: str, answers: list[dict]) -> dict:
+def submit_baseline(
+    db: Session,
+    user_id: str,
+    answers: list[dict],
+    ip_hash: str = "",
+) -> dict:
     graded = grade(answers)
     if graded["total"] < 1:
         raise ValueError("Cevap bulunamadı.")
@@ -1034,6 +1114,7 @@ def submit_baseline(db: Session, user_id: str, answers: list[dict]) -> dict:
         summary=analysis["summary"],
         breakdown=graded["topic_breakdown"],
     )
+    mark_diagnostic_ip(db, ip_hash, user_id)
     db.commit()
     db.refresh(baseline)
     return {

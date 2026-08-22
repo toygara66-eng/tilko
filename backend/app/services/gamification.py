@@ -93,7 +93,7 @@ def unlocked_for(level: int) -> list[dict]:
     ]
 
 
-def public_progress(db: Session, user_id: str) -> dict:
+def public_progress(db: Session, user_id: str, ip_hash: str = "") -> dict:
     from app.services import prizes as prize_service
     from app.services import credits as credit_service
 
@@ -102,7 +102,7 @@ def public_progress(db: Session, user_id: str) -> dict:
     credit_view = credit_service.snapshot(db, user_id)
     from app.services import diagnostic as diagnostic_service
 
-    diag = diagnostic_service.status(db, user_id)
+    diag = diagnostic_service.status(db, user_id, ip_hash=ip_hash)
     db.commit()
     rank = fox_rank(row.xp)
     from app.services.exams import (

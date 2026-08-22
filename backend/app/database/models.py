@@ -138,6 +138,16 @@ class UserBaseline(Base):
     )
 
 
+class DiagnosticIpMark(Base):
+    """Aynı IP'de seviye teşhisi bir kez geçildi; misafir oturum tekrar sormaz."""
+
+    __tablename__ = "diagnostic_ip_marks"
+
+    ip_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_user_id: Mapped[str] = mapped_column(String(128), index=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class ProgressCheckup(Base):
     """Haftalık/aylık gelişim check-up kaydı."""
 
