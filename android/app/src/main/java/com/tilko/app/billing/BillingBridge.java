@@ -15,6 +15,7 @@ import com.android.billingclient.api.BillingResult;
 import com.android.billingclient.api.ProductDetails;
 import com.android.billingclient.api.Purchase;
 import com.android.billingclient.api.PurchasesUpdatedListener;
+import com.android.billingclient.api.QueryPurchasesParams;
 import com.android.billingclient.api.QueryProductDetailsParams;
 
 import org.json.JSONObject;
@@ -67,6 +68,70 @@ public final class BillingBridge implements PurchasesUpdatedListener {
         }
         pendingProductId = sku;
         activity.runOnUiThread(() -> ensureConnectedThenBuy(sku));
+    }
+
+    /** Daha önce alınmış aboneliği tekrar sunucuya göndermek için. */
+    @JavascriptInterface
+    public void restore() {
+        Activity activity = activityRef.get();
+        if (activity == null) {
+            deliverError("Aktivite yok");
+            return;
+        }
+        activity.runOnUiThread(this::ensureConnectedThenRestore);
+    }
+
+    private void ensureConnectedThenRestore() {
+        if (client.isReady()) {
+            queryOwned();
+            return;
+        }
+        client.startConnection(new BillingClientStateListener() {
+            @Override
+            public void onBillingSetupFinished(@NonNull BillingResult billingResult) {
+                if (billingResult.getResponseCode() != BillingClient.BillingResponseCode.OK) {
+                    deliverError("Play Billing bağlanamadı (" + billingResult.getResponseCode() + ")");
+                    return;
+                }
+                queryOwned();
+            }
+
+            @Override
+            public void onBillingServiceDisconnected() {
+                deliverError("Play Billing bağlantısı koptu");
+            }
+        });
+    }
+
+    private void queryOwned() {
+        QueryPurchasesParams params = QueryPurchasesParams.newBuilder()
+                .setProductType(BillingClient.ProductType.SUBS)
+                .build();
+        client.queryPurchasesAsync(params, (billingResult, purchases) -> {
+            if (billingResult.getResponseCode() != BillingClient.BillingResponseCode.OK
+                    || purchases == null
+                    || purchases.isEmpty()) {
+                deliverError("Geri yüklenecek abonelik bulunamadı");
+                return;
+            }
+            Purchase purchase = null;
+            for (Purchase item : purchases) {
+                if (item.getPurchaseState() == Purchase.PurchaseState.PURCHASED) {
+                    purchase = item;
+                    break;
+                }
+            }
+            if (purchase == null) {
+                deliverError("Geri yüklenecek abonelik bulunamadı");
+                return;
+            }
+            String token = purchase.getPurchaseToken();
+            String orderId = purchase.getOrderId() == null ? "" : purchase.getOrderId();
+            String productId = purchase.getProducts().isEmpty()
+                    ? pendingProductId
+                    : purchase.getProducts().get(0);
+            deliverOk(token, productId, orderId);
+        });
     }
 
     private void ensureConnectedThenBuy(String sku) {

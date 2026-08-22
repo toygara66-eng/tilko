@@ -115,3 +115,46 @@ def finish(job_id: str, status: str = "done", error: str = "") -> None:
         job["error"] = error
         if status == "done":
             job["chunks_done"] = job["chunks_total"]
+
+
+def track_follower(job_id: str, user_id: str, charge_kind: str) -> None:
+    """Paylaşılan işe katılan kullanıcı — iş bitince confirm/refund."""
+    uid = (user_id or "").strip()
+    if not uid or not job_id:
+        return
+    with _lock:
+        job = _JOBS.get(job_id)
+        if not job:
+            return
+        bag = job.setdefault("followers", {})
+        if uid in bag:
+            return
+        bag[uid] = {"charge_kind": charge_kind or "trial", "settled": False}
+
+
+def take_unsettled_followers(job_id: str) -> list[tuple[str, str]]:
+    with _lock:
+        job = _JOBS.get(job_id)
+        if not job:
+            return []
+        out: list[tuple[str, str]] = []
+        for uid, meta in list((job.get("followers") or {}).items()):
+            if meta.get("settled"):
+                continue
+            meta["settled"] = True
+            out.append((uid, str(meta.get("charge_kind") or "trial")))
+        return out
+
+
+def mark_follower_settled(job_id: str, user_id: str) -> str | None:
+    """Takipçiyi settled yap; charge_kind döner (yoksa None)."""
+    uid = (user_id or "").strip()
+    with _lock:
+        job = _JOBS.get(job_id)
+        if not job:
+            return None
+        meta = (job.get("followers") or {}).get(uid)
+        if not meta or meta.get("settled"):
+            return None
+        meta["settled"] = True
+        return str(meta.get("charge_kind") or "trial")

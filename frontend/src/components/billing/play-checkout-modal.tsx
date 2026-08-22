@@ -13,7 +13,7 @@ import {
   type SubscriptionPlan,
   type SubscriptionStatus,
 } from "@/lib/api";
-import { FALLBACK_PLANS, hasNativePlayBilling, launchPlayPurchase } from "@/lib/billing";
+import { FALLBACK_PLANS, hasNativePlayBilling, launchPlayPurchase, restorePlayPurchase } from "@/lib/billing";
 import { getUserId } from "@/lib/user";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +107,30 @@ export function PlayCheckoutModal({
     } catch (err) {
       setPhase("pick");
       setError(err instanceof Error ? err.message : "Ödeme doğrulanamadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restore() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const receipt = await restorePlayPurchase(sku);
+      const data = await verifySubscription({
+        user_id: getUserId(),
+        product_id: receipt.productId,
+        purchase_token: receipt.purchaseToken,
+        order_id: receipt.orderId,
+        platform: receipt.platform,
+      });
+      apply({ isPremium: true, isAdTier: false });
+      setPhase("done");
+      onActivated?.(data);
+      void refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Geri yükleme başarısız");
     } finally {
       setBusy(false);
     }
@@ -273,23 +297,41 @@ export function PlayCheckoutModal({
                 </div>
               ) : null}
               {error ? <p className="text-sm text-red-500">{error}</p> : null}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  className="h-11 flex-1"
-                  disabled={busy}
-                  onClick={() => void pay()}
-                >
-                  {busy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                  {native ? "Play ile satın al" : "Test satın al"}
-                </Button>
-                <Button type="button" variant="outline" className="h-11" onClick={onClose}>
-                  Vazgeç
-                </Button>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    className="h-11 flex-1"
+                    disabled={busy}
+                    onClick={() => void pay()}
+                  >
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    {native ? "Play ile satın al" : "Test satın al"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11"
+                    disabled={busy}
+                    onClick={onClose}
+                  >
+                    Vazgeç
+                  </Button>
+                </div>
+                {native ? (
+                  <button
+                    type="button"
+                    className="text-xs text-orange-700 underline-offset-2 hover:underline dark:text-orange-300"
+                    disabled={busy}
+                    onClick={() => void restore()}
+                  >
+                    Satın almayı geri yükle
+                  </button>
+                ) : null}
               </div>
             </>
           )}

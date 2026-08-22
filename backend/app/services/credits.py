@@ -310,6 +310,58 @@ def confirm(db: Session, user_id: str, video_id: str, reservation: CreditReserva
     return snapshot_reservation(db, user_id, reservation)
 
 
+def refund_charged(
+    db: Session,
+    user_id: str,
+    charge_kind: str,
+) -> None:
+    """Paylaşılan iş başarısız olunca takipçi iadesi (reservation objesi yok)."""
+    kind = (charge_kind or "trial").strip()
+    if kind == "ad":
+        db.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(daily_ad_rewarded_credits=User.daily_ad_rewarded_credits + 1)
+        )
+        db.commit()
+        user = get_or_create_user(db, user_id)
+        if (user.daily_ad_rewarded_credits or 0) > AD_DAILY_LIMIT:
+            user.daily_ad_rewarded_credits = AD_DAILY_LIMIT
+            db.commit()
+        return
+    if kind == "none":
+        return
+    db.execute(
+        update(User)
+        .where(User.user_id == user_id)
+        .where(User.is_premium.is_(False))
+        .values(ai_credits_left=User.ai_credits_left + 1)
+    )
+    db.commit()
+    user = get_or_create_user(db, user_id)
+    if user.ai_credits_left > FREE_AI_CREDITS:
+        user.ai_credits_left = FREE_AI_CREDITS
+        db.commit()
+
+
+def confirm_charged(
+    db: Session,
+    user_id: str,
+    video_id: str,
+    charge_kind: str,
+) -> None:
+    if not charge_kind or charge_kind == "none":
+        return
+    if already_converted(db, user_id, video_id):
+        return
+    db.add(AiConversion(user_id=user_id, video_id=video_id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+
+
+
 def snapshot_reservation(
     db: Session,
     user_id: str,

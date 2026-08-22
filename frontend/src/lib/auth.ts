@@ -130,6 +130,9 @@ export function logout() {
   window.localStorage.removeItem(ROLE_KEY);
   window.localStorage.removeItem(MODE_KEY);
   window.localStorage.removeItem("kpss_user_id");
+  window.localStorage.removeItem("tilko_profile_flags");
+  window.localStorage.removeItem("tilko_last_analyze");
+  window.localStorage.removeItem("tilko_notebook_bump");
 }
 
 export function isAuthPublic(path: string) {

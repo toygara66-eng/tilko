@@ -36,6 +36,7 @@ type PlayBridge = {
 
 type PlayNative = {
   launch: (productId: string) => void;
+  restore?: () => void;
 };
 
 declare global {
@@ -92,6 +93,59 @@ export function installPlayBillingBridge() {
       }),
   };
   bridgeReady = true;
+}
+
+function nativePurchaseCall(
+  run: (native: PlayNative) => void,
+  fallbackProductId: string,
+): Promise<PlayPurchaseResult> {
+  installPlayBillingBridge();
+  const native = window.TilkoPlayBillingNative;
+  if (!native) {
+    return Promise.reject(new Error("Play Billing köprüsü yok"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error("Google Play zaman aşımı"));
+    }, 180_000);
+    window.__tilkoBillingDone = (payload) => {
+      window.clearTimeout(timer);
+      window.__tilkoBillingDone = undefined;
+      if (payload?.error) {
+        reject(new Error(payload.error));
+        return;
+      }
+      const token = String(payload?.purchaseToken || "").trim();
+      if (!token) {
+        reject(new Error("Google Play token boş döndü."));
+        return;
+      }
+      resolve({
+        purchaseToken: token,
+        productId: payload.productId || fallbackProductId,
+        orderId: payload.orderId || "",
+        platform: "android",
+      });
+    };
+    try {
+      run(native);
+    } catch (err) {
+      window.clearTimeout(timer);
+      window.__tilkoBillingDone = undefined;
+      reject(err instanceof Error ? err : new Error("Play Billing açılamadı"));
+    }
+  });
+}
+
+export async function restorePlayPurchase(
+  fallbackProductId = "tilko_pro_monthly",
+): Promise<PlayPurchaseResult> {
+  installPlayBillingBridge();
+  const native = window.TilkoPlayBillingNative;
+  if (!native?.restore) {
+    throw new Error("Geri yükleme yalnızca Android uygulamasında.");
+  }
+  return nativePurchaseCall((bridge) => bridge.restore!(), fallbackProductId);
 }
 
 export function hasNativePlayBilling() {

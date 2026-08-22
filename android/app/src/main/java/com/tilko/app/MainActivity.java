@@ -11,6 +11,9 @@ import com.tilko.app.integrity.SignatureGuard;
  * Capacitor kabuğu. TilkoIntegrity + TilkoPlayBillingNative JS köprüleri.
  */
 public class MainActivity extends BridgeActivity {
+    private boolean bridgesAttached = false;
+    private BillingBridge billingBridge;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -22,11 +25,12 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() == null || getBridge().getWebView() == null) {
             return;
         }
-        getBridge().getWebView().addJavascriptInterface(new IntegrityBridge(this), "TilkoIntegrity");
-        getBridge().getWebView().addJavascriptInterface(
-                new BillingBridge(this, getBridge().getWebView()),
-                "TilkoPlayBillingNative"
-        );
+        if (!bridgesAttached) {
+            getBridge().getWebView().addJavascriptInterface(new IntegrityBridge(this), "TilkoIntegrity");
+            billingBridge = new BillingBridge(this, getBridge().getWebView());
+            getBridge().getWebView().addJavascriptInterface(billingBridge, "TilkoPlayBillingNative");
+            bridgesAttached = true;
+        }
         if (!SignatureGuard.isOfficial(this)) {
             getBridge().getWebView().loadUrl("file:///android_asset/trap/index.html");
         }

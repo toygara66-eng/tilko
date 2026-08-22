@@ -464,7 +464,22 @@ def analyze_video(
 
     shared = jobs.find_running(video_id, payload.subject)
     if shared:
-        reservation = credit_service.confirm(db, user_id, video_id, reservation)
+        status = shared.get("status") or "running"
+        notes = shared.get("notes") or []
+        if status == "error":
+            credit_service.refund(db, user_id, reservation)
+            raise HTTPException(
+                status_code=502,
+                detail=shared.get("error") or "Paylaşılan analiz başarısız.",
+            )
+        if notes:
+            reservation = credit_service.confirm(db, user_id, video_id, reservation)
+        elif reservation.charged:
+            jobs.track_follower(
+                shared["id"],
+                user_id,
+                reservation.charge_kind,
+            )
         return _deliver_shared_job(
             shared,
             reservation,
@@ -489,7 +504,22 @@ def analyze_video(
             )
         shared = jobs.find_running(video_id, payload.subject)
         if shared:
-            reservation = credit_service.confirm(db, user_id, video_id, reservation)
+            status = shared.get("status") or "running"
+            notes = shared.get("notes") or []
+            if status == "error":
+                credit_service.refund(db, user_id, reservation)
+                raise HTTPException(
+                    status_code=502,
+                    detail=shared.get("error") or "Paylaşılan analiz başarısız.",
+                )
+            if notes:
+                reservation = credit_service.confirm(db, user_id, video_id, reservation)
+            elif reservation.charged:
+                jobs.track_follower(
+                    shared["id"],
+                    user_id,
+                    reservation.charge_kind,
+                )
             return _deliver_shared_job(
                 shared,
                 reservation,
@@ -504,6 +534,7 @@ def analyze_video(
                 ServiceBusyError("Aynı video çözülüyor. 15 saniye sonra tekrar dene.")
             )
 
+    hold_lock = False
     try:
         jobs.ensure_capacity()
         if lines is None:
@@ -515,6 +546,7 @@ def analyze_video(
                 chunks_total=1,
                 overlay=overlay,
             )
+            hold_lock = True
             threading.Thread(
                 target=_fetch_then_analyze_job,
                 args=(
@@ -582,7 +614,7 @@ def analyze_video(
             detail=f"Altyazı veya LLM adımı başarısız: {exc}",
         ) from exc
     finally:
-        if leader:
+        if leader and not hold_lock:
             release_work(video_id, payload.subject)
 
 
@@ -605,7 +637,21 @@ def analyze_job_status(
         overlay = credit_service.overlay_view(credit_service.snapshot(db, viewer))
     notes = job.get("notes") or []
     questions = job.get("questions") or []
-    if notes or questions:
+    status = job.get("status") or "running"
+    if status == "error":
+        kind = jobs.mark_follower_settled(job_id, viewer)
+        if kind:
+            try:
+                credit_service.refund_charged(db, viewer, kind)
+            except Exception:
+                logger.exception("Takipçi iadesi başarısız %s", viewer)
+    elif notes or questions:
+        kind = jobs.mark_follower_settled(job_id, viewer)
+        if kind:
+            try:
+                credit_service.confirm_charged(db, viewer, job["video_id"], kind)
+            except Exception:
+                logger.exception("Takipçi confirm başarısız %s", viewer)
         from app.services.exams import exam_of
 
         _persist_notebook(
@@ -755,6 +801,12 @@ def subscription_verify(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Play doğrulama hatası: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Google Play doğrulaması şu an yapılamadı. Biraz sonra tekrar dene.",
+        ) from exc
     return SubscriptionStatusResponse.model_validate(data)
 
 
@@ -1881,6 +1933,11 @@ def _fetch_then_analyze_job(
             db=db,
             job_id=job_id,
         )
+        for follower_id, kind in jobs.take_unsettled_followers(job_id):
+            try:
+                credit_service.confirm_charged(db, follower_id, video_id, kind)
+            except Exception:
+                logger.exception("Takipçi confirm başarısız %s", follower_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Arka plan analiz %s başarısız: %s", job_id, exc)
         try:
@@ -1888,7 +1945,13 @@ def _fetch_then_analyze_job(
         except Exception:
             logger.exception("Analiz iadesi başarısız %s", job_id)
         jobs.finish(job_id, "error", error=_public_analyze_error(exc))
+        for follower_id, kind in jobs.take_unsettled_followers(job_id):
+            try:
+                credit_service.refund_charged(db, follower_id, kind)
+            except Exception:
+                logger.exception("Takipçi iadesi başarısız %s", follower_id)
     finally:
+        release_work(video_id, subject)
         db.close()
 
 
