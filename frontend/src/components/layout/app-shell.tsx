@@ -21,6 +21,7 @@ import { FeedbackHeaderButton } from "@/components/feedback/feedback-form";
 import { RoleGate } from "@/components/auth/role-gate";
 import { IntegrityGate } from "@/components/security/integrity-gate";
 import { AnalyzeProvider } from "@/components/analyze/analyze-context";
+import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
 
 const NAV = [
   { href: "/", label: "Av", icon: LayoutDashboard },
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <NoteModeProvider>
           <ProfileProvider>
             <AnalyzeProvider>
+            <PlayBillingBoot />
             <PenaltyProvider>
               <PomodoroProvider>
                 <ShellFrame>{children}</ShellFrame>

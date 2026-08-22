@@ -206,6 +206,23 @@ def verify_google_token(product_id: str, purchase_token: str) -> dict:
     return data
 
 
+def acknowledge_google_purchase(product_id: str, purchase_token: str) -> None:
+    """Play aboneliğini onayla; onaylanmazsa Google otomatik iade edebilir."""
+    package = settings.play_package_name
+    access = _google_access_token()
+    url = (
+        "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+        f"{package}/purchases/subscriptions/{product_id}/tokens/{purchase_token}:acknowledge"
+    )
+    with httpx.Client(timeout=20.0) as client:
+        response = client.post(url, headers={"Authorization": f"Bearer {access}"}, json={})
+        if response.status_code in {200, 204}:
+            return
+        if response.status_code == 400 and "already" in (response.text or "").lower():
+            return
+        logger.warning("Play acknowledge başarısız %s: %s", response.status_code, response.text[:200])
+
+
 def _apply_receipt(
     db: Session,
     user: User,
@@ -286,6 +303,11 @@ def verify_purchase(
             )
         receipt = verify_google_token(sku, token)
         plat = platform or "android"
+        try:
+            if not receipt.get("acknowledgementState"):
+                acknowledge_google_purchase(sku, token)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Play acknowledge atlandı: %s", exc)
     _apply_receipt(
         db,
         user,

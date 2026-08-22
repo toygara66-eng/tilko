@@ -5,9 +5,10 @@ import { Loader2, GraduationCap, School } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
-import { loginAccount, registerAccount } from "@/lib/api";
-import { setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
-import { setUserId } from "@/lib/user";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in";
+import { loginAccount, loginWithGoogle, registerAccount } from "@/lib/api";
+import { setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
+import { getUserId, setUserId } from "@/lib/user";
 import { cn } from "@/lib/utils";
 
 type Mode = "student" | "teacher";
@@ -20,6 +21,20 @@ export default function GirisPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [registering, setRegistering] = useState(false);
+
+  function finishSession(data: {
+    access_token: string;
+    role: string;
+    user_id: string;
+    dashboard?: string;
+  }, passwordForStore?: string) {
+    setToken(data.access_token);
+    if (passwordForStore) setAuthSecret(passwordForStore);
+    else setAuthMode("google");
+    setStoredRole(data.role);
+    setUserId(data.user_id);
+    window.location.assign(data.dashboard || (data.role === "teacher" ? "/hoca" : "/"));
+  }
 
   async function submit(isRegister: boolean) {
     setBusy(true);
@@ -34,13 +49,29 @@ export default function GirisPage() {
       const data = isRegister
         ? await registerAccount(payload)
         : await loginAccount(payload);
-      setToken(data.access_token);
-      setAuthSecret(password);
-      setStoredRole(data.role);
-      setUserId(data.user_id);
-      window.location.assign(data.dashboard || (data.role === "teacher" ? "/hoca" : "/"));
+      finishSession(data, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Giriş yapılamadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onGoogle(idToken: string) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const guest = getUserId();
+      const data = await loginWithGoogle({
+        id_token: idToken,
+        role: mode === "teacher" ? "teacher" : "student",
+        display_name: mode === "teacher" ? displayName.trim() : "",
+        link_user_id: guest.startsWith("aday-") ? guest : "",
+      });
+      finishSession(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google girişi başarısız");
     } finally {
       setBusy(false);
     }
@@ -90,7 +121,17 @@ export default function GirisPage() {
           : "Tuzak defterin, sazan avın ve teşhisin burada."}
       </p>
 
-      <div className="mt-5 grid gap-3">
+      <div className="mt-5">
+        <GoogleSignInButton onCredential={onGoogle} disabled={busy} />
+      </div>
+
+      <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-zinc-400">
+        <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+        veya
+        <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+      </div>
+
+      <div className="grid gap-3">
         {mode === "teacher" ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Görünen ad

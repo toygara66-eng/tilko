@@ -1158,6 +1158,18 @@ export function loginAccount(payload: {
   });
 }
 
+export function loginWithGoogle(payload: {
+  id_token: string;
+  role?: string;
+  display_name?: string;
+  link_user_id?: string;
+}) {
+  return request<AuthSession>("/auth/google", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function registerAccount(payload: {
   user_id: string;
   password: string;

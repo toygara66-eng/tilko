@@ -1,6 +1,7 @@
 const TOKEN_KEY = "tilko_jwt";
 const SECRET_KEY = "tilko_auth_secret";
 const ROLE_KEY = "tilko_role";
+const MODE_KEY = "tilko_auth_mode";
 
 function randomSecret() {
   const bytes = new Uint8Array(24);
@@ -21,6 +22,17 @@ export function setAuthSecret(password: string) {
   if (typeof window === "undefined") return;
   if (password.length < 8) return;
   window.localStorage.setItem(SECRET_KEY, password);
+  window.localStorage.setItem(MODE_KEY, "password");
+}
+
+export function setAuthMode(mode: "password" | "google") {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(MODE_KEY, mode);
+}
+
+export function getAuthMode(): "password" | "google" {
+  if (typeof window === "undefined") return "password";
+  return window.localStorage.getItem(MODE_KEY) === "google" ? "google" : "password";
 }
 
 export function getStoredRole(): string {
@@ -63,6 +75,12 @@ export async function ensureAuth(
 ): Promise<string> {
   const current = getToken();
   if (tokenValid(current)) return current;
+  if (getAuthMode() === "google") {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
+      window.location.assign("/giris");
+    }
+    throw new Error("Google oturumu doldu. Tekrar giriş yap.");
+  }
   if (inflight) return inflight;
   inflight = (async () => {
     const password = getAuthSecret();
@@ -107,6 +125,7 @@ export function logout() {
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(SECRET_KEY);
   window.localStorage.removeItem(ROLE_KEY);
+  window.localStorage.removeItem(MODE_KEY);
   window.localStorage.removeItem("kpss_user_id");
 }
 

@@ -19,15 +19,23 @@ android {
         applicationId "com.tilko.app"
         minSdk 24
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 3
+        versionName "1.0.2"
         buildConfigField "String", "TILKO_PLAY_CERT_SHA256", "\"${playCerts}\""
         buildConfigField "String", "TILKO_WEB_URL", "\"${webUrl}\""
         buildConfigField "String", "TILKO_PLAY_PACKAGE", "\"com.tilko.app\""
     }
 
     signingConfigs {
+        debug {
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
+        }
         release {
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
             if (keystorePropertiesFile.exists()) {
                 keyAlias keystoreProperties["keyAlias"]
                 keyPassword keystoreProperties["keyPassword"]
@@ -42,6 +50,7 @@ android {
             minifyEnabled false
             shrinkResources false
             debuggable true
+            signingConfig signingConfigs.debug
         }
         release {
             minifyEnabled true
@@ -58,6 +67,11 @@ android {
         buildConfig true
     }
 
+    // Next.js static files live in _next/; aapt's default pattern drops <dir>_*.
+    androidResources {
+        ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
@@ -68,6 +82,7 @@ dependencies {
     implementation project(":capacitor-android")
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "androidx.webkit:webkit:1.11.0"
+    implementation "com.android.billingclient:billing:6.2.1"
 }
 
 configurations.configureEach {

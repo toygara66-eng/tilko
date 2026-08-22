@@ -46,5 +46,13 @@ services:
         value: "false"
       - key: PLAY_PACKAGE_NAME
         value: com.tilko.app
+      - key: PLAY_WEBHOOK_SECRET
+        sync: false
+      - key: PLAY_SERVICE_ACCOUNT_FILE
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ANDROID_CLIENT_ID
+        sync: false
       - key: CORS_ORIGINS
         value: "*"

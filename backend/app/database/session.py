@@ -109,6 +109,8 @@ def _add_missing_columns() -> None:
             "is_onboarded": "BOOLEAN DEFAULT 0",
             "target_score": "REAL DEFAULT 0",
             "password_hash": "VARCHAR(256) DEFAULT ''",
+            "google_sub": "VARCHAR(64) DEFAULT ''",
+            "email": "VARCHAR(256) DEFAULT ''",
             "created_at": "DATETIME",
             "daily_ad_rewarded_credits": "INTEGER DEFAULT 1",
             "last_credit_reset_date": "DATE",

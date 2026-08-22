@@ -34,14 +34,70 @@ type PlayBridge = {
   }>;
 };
 
+type PlayNative = {
+  launch: (productId: string) => void;
+};
+
 declare global {
   interface Window {
     TilkoPlayBilling?: PlayBridge;
+    TilkoPlayBillingNative?: PlayNative;
+    __tilkoBillingDone?: (payload: {
+      purchaseToken?: string;
+      productId?: string;
+      orderId?: string;
+      error?: string;
+    }) => void;
   }
 }
 
+let bridgeReady = false;
+
+/** Android native köprüsünü Promise API’ye sarar. */
+export function installPlayBillingBridge() {
+  if (typeof window === "undefined" || bridgeReady) return;
+  const native = window.TilkoPlayBillingNative;
+  if (!native || typeof native.launch !== "function") return;
+  window.TilkoPlayBilling = {
+    launch: (productId: string) =>
+      new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          reject(new Error("Google Play ödeme zaman aşımı"));
+        }, 180_000);
+        window.__tilkoBillingDone = (payload) => {
+          window.clearTimeout(timer);
+          window.__tilkoBillingDone = undefined;
+          if (payload?.error) {
+            reject(new Error(payload.error));
+            return;
+          }
+          const token = String(payload?.purchaseToken || "").trim();
+          if (!token) {
+            reject(new Error("Google Play token boş döndü."));
+            return;
+          }
+          resolve({
+            purchaseToken: token,
+            productId: payload.productId || productId,
+            orderId: payload.orderId || "",
+          });
+        };
+        try {
+          native.launch(productId);
+        } catch (err) {
+          window.clearTimeout(timer);
+          window.__tilkoBillingDone = undefined;
+          reject(err instanceof Error ? err : new Error("Play Billing açılamadı"));
+        }
+      }),
+  };
+  bridgeReady = true;
+}
+
 export function hasNativePlayBilling() {
-  return typeof window !== "undefined" && typeof window.TilkoPlayBilling?.launch === "function";
+  if (typeof window === "undefined") return false;
+  installPlayBillingBridge();
+  return typeof window.TilkoPlayBilling?.launch === "function";
 }
 
 export function sandboxToken(userId: string, productId: string) {
@@ -56,6 +112,7 @@ export async function launchPlayPurchase(
   userId: string,
   productId: string,
 ): Promise<PlayPurchaseResult> {
+  installPlayBillingBridge();
   if (hasNativePlayBilling() && window.TilkoPlayBilling) {
     const native = await window.TilkoPlayBilling.launch(productId);
     const token = String(native.purchaseToken || "").trim();
@@ -68,6 +125,14 @@ export async function launchPlayPurchase(
       orderId: native.orderId || "",
       platform: "android",
     };
+  }
+  const allowSandbox =
+    process.env.NEXT_PUBLIC_PLAY_BILLING_SANDBOX !== "false" &&
+    process.env.NODE_ENV !== "production";
+  if (!allowSandbox && process.env.NEXT_PUBLIC_PLAY_BILLING_SANDBOX === "false") {
+    throw new Error(
+      "Tilko Pro ödemesi Google Play üzerinden yapılır. Android uygulamasını Play Store’dan aç.",
+    );
   }
   await new Promise((resolve) => window.setTimeout(resolve, 700));
   return {

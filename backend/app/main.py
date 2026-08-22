@@ -65,6 +65,7 @@ from app.models.schemas import (
     MotivationalQuoteResponse,
     AuthRequest,
     AuthResponse,
+    GoogleAuthRequest,
     SubscriptionVerifyRequest,
     SubscriptionStatusResponse,
     PromoCreateRequest,
@@ -119,7 +120,14 @@ from app.services.scale import (
     release_work,
     wait_work,
 )
-from app.security.auth import actor, jwt_guard, login_user, play_webhook_ok, register_user
+from app.security.auth import (
+    actor,
+    jwt_guard,
+    login_user,
+    login_with_google,
+    play_webhook_ok,
+    register_user,
+)
 from app.security.rate_limit import limiter
 from app.services.youtube import (
     YOUTUBE_ID_RE,
@@ -243,6 +251,24 @@ def auth_login(
             payload.password,
             role=payload.role,
             display_name=payload.display_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return AuthResponse.model_validate(data)
+
+
+@app.post("/auth/google", response_model=AuthResponse)
+@limiter.limit("8/minute")
+def auth_google(
+    request: Request, payload: GoogleAuthRequest, db: Session = Depends(get_db)
+) -> AuthResponse:
+    try:
+        data = login_with_google(
+            db,
+            payload.id_token,
+            role=payload.role,
+            display_name=payload.display_name,
+            link_user_id=payload.link_user_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc

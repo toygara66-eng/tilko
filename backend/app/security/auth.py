@@ -25,6 +25,7 @@ PUBLIC_PATHS = {
     "/openapi.json",
     "/auth/login",
     "/auth/register",
+    "/auth/google",
     "/login",
     "/subscription/webhook",
 }
@@ -205,6 +206,100 @@ def login_user(
         set_display_name(db, uid, display_name)
         db.commit()
         db.refresh(user)
+    return _auth_view(db, user)
+
+
+def _google_audiences() -> list[str]:
+    ids = [
+        (settings.google_client_id or "").strip(),
+        (settings.google_android_client_id or "").strip(),
+    ]
+    return [item for item in ids if item]
+
+
+def verify_google_id_token(id_token: str) -> dict:
+    """Google ID token doğrula (GIS / Android)."""
+    token = (id_token or "").strip()
+    if not token:
+        raise ValueError("Google jetonu eksik.")
+    audiences = _google_audiences()
+    if not audiences:
+        raise ValueError("GOOGLE_CLIENT_ID sunucuda ayarlı değil.")
+    import httpx
+
+    with httpx.Client(timeout=15.0) as client:
+        response = client.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"id_token": token},
+        )
+    if response.status_code != 200:
+        raise ValueError("Google jetonu geçersiz veya süresi dolmuş.")
+    data = response.json()
+    aud = str(data.get("aud") or "").strip()
+    if aud not in audiences:
+        raise ValueError("Google istemci kimliği uyuşmuyor.")
+    if str(data.get("email_verified") or "").lower() not in {"true", "1"}:
+        # Bazı Android tokenlerinde alan yok; email varsa doğrulanmış say.
+        if not data.get("email"):
+            raise ValueError("Google e-posta doğrulanmamış.")
+    sub = str(data.get("sub") or "").strip()
+    if not sub:
+        raise ValueError("Google kimliği okunamadı.")
+    return data
+
+
+def login_with_google(
+    db: Session,
+    id_token: str,
+    *,
+    role: str = "",
+    display_name: str = "",
+    link_user_id: str = "",
+) -> dict:
+    from sqlalchemy import select
+
+    from app.database.models import User
+    from app.services.teacher import normalize_role, set_display_name
+
+    claims = verify_google_id_token(id_token)
+    sub = str(claims.get("sub") or "").strip()
+    email = str(claims.get("email") or "").strip()[:256]
+    name = (display_name or claims.get("name") or "").strip()[:64]
+    intended = normalize_role(role, default="student")
+    if intended == "teacher" and settings.is_production:
+        raise ValueError("Hoca hesabı Google ile buradan açılamaz.")
+
+    user = db.scalars(select(User).where(User.google_sub == sub)).first()
+    if user is None and email:
+        user = db.scalars(select(User).where(User.email == email)).first()
+
+    link = (link_user_id or "").strip()
+    if user is None and link.startswith("aday-"):
+        guest = db.get(User, link)
+        if guest is not None and not (getattr(guest, "google_sub", "") or "").strip():
+            user = guest
+
+    if user is None:
+        uid = f"g_{sub}"[:64]
+        if not USER_RE.match(uid):
+            uid = f"g{sub}"[:64]
+        user = get_or_create_user(db, uid)
+
+    user.google_sub = sub
+    if email:
+        user.email = email
+    if intended == "teacher":
+        _stamp_teacher(user, name)
+    elif not (getattr(user, "role", "") or "").strip() or user.role == "student":
+        user.role = "student"
+    if name and not (user.display_name or "").strip():
+        user.display_name = name
+    db.add(user)
+    db.commit()
+    if name:
+        set_display_name(db, user.user_id, name)
+        db.commit()
+    db.refresh(user)
     return _auth_view(db, user)
 
 

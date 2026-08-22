@@ -145,9 +145,13 @@ export function PlayCheckoutModal({
           ) : (
             <>
               <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-                Hey {profile.title}, Play Billing fişini sunucu{" "}
-                <span className="font-mono text-xs">/subscription/verify</span> ile
-                doğrular. {sandbox ? "Şu an test ortamı — gerçek kart çekilmez." : "Canlı Play token gerekli."}
+                Hey {profile.title}, ödeme{" "}
+                {native
+                  ? "Google Play Billing ile alınır; fiş sunucuda doğrulanır."
+                  : sandbox
+                    ? "şu an test modunda (gerçek kart çekilmez). Canlı ödeme için Android uygulamasını Play Store’dan aç."
+                    : "yalnızca Android uygulamasında Google Play ile yapılır."}{" "}
+                {quote ? "Kupon sınıfa katılım / bilgi içindir; Play fiyatı mağazadan gelir." : null}
               </p>
               <div className="grid gap-2">
                 {plans.map((plan) => (

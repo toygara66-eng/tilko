@@ -665,6 +665,17 @@ class AuthRequest(BaseModel):
     display_name: str = Field(default="", max_length=64)
 
 
+class GoogleAuthRequest(BaseModel):
+    id_token: str = Field(..., min_length=20, max_length=8192)
+    role: str = ""
+    display_name: str = Field(default="", max_length=64)
+    link_user_id: str = Field(
+        default="",
+        max_length=128,
+        description="Misafir aday-* hesabını Google'a bağlamak için",
+    )
+
+
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

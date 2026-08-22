@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     play_billing_sandbox: bool = True
     play_webhook_secret: str = ""
     play_service_account_file: str = ""
+    google_client_id: str = ""
+    google_android_client_id: str = ""
     admin_api_secret: str = "tilko-admin-dev"
     cors_origins: str = "*"
     database_path: str = ""
