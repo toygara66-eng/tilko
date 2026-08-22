@@ -144,16 +144,27 @@ export function Dashboard() {
             <p className="mt-2 text-xs text-zinc-500">
               YouTube → üç nokta → Transkripti göster, veya{" "}
               {extractYoutubeId(url) ? (
-                <a
-                  href={`https://youtubetotranscript.com/transcript?v=${extractYoutubeId(url)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-orange-600 underline dark:text-orange-300"
-                >
-                  youtubetotranscript.com’da aç
-                </a>
+                <>
+                  <a
+                    href={`https://youtubetotranscript.com/transcript?v=${extractYoutubeId(url)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-orange-600 underline dark:text-orange-300"
+                  >
+                    youtubetotranscript.com
+                  </a>
+                  {" / "}
+                  <a
+                    href={`https://www.youtube-transcript.io/videos?id=${extractYoutubeId(url)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-orange-600 underline dark:text-orange-300"
+                  >
+                    youtube-transcript.io
+                  </a>
+                </>
               ) : (
-                "youtubetotranscript.com"
+                "youtubetotranscript.com / youtube-transcript.io"
               )}
               , kopyala, yapıştır.
             </p>

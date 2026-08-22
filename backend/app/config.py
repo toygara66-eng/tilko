@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     admin_api_secret: str = "tilko-admin-dev"
     cors_origins: str = "*"
     database_path: str = ""
+    youtube_transcript_io_token: str = ""
 
     @property
     def is_local(self) -> bool:

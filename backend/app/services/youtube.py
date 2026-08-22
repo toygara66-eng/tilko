@@ -108,6 +108,7 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
     errors: list[str] = []
     scrapers = (
         (_fetch_via_youtubetotranscript, 12),
+        (_fetch_via_youtube_transcript_io, 12),
         (_fetch_via_innertube, 8),
         (_fetch_transcript_lines_inner, 8),
         (_fetch_via_invidious, 12),
@@ -242,6 +243,12 @@ _YTT_SEGMENT = re.compile(
     r'data-start="([\d.]+)"[^>]*>\s*(.*?)\s*</span>',
     re.IGNORECASE | re.DOTALL,
 )
+_YTI_CUE = re.compile(
+    r">(\d{1,2}:\d{2}(?::\d{2})?)</div>\s*"
+    r'<div class="text-sm[^"]*">(.*?)</div>',
+    re.IGNORECASE | re.DOTALL,
+)
+_YTI_CLOCK = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 _XML_CAPTION = re.compile(
     r'<text[^>]*start="([^"]+)"[^>]*>(.*?)</text>',
     re.IGNORECASE | re.DOTALL,
@@ -419,6 +426,209 @@ def _fetch_via_youtubetotranscript(video_id: str) -> list[dict]:
     if len(lines) < 3:
         raise ValueError("Transkript satırı yetersiz")
     return lines
+
+
+def _clock_to_seconds(stamp: str) -> int:
+    match = _YTI_CLOCK.match((stamp or "").strip())
+    if not match:
+        return 0
+    hour, minute, second = match.group(1), match.group(2), match.group(3)
+    if second is None:
+        return int(hour) * 60 + int(minute)
+    return int(hour) * 3600 + int(minute) * 60 + int(second)
+
+
+def _yti_clean_text(value: object) -> str:
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _yti_start_seconds(item: dict) -> int:
+    for key in (
+        "startMs",
+        "start_ms",
+        "offsetMs",
+        "tStartMs",
+        "start",
+        "offset",
+        "startTime",
+        "start_time",
+        "time",
+    ):
+        if key not in item:
+            continue
+        raw = item[key]
+        if isinstance(raw, str) and ":" in raw:
+            return _clock_to_seconds(raw)
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if "ms" in key.lower():
+            value /= 1000.0
+        return int(value)
+    return 0
+
+
+def _yti_lang_priority(node: dict) -> int:
+    raw = str(
+        node.get("language")
+        or node.get("lang")
+        or node.get("languageCode")
+        or node.get("language_code")
+        or ""
+    ).lower()
+    for index, pref in enumerate(PREFERRED_LANGUAGES):
+        if raw == pref.lower() or raw.startswith("tr"):
+            return index
+    if raw.startswith("en"):
+        return 10
+    return 40
+
+
+def _lines_from_yti_cues(items: list) -> list[dict]:
+    lines: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = _yti_clean_text(item.get("text") or item.get("utf8") or "")
+        if not text or text in {"♪", "[♪♪♪]"}:
+            continue
+        lines.append({"start": _yti_start_seconds(item), "text": text[:800]})
+        if len(lines) >= 20000:
+            break
+    return lines
+
+
+def _lines_from_yti_payload(payload) -> list[dict]:
+    """youtube-transcript.io JSON'undaki damgalı satırları toplar."""
+    ranked: list[tuple[int, list[dict]]] = []
+
+    def consider(cues: list[dict], priority: int) -> None:
+        lines = _lines_from_yti_cues(cues)
+        if len(lines) >= 3:
+            ranked.append((priority, lines))
+
+    def walk(node, priority: int = 40) -> None:
+        if isinstance(node, dict) and node.get("events"):
+            json3 = _lines_from_json3(node)
+            if len(json3) >= 3:
+                ranked.append((priority, json3))
+        if isinstance(node, list):
+            dicts = [item for item in node if isinstance(item, dict)]
+            if len(dicts) >= 3 and any(
+                "text" in item or "utf8" in item for item in dicts[:8]
+            ):
+                consider(dicts, priority)
+            for item in node:
+                walk(item, priority)
+            return
+        if not isinstance(node, dict):
+            return
+        next_priority = min(priority, _yti_lang_priority(node))
+        nested = False
+        for key in (
+            "tracks",
+            "transcripts",
+            "captions",
+            "snippets",
+            "transcript",
+            "cues",
+            "lines",
+            "data",
+            "results",
+            "videos",
+        ):
+            if key in node:
+                nested = True
+                walk(node[key], next_priority)
+        if not nested:
+            for value in node.values():
+                if isinstance(value, (dict, list)):
+                    walk(value, next_priority)
+
+    walk(payload)
+    if not ranked:
+        return []
+    ranked.sort(key=lambda row: row[0])
+    return ranked[0][1]
+
+
+def _lines_from_yti_html(html_text: str) -> list[dict]:
+    lines: list[dict] = []
+    for match in _YTI_CUE.finditer(html_text or ""):
+        text = _yti_clean_text(match.group(2))
+        if not text:
+            continue
+        lines.append({"start": _clock_to_seconds(match.group(1)), "text": text[:800]})
+    return lines
+
+
+def _fetch_via_youtube_transcript_io(video_id: str) -> list[dict]:
+    """youtube-transcript.io resmi API (jeton varsa) veya videos sayfası."""
+    from app.config import settings
+
+    errors: list[str] = []
+    token = (settings.youtube_transcript_io_token or "").strip()
+    headers = {
+        "User-Agent": WATCH_UA,
+        "Accept": "application/json, text/html;q=0.8,*/*;q=0.5",
+        "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+        "Referer": "https://www.youtube-transcript.io/",
+    }
+    if token:
+        auth = token if token.lower().startswith("basic ") else f"Basic {token}"
+        try:
+            response = httpx.post(
+                "https://www.youtube-transcript.io/api/transcripts",
+                headers={
+                    **headers,
+                    "Authorization": auth,
+                    "Content-Type": "application/json",
+                },
+                json={"ids": [video_id]},
+                timeout=12,
+                follow_redirects=True,
+            )
+        except httpx.HTTPError as exc:
+            errors.append(f"api: {exc}")
+        else:
+            if response.status_code == 429:
+                raise ValueError("youtube-transcript.io kota")
+            if response.status_code in {401, 402, 403}:
+                errors.append(f"api {response.status_code}")
+            elif response.status_code >= 400:
+                errors.append(f"api {response.status_code}")
+            else:
+                try:
+                    payload = response.json()
+                except json.JSONDecodeError:
+                    payload = None
+                lines = _lines_from_yti_payload(payload) if payload is not None else []
+                if len(lines) >= 3:
+                    return lines
+                errors.append("api: transkript yok")
+
+    page = httpx.get(
+        f"https://www.youtube-transcript.io/videos?id={video_id}",
+        headers=headers,
+        timeout=12,
+        follow_redirects=True,
+    )
+    page.raise_for_status()
+    html_text = page.text or ""
+    low = html_text.lower()
+    if "just a moment" in low or "cf-browser-verification" in low:
+        raise ValueError("Cloudflare bot koruması")
+    lines = _lines_from_yti_html(html_text)
+    if len(lines) >= 3:
+        return lines
+    extra = "; ".join(errors)
+    raise ValueError(
+        "Sayfada transkript yok"
+        + (f" ({extra})" if extra else "")
+    )
 
 
 def _fetch_via_invidious(video_id: str) -> list[dict]:
