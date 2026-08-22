@@ -129,10 +129,14 @@ def _client() -> tuple[OpenAI, str]:
     if settings.llm_provider == "openrouter":
         if _skip_openrouter:
             pair = None
-            if _credit_stage == 2:
+            if _credit_stage == 1:
                 pair = _groq_fast_client()
+            elif _credit_stage == 2 and not _skip_gemini:
+                pair = _gemini_client(timeout=LLM_HTTP_TIMEOUT)
             else:
-                pair = _gemini_client(timeout=LLM_HTTP_TIMEOUT) or _groq_fast_client()
+                pair = _groq_fast_client() or (
+                    None if _skip_gemini else _gemini_client(timeout=LLM_HTTP_TIMEOUT)
+                )
             if pair:
                 return pair
         if not settings.openrouter_api_key:
@@ -158,6 +162,19 @@ def _client() -> tuple[OpenAI, str]:
             "OPENAI_API_KEY tanımlı değil. backend/.env dosyasını doldurun."
         )
     return _openai_client(api_key=settings.openai_api_key), settings.openai_model
+
+
+def _is_gemini_quota_error(raw: str) -> bool:
+    text = raw.lower()
+    googleish = (
+        "generativelanguage.googleapis.com" in text
+        or "gemini" in text
+        or "you exceeded your current quota" in text
+        or "resource_exhausted" in text
+    )
+    return googleish and (
+        "quota" in text or "resource_exhausted" in text or "429" in raw
+    )
 
 
 def _fatal_message(raw: str) -> str | None:
@@ -214,18 +231,19 @@ def _fatal_message(raw: str) -> str | None:
             "OpenAI hesabının kredisi bitmiş. backend/.env içinde LLM_PROVIDER=gemini "
             "yapabilir veya OpenAI faturalandırmasını açabilirsin."
         )
-    if "exceeded your current quota" in text or (
-        "429" in raw and "quota" in text
+    if _is_gemini_quota_error(raw) or (
+        "exceeded your current quota" in text
+        or ("429" in raw and "quota" in text and "gemini" in text)
     ):
+        if _groq_fast_client():
+            return "Gemini ücretsiz kotası doldu; Groq yedeğine geçiliyor."
         return (
-            "Gemini ücretsiz kotası doldu. Birkaç dakika veya yarın tekrar dene. "
-            "Hemen devam için Google AI Studio'da faturalandırmayı aç."
+            "Gemini ücretsiz kotası doldu. Yarın tekrar dene."
         )
     if "perday" in text.replace(" ", "") or "requests per day" in text:
         return (
-            "Gemini ücretsiz kotasının GÜNLÜK istek sınırı doldu (ücretsiz katmanda "
-            "günde 20 istek). Yarın sıfırlanır; hemen devam etmek için Google AI Studio'da "
-            "faturalandırmayı aç veya .env içinde LLM_PROVIDER=openai yap."
+            "Gemini ücretsiz kotasının GÜNLÜK istek sınırı doldu. "
+            "Groq yedeği varsa ona geçilir; yoksa yarın tekrar dene."
         )
     return None
 
@@ -555,6 +573,10 @@ def _gemini_native_completion(
                 "GEMINI_MODEL=gemini-3.6-flash bu anahtarda yok. "
                 "Google AI Studio'da 3.6 Flash'i aç veya anahtarı yenile."
             )
+        if response.status_code == 429:
+            raise RuntimeError(
+                f"{name}: 429 You exceeded your current quota. {response.text[:200]}"
+            )
         if not response.is_success:
             last = RuntimeError(f"{name}: {response.status_code} {response.text[:240]}")
             logger.warning("Gemini %s reddetti: %s", name, response.status_code)
@@ -638,26 +660,25 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _activate_credit_fallback() -> bool:
-    """Kota bitince Gemini 3.6 Flash, olmazsa Groq dene."""
+    """Kota bitince Groq, Gemini kotası yoksa Gemini dene."""
     global _skip_openrouter, _openrouter_free_only, _skip_gemini, _credit_stage
     with _provider_lock:
         _openrouter_free_only = True
         if _credit_stage < 1:
-            if _gemini_client():
+            if _groq_fast_client():
                 _credit_stage = 1
                 _skip_openrouter = True
-                _skip_gemini = False
-                logger.warning(
-                    "OpenRouter kotası yok; Gemini yedeğine geçiliyor (%s).",
-                    GEMINI_CHAT_MODEL,
-                )
+                logger.warning("OpenRouter/Gemini kotası yok; Groq yedeğine geçiliyor.")
                 return True
             _credit_stage = 1
         if _credit_stage < 2:
-            if _groq_fast_client():
+            if _gemini_client() and not _skip_gemini:
                 _credit_stage = 2
                 _skip_openrouter = True
-                logger.warning("Gemini yedeği yok veya düştü; Groq deneniyor.")
+                logger.warning(
+                    "Groq yok veya düştü; Gemini yedeğine geçiliyor (%s).",
+                    GEMINI_CHAT_MODEL,
+                )
                 return True
             _credit_stage = 2
         _credit_stage = 3
@@ -668,9 +689,9 @@ def _activate_credit_fallback() -> bool:
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
     """Video analizi LLM_PROVIDER yolunu izler; düşünme modelini kullanmaz."""
     if _credit_stage == 1:
-        return _gemini_client()
-    if _credit_stage == 2:
         return _groq_fast_client()
+    if _credit_stage == 2:
+        return None if _skip_gemini else _gemini_client()
     if settings.openrouter_api_key and not _skip_openrouter:
         return (
             _openai_client(
@@ -768,7 +789,7 @@ def _chat_openai_compatible(
     free = str(_openrouter_fast_model() if settings.llm_provider == "openrouter" else "").endswith(
         ":free"
     )
-    use_json = (not free) or _credit_stage == 1 or settings.llm_provider == "gemini"
+    use_json = (not free) or _credit_stage == 2 or settings.llm_provider == "gemini"
     try:
         response = _openai_create(messages, temperature, json_mode=use_json)
     except Exception as exc:
@@ -794,7 +815,7 @@ def _chat_openai_compatible(
 
 def _throttle_groq() -> None:
     """Ücretsiz katmanda 8K TPM var; çağrılar arasında yer açılmazsa 429 yağar."""
-    if settings.llm_provider != "groq":
+    if settings.llm_provider != "groq" and _credit_stage != 1:
         return
     global _groq_next_ok
     with _groq_gate:
@@ -814,6 +835,7 @@ def _chat(
     task: str = "genel",
 ) -> dict:
     """Kota/geçici hatalarda artan bekleme ile yeniden dener."""
+    global _skip_gemini, _credit_stage
     last_error: Exception | None = None
     attempt = 0
     task_token = usage_task.set(task or "genel")
@@ -832,6 +854,10 @@ def _chat(
             except Exception as exc:
                 fatal = _fatal_message(str(exc))
                 if fatal:
+                    if _is_gemini_quota_error(str(exc)):
+                        _skip_gemini = True
+                        if _credit_stage < 1:
+                            _credit_stage = 1
                     if _activate_credit_fallback():
                         continue
                     raise QuotaExhaustedError(fatal) from exc
