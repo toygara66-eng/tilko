@@ -1277,7 +1277,14 @@ def pick_content_slice(
         raise ValueError("Bu video için altyazı bulunamadı.")
     start_idx = 0
     focus = int(prefer_start or 0)
-    if focus > 0:
+    last_end = int(slices[-1].get("end") or slices[-1].get("start") or 0)
+    # Uzun videoda URL t= yoksa ilk ~12 dk selam/PDF/reklamı atla.
+    if focus <= 0 and last_end >= 1800:
+        for index, piece in enumerate(slices):
+            if int(piece.get("start") or 0) >= 720:
+                start_idx = index
+                break
+    elif focus > 0:
         for index, piece in enumerate(slices):
             st = int(piece.get("start") or 0)
             en = int(piece.get("end") or st)

@@ -1829,6 +1829,14 @@ def _analyze_with_lines(
 
     notes = _pack_notes(llm_data.get("notes"), video_id)
     questions = _pack_questions(llm_data.get("questions"), video_id)
+    if focus_start > 0:
+        floor = max(0, int(focus_start) - 120)
+        notes = [n for n in notes if int(n.timestamp or 0) >= floor]
+        questions = [q for q in questions if int(q.timestamp or 0) >= floor]
+    elif transcript_duration_seconds(lines) >= 1800:
+        # Uzun videoda giriş sohbetini (PDF/korsan/selam) ders notu sayma.
+        notes = [n for n in notes if int(n.timestamp or 0) >= 600]
+        questions = [q for q in questions if int(q.timestamp or 0) >= 600]
     if notes or questions:
         reservation = credit_service.confirm(db, user_id, video_id, reservation)
     else:
@@ -1913,7 +1921,7 @@ def _analyze_with_lines(
         ).model_dump()
         dump["analyze_span"] = "full"
         dump["llm_model"] = settings.active_model
-        dump["notes_depth"] = 5
+        dump["notes_depth"] = 6
         dump["focus_bucket"] = int(focus_bucket or 0)
         dump["focus_start"] = int(focus_start or 0)
         dump["exam_target"] = exam_target or ""
@@ -2098,7 +2106,7 @@ def _continue_analyze_job(
         "cached": False,
         "analyze_span": "full",
         "llm_model": settings.active_model,
-        "notes_depth": 5,
+        "notes_depth": 6,
         "focus_bucket": int(final.get("focus_bucket") or 0),
         "exam_target": exam_target or "",
         "job_id": "",

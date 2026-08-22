@@ -445,11 +445,12 @@ _PROMO_NOTE_RE = re.compile(
     r"ücretsiz\s*pdf|pdf'?i?\s*indir|kolay\s*erişim|destek\s*ol|"
     r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|hız\s*kat|"
     r"kanalıma|satın\s*al|sipariş|kampanya|sponsor|"
-    r"korsan|indirim\s*kod|yayınevi|yayinevi|sosyal\s*medya|"
+    r"korsan|indirim|yayınevi|yayinevi|sosyal\s*medya|"
     r"başarıya\s*koş|sınavı\s*fethet|birebir\s*uyumlu|"
-    r"eleştirel\s*düşünme\s*beceri|farklı\s*kaynaklardan\s*bilgi|"
-    r"doğru\s*kaynakları\s*seç|zaman\s*yönetimi\s*çok\s*önemli|"
-    r"genel\s*tekrar|lisans\s*hedefi"
+    r"eleştirel\s*düşünme|farklı\s*kaynaklardan|"
+    r"doğru\s*kaynak|zaman\s*yönetimi|"
+    r"genel\s*tekrar|lisans\s*hedefi|kalem\s*tutan|"
+    r"hakkım\s*(sonuna|helal)|ücretsiz\s*olarak\s*indir"
     r")",
     re.IGNORECASE,
 )
@@ -469,13 +470,13 @@ def _is_promo_note(note: dict) -> bool:
 
 
 def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
-    """Altyazıyla örtüşmeyen veya tanıtım notlarını atar."""
+    """Altyazıda birebir quote olmayan veya tanıtım notlarını atar."""
     source = _content_tokens(transcript)
     folded = _fold_tr(transcript)
     if not notes:
         return []
     if not source:
-        return [n for n in notes if not _is_promo_note(n)]
+        return []
     kept: list[dict] = []
     for note in notes:
         if _is_promo_note(note):
@@ -486,6 +487,9 @@ def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
             or note.get("alıntı")
             or ""
         ).strip()
+        # Quote zorunlu: altyazıda yoksa uydurma/meta not düşer.
+        if len(quote) < 12 or _fold_tr(quote) not in folded:
+            continue
         blob = " ".join(
             [
                 str(note.get("title") or ""),
@@ -493,11 +497,10 @@ def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
                 " ".join(str(p) for p in (note.get("key_points") or [])),
             ]
         )
-        quote_ok = len(quote) >= 10 and _fold_tr(quote) in folded
         tokens = _content_tokens(blob)
         overlap = tokens & source
         ratio = len(overlap) / max(len(tokens), 1)
-        if quote_ok or (len(overlap) >= 4 and ratio >= 0.22):
+        if len(overlap) >= 3 and ratio >= 0.18:
             kept.append(note)
     return kept
 
