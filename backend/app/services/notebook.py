@@ -241,20 +241,21 @@ def _to_public(row: SavedNotebookItem) -> dict | None:
     timed = str(payload.get("video_url_with_t") or "") or (
         build_watch_url(row.video_id, stamp) if row.video_id else watch
     )
+    text = str(payload.get("text") or payload.get("detail") or row.title or "").strip()
     return {
         **payload,
         "saved_id": row.id,
         "subject": row.subject,
         "video_url": watch,
         "id": str(payload.get("id") or f"{row.kind}_{row.id}"),
-        "title": str(payload.get("title") or row.title or ""),
-        "text": str(payload.get("text") or payload.get("detail") or row.title or ""),
+        "title": str(payload.get("title") or row.title or "") or "Not",
+        "text": text or str(payload.get("title") or row.title or "Not"),
         "key_points": [str(p).strip() for p in points if str(p).strip()],
         "mnemonic": str(payload.get("mnemonic") or ""),
         "exam_tip": str(payload.get("exam_tip") or ""),
         "timestamp": stamp,
         "timestamp_label": str(payload.get("timestamp_label") or format_timestamp_label(stamp)),
-        "video_url_with_t": timed,
+        "video_url_with_t": timed or watch or "",
         "options": {str(k): str(v) for k, v in options.items()},
         "correct": str(payload.get("correct") or ""),
         "explanation": str(payload.get("explanation") or ""),

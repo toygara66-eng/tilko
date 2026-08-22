@@ -291,15 +291,36 @@ def _deliver_cached_analyze(
     return response
 
 
-def _deliver_shared_job(job: dict, reservation) -> AnalyzeResponse:
+def _deliver_shared_job(
+    job: dict,
+    reservation,
+    *,
+    user_id: str,
+    subject: str | None,
+    exam_target: str | None,
+) -> AnalyzeResponse:
     overlay = credit_service.overlay(reservation)
+    notes = job.get("notes") or []
+    questions = job.get("questions") or []
+    persona = job.get("teacher_persona") or {"catchphrases": [], "tone": "öğretici, net"}
+    if notes or questions:
+        _persist_notebook(
+            user_id=user_id,
+            subject=subject or job.get("subject"),
+            video_id=job["video_id"],
+            video_url=job["video_url"],
+            notes=notes,
+            questions=questions,
+            persona=persona,
+            exam_target=exam_target,
+        )
     return AnalyzeResponse(
         video_id=job["video_id"],
         video_url=job["video_url"],
         subject=job.get("subject") or None,
-        notes=job.get("notes") or [],
-        questions=job.get("questions") or [],
-        teacher_persona=job.get("teacher_persona") or {"catchphrases": [], "tone": "öğretici, net"},
+        notes=notes,
+        questions=questions,
+        teacher_persona=persona,
         job_id=job["id"],
         job_status=job.get("status") or "running",
         job_error=job.get("error") or "",
@@ -418,7 +439,13 @@ def analyze_video(
     shared = jobs.find_running(video_id, payload.subject)
     if shared:
         reservation = credit_service.confirm(db, user_id, video_id, reservation)
-        return _deliver_shared_job(shared, reservation)
+        return _deliver_shared_job(
+            shared,
+            reservation,
+            user_id=user_id,
+            subject=payload.subject,
+            exam_target=exam_target,
+        )
 
     leader = claim_work(video_id, payload.subject)
     if not leader:
@@ -437,7 +464,13 @@ def analyze_video(
         shared = jobs.find_running(video_id, payload.subject)
         if shared:
             reservation = credit_service.confirm(db, user_id, video_id, reservation)
-            return _deliver_shared_job(shared, reservation)
+            return _deliver_shared_job(
+                shared,
+                reservation,
+                user_id=user_id,
+                subject=payload.subject,
+                exam_target=exam_target,
+            )
         leader = claim_work(video_id, payload.subject)
         if not leader:
             credit_service.refund(db, user_id, reservation)
@@ -544,12 +577,27 @@ def analyze_job_status(
         overlay = job.get("overlay") or {}
     else:
         overlay = credit_service.overlay_view(credit_service.snapshot(db, viewer))
+    notes = job.get("notes") or []
+    questions = job.get("questions") or []
+    if notes or questions:
+        from app.services.exams import exam_of
+
+        _persist_notebook(
+            user_id=viewer,
+            subject=job.get("subject"),
+            video_id=job["video_id"],
+            video_url=job["video_url"],
+            notes=notes,
+            questions=questions,
+            persona=job.get("teacher_persona"),
+            exam_target=exam_of(db, viewer),
+        )
     return AnalyzeResponse(
         video_id=job["video_id"],
         video_url=job["video_url"],
         subject=job["subject"] or None,
-        notes=job["notes"],
-        questions=job["questions"],
+        notes=notes,
+        questions=questions,
         teacher_persona=job["teacher_persona"],
         job_id=job["id"],
         job_status=job["status"],
@@ -576,11 +624,33 @@ def list_notebook(
         subject=subject,
         exam_target=exam_of(db, user_id),
     )
-    try:
-        return NotebookResponse.model_validate(data)
-    except Exception as extra:
-        logger.warning("Not defteri doğrulanamadı: %s", extra)
-        raise HTTPException(status_code=500, detail="Not defteri okunamadı.") from extra
+    from app.models.schemas import SavedNoteItem, SavedQuestionItem, NotebookSubjectCount
+
+    notes_out = []
+    for item in data.get("notes") or []:
+        try:
+            notes_out.append(SavedNoteItem.model_validate(item))
+        except Exception as exc:
+            logger.warning("Not satırı atlandı: %s", exc)
+    questions_out = []
+    for item in data.get("questions") or []:
+        try:
+            questions_out.append(SavedQuestionItem.model_validate(item))
+        except Exception as exc:
+            logger.warning("Soru satırı atlandı: %s", exc)
+    subjects_out = []
+    for item in data.get("subjects") or []:
+        try:
+            subjects_out.append(NotebookSubjectCount.model_validate(item))
+        except Exception:
+            continue
+    return NotebookResponse(
+        user_id=str(data.get("user_id") or user_id),
+        subject=data.get("subject"),
+        subjects=subjects_out,
+        notes=notes_out,
+        questions=questions_out,
+    )
 
 
 @app.post("/ads/unlock", response_model=AdUnlockResponse)
@@ -1529,17 +1599,19 @@ def _persist_notebook(
     exam_target: str | None = None,
     db: Session | None = None,
 ) -> None:
-    own = db is None
-    if own:
-        from app.database.session import SessionLocal
+    """Notları Notlarım'a yazar. İstek session'ına bağlı kalmaz (rollback ile silinmesin)."""
+    del db  # çağıran session ile karışmasın
+    from app.database.session import SessionLocal
 
-        db = SessionLocal()
+    if not notes and not questions:
+        return
+    session = SessionLocal()
     try:
         dumped = persona
         if hasattr(persona, "model_dump"):
             dumped = persona.model_dump()
         notebook_service.ingest(
-            db,
+            session,
             user_id=user_id,
             subject=subject,
             video_id=video_id,
@@ -1550,12 +1622,10 @@ def _persist_notebook(
             exam_target=exam_target,
         )
     except Exception as exc:
-        if own:
-            db.rollback()
+        session.rollback()
         logger.warning("Not defteri kaydı atlandı: %s", exc)
     finally:
-        if own:
-            db.close()
+        session.close()
 
 
 def _pack_notes(raw: object, video_id: str, start: int = 1) -> list[NoteItem]:

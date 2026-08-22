@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { analyzeVideo, getAnalyzeJob, type AnalyzeResponse } from "@/lib/api";
 import {
   fetchCaptionsForVideo,
@@ -81,6 +82,7 @@ function sleep(ms: number) {
 }
 
 export function AnalyzeProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const { apply, refresh } = useProfile();
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [url, setUrl] = useState("");
@@ -92,6 +94,15 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const job = useRef(0);
   const busyRef = useRef(false);
   const resumed = useRef(false);
+
+  const goNotebook = useCallback(
+    (data: AnalyzeResponse) => {
+      if ((data.notes?.length || 0) > 0 && !stillRunning(data)) {
+        router.push("/notlarim");
+      }
+    },
+    [router],
+  );
 
   const remember = useCallback(
     (data: AnalyzeResponse, videoUrl: string, topic: string) => {
@@ -133,7 +144,10 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
             return;
           }
           remember(next, videoUrl, topic);
-          if (!stillRunning(next)) return;
+          if (!stillRunning(next)) {
+            goNotebook(next);
+            return;
+          }
         } catch {
           const saved = readStored();
           if (saved?.result?.job_id === jobId) {
@@ -142,12 +156,13 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
               videoUrl,
               topic,
             );
+            goNotebook({ ...saved.result, job_status: "done" });
           }
           return;
         }
       }
     },
-    [remember, refresh],
+    [remember, refresh, goNotebook],
   );
 
   useEffect(() => {
@@ -217,6 +232,8 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         void refresh();
         if (stillRunning(data) && data.job_id) {
           await pollUntilDone(data.job_id, token, input.video_url, topic);
+        } else {
+          goNotebook(data);
         }
       } catch (err) {
         if (token !== job.current) return;
@@ -229,7 +246,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [pollUntilDone, refresh, remember],
+    [pollUntilDone, refresh, remember, goNotebook],
   );
 
   const value = useMemo(

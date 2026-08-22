@@ -117,11 +117,16 @@ export function NotesPanel() {
                     }
                   />
                 ))}
+              </div>
+            ) : null}
+
+            {tab === "notes" && result?.notes?.length ? (
+              <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <Link
                   href="/notlarim"
-                  className="block text-xs text-orange-700 dark:text-orange-300"
+                  className="inline-flex text-sm font-medium text-orange-700 dark:text-orange-300"
                 >
-                  Tüm notlar Notlarım’da birikir →
+                  Notlarım’a git →
                 </Link>
               </div>
             ) : null}
