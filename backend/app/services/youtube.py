@@ -1,3 +1,4 @@
+import html
 import json
 import logging
 import re
@@ -69,9 +70,11 @@ def fetch_transcript_lines(video_id: str) -> list[dict]:
 
     errors: list[str] = []
     fetchers = (
-        (_fetch_via_ytdlp, 28),
-        (_fetch_via_invidious, 10),
+        (_fetch_via_innertube, 18),
+        (_fetch_via_ytdlp, 20),
+        (_fetch_via_invidious, 12),
         (_fetch_transcript_lines_inner, 8),
+        (_fetch_via_gemini_youtube, 28),
     )
     for fetcher, limit in fetchers:
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -142,21 +145,24 @@ def _lines_from_json3(payload: dict) -> list[dict]:
     return lines
 
 
-def _download_caption(base_url: str) -> list[dict]:
+def _download_caption(base_url: str, headers: dict | None = None) -> list[dict]:
     url = base_url
     if "fmt=" not in url:
         url += ("&" if "?" in url else "?") + "fmt=json3"
     response = httpx.get(
         url,
-        headers={"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
+        headers=headers
+        or {"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
         timeout=18,
         follow_redirects=True,
     )
     response.raise_for_status()
-    data = response.json()
-    if not isinstance(data, dict):
-        raise ValueError("Altyazı biçimi okunamadı.")
-    return _lines_from_json3(data)
+    if not response.content:
+        raise ValueError("Altyazı boş geldi.")
+    lines = _lines_from_caption_bytes(response.content, "json3")
+    if lines:
+        return lines
+    raise ValueError("Altyazı biçimi okunamadı.")
 
 
 _VTT_STAMP = re.compile(
@@ -164,8 +170,13 @@ _VTT_STAMP = re.compile(
 )
 INVIDIOUS_HOSTS = (
     "https://inv.nadeko.net",
-    "https://invidious.privacyredirect.com",
-    "https://iv.datura.network",
+    "https://invidious.nerdvpn.de",
+    "https://invidious.f5.si",
+    "https://yt.chocolatemoo53.com",
+)
+_XML_CAPTION = re.compile(
+    r'<text[^>]*start="([^"]+)"[^>]*>(.*?)</text>',
+    re.IGNORECASE | re.DOTALL,
 )
 
 
@@ -206,43 +217,61 @@ def _lines_from_vtt(text: str) -> list[dict]:
     return lines
 
 
+def _lines_from_xml(raw: str) -> list[dict]:
+    lines: list[dict] = []
+    for match in _XML_CAPTION.finditer(raw or ""):
+        text = re.sub(r"<[^>]+>", "", html.unescape(match.group(2)))
+        text = text.replace("\n", " ").strip()
+        if not text:
+            continue
+        lines.append({"start": int(float(match.group(1))), "text": text})
+    return lines
+
+
 def _lines_from_caption_bytes(raw: bytes, ext: str) -> list[dict]:
     if not raw:
         return []
+    head = raw.lstrip()[:80]
     kind = (ext or "").lower()
-    if kind in {"json3", "json"}:
-        data = json.loads(raw)
+    if head.startswith(b"{") or kind in {"json3", "json", "srv3"}:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
         if isinstance(data, dict):
             return _lines_from_json3(data)
-        return []
+    if b"<transcript" in head or b"<text" in raw[:400] or kind in {"xml", "srv1", "srv2"}:
+        return _lines_from_xml(raw.decode("utf-8", "replace"))
     return _lines_from_vtt(raw.decode("utf-8", "replace"))
 
 
 def _pick_ytdlp_track(info: dict) -> dict | None:
     bags = (info.get("subtitles") or {}, info.get("automatic_captions") or {})
     preferred = ("tr", "tr-TR", "en", "en-orig", "en-US")
+    ranked: list[tuple[int, dict]] = []
     for bag in bags:
-        for lang in preferred:
-            tracks = bag.get(lang) or []
-            json3 = next((item for item in tracks if item.get("ext") == "json3" and item.get("url")), None)
-            if json3:
-                return json3
-            other = next(
-                (
-                    item
-                    for item in tracks
-                    if item.get("ext") in {"vtt", "srv3", "ttml"} and item.get("url")
-                ),
-                None,
-            )
-            if other:
-                return other
-    for bag in bags:
-        for tracks in bag.values():
-            json3 = next((item for item in tracks if item.get("ext") == "json3" and item.get("url")), None)
-            if json3:
-                return json3
-    return None
+        if not isinstance(bag, dict):
+            continue
+        for lang, tracks in bag.items():
+            code = str(lang or "").lower()
+            priority = 50
+            for index, pref in enumerate(preferred):
+                if code == pref.lower() or code.startswith("tr"):
+                    priority = index
+                    break
+            else:
+                if code.startswith("en"):
+                    priority = 10
+            for item in tracks or []:
+                if not item.get("url"):
+                    continue
+                ext = str(item.get("ext") or "")
+                bump = 0 if ext == "json3" else 1 if ext in {"vtt", "srv3", "srv1", "ttml"} else 2
+                ranked.append((priority * 10 + bump, item))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda row: row[0])
+    return ranked[0][1]
 
 
 def _fetch_via_ytdlp(video_id: str) -> list[dict]:
@@ -254,7 +283,12 @@ def _fetch_via_ytdlp(video_id: str) -> list[dict]:
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "tv", "web_safari"],
+                "skip": ["dash", "hls"],
+            }
+        },
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(watch, download=False)
@@ -332,37 +366,138 @@ def _fetch_via_invidious(video_id: str) -> list[dict]:
     raise ValueError(last)
 
 
-def _fetch_via_innertube(video_id: str) -> list[dict]:
-    payload = {
-        "context": {
-            "client": {
-                "clientName": "WEB",
-                "clientVersion": "2.20240815.00.00",
-                "hl": "tr",
-                "gl": "TR",
-            }
+_IOS_CLIENTS = (
+    {
+        "client": {
+            "clientName": "IOS",
+            "clientVersion": "20.10.4",
+            "deviceMake": "Apple",
+            "deviceModel": "iPhone16,2",
+            "osName": "iOS",
+            "osVersion": "17.5.1.21F90",
+            "hl": "tr",
+            "gl": "TR",
         },
-        "videoId": video_id,
-    }
+        "headers": {
+            "User-Agent": "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
+            "X-YouTube-Client-Name": "5",
+            "X-YouTube-Client-Version": "20.10.4",
+            "Content-Type": "application/json",
+        },
+    },
+    {
+        "client": {
+            "clientName": "IOS",
+            "clientVersion": "19.45.4",
+            "deviceMake": "Apple",
+            "deviceModel": "iPhone16,2",
+            "osName": "iOS",
+            "osVersion": "17.5.1.21F90",
+            "hl": "tr",
+            "gl": "TR",
+        },
+        "headers": {
+            "User-Agent": "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
+            "X-YouTube-Client-Name": "5",
+            "X-YouTube-Client-Version": "19.45.4",
+            "Content-Type": "application/json",
+        },
+    },
+)
+
+
+def _fetch_via_innertube(video_id: str) -> list[dict]:
+    last = "YouTube oynatıcı yanıtı alınamadı."
+    for spec in _IOS_CLIENTS:
+        try:
+            response = httpx.post(
+                PLAYER_URL,
+                json={
+                    "context": {"client": spec["client"]},
+                    "videoId": video_id,
+                    "contentCheckOk": True,
+                    "racyCheckOk": True,
+                },
+                headers=spec["headers"],
+                timeout=16,
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+            data = response.json()
+            tracks = (
+                data.get("captions", {})
+                .get("playerCaptionsTracklistRenderer", {})
+                .get("captionTracks")
+                or []
+            )
+            track = _pick_caption_track(tracks)
+            if not track or not track.get("baseUrl"):
+                last = f"{spec['client']['clientVersion']}: altyazı yok"
+                continue
+            lines = _download_caption(
+                str(track["baseUrl"]),
+                headers={
+                    "User-Agent": spec["headers"]["User-Agent"],
+                    "Accept-Language": "tr-TR,tr;q=0.9",
+                },
+            )
+            if lines:
+                return lines
+            last = f"{spec['client']['clientVersion']}: altyazı boş"
+        except Exception as exc:  # noqa: BLE001
+            last = str(exc)
+    raise ValueError(last)
+
+
+def _fetch_via_gemini_youtube(video_id: str) -> list[dict]:
+    from app.config import settings
+
+    key = (settings.gemini_api_key or "").strip()
+    if not key:
+        raise ValueError("Gemini anahtarı yok.")
+    model = (settings.gemini_model or "gemini-2.5-flash").strip()
+    if model.startswith("gemini-3"):
+        model = "gemini-2.5-flash"
+    prompt = (
+        "Bu YouTube ders videosunun konuşmasını Türkçe yazıya dök. "
+        "Her satır tam olarak [SANIYE] metin formatında olsun. "
+        "SANIYE tam sayı saniye olsun. Başka açıklama yazma."
+    )
     response = httpx.post(
-        PLAYER_URL,
-        json=payload,
-        headers={"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
-        timeout=18,
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        params={"key": key},
+        json={
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "file_data": {
+                                "file_uri": f"https://www.youtube.com/watch?v={video_id}"
+                            }
+                        },
+                        {"text": prompt},
+                    ]
+                }
+            ],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192},
+        },
+        timeout=26,
         follow_redirects=True,
     )
     response.raise_for_status()
     data = response.json()
-    tracks = (
-        data.get("captions", {})
-        .get("playerCaptionsTracklistRenderer", {})
-        .get("captionTracks")
-        or []
-    )
-    track = _pick_caption_track(tracks)
-    if not track or not track.get("baseUrl"):
-        raise ValueError("Bu video için altyazı bulunamadı.")
-    return _download_caption(str(track["baseUrl"]))
+    text = ""
+    for candidate in data.get("candidates") or []:
+        parts = ((candidate.get("content") or {}).get("parts")) or []
+        text += "".join(str(part.get("text") or "") for part in parts)
+    lines: list[dict] = []
+    for match in re.finditer(r"\[(\d+)\]\s*(.+)", text):
+        body = match.group(2).strip()
+        if body:
+            lines.append({"start": int(match.group(1)), "text": body})
+    if not lines:
+        raise ValueError("Gemini transkript üretemedi.")
+    return lines
 
 
 def _fetch_via_watch_html(video_id: str) -> list[dict]:
