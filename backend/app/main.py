@@ -446,7 +446,9 @@ def analyze_video(
         subject_meta["is_yks_fen_question"],
         rag_service.style_revision(db, exam_target),
     )
-    cached = cache.load(cache_key) or cache.find_cached(video_id, payload.subject)
+    cached = cache.load(cache_key) or cache.find_cached(
+        video_id, payload.subject, exam_target
+    )
     if cached:
         return _deliver_cached_analyze(
             cached=cached,
@@ -466,13 +468,14 @@ def analyze_video(
     if shared:
         status = shared.get("status") or "running"
         notes = shared.get("notes") or []
+        questions = shared.get("questions") or []
         if status == "error":
             credit_service.refund(db, user_id, reservation)
             raise HTTPException(
                 status_code=502,
                 detail=shared.get("error") or "Paylaşılan analiz başarısız.",
             )
-        if notes:
+        if notes or questions:
             reservation = credit_service.confirm(db, user_id, video_id, reservation)
         elif reservation.charged:
             jobs.track_follower(
@@ -491,7 +494,9 @@ def analyze_video(
     leader = claim_work(video_id, payload.subject)
     if not leader:
         wait_work(video_id, payload.subject)
-        cached = cache.load(cache_key) or cache.find_cached(video_id, payload.subject)
+        cached = cache.load(cache_key) or cache.find_cached(
+            video_id, payload.subject, exam_target
+        )
         if cached:
             return _deliver_cached_analyze(
                 cached=cached,
@@ -506,13 +511,14 @@ def analyze_video(
         if shared:
             status = shared.get("status") or "running"
             notes = shared.get("notes") or []
+            questions = shared.get("questions") or []
             if status == "error":
                 credit_service.refund(db, user_id, reservation)
                 raise HTTPException(
                     status_code=502,
                     detail=shared.get("error") or "Paylaşılan analiz başarısız.",
                 )
-            if notes:
+            if notes or questions:
                 reservation = credit_service.confirm(db, user_id, video_id, reservation)
             elif reservation.charged:
                 jobs.track_follower(
@@ -1792,7 +1798,7 @@ def _analyze_with_lines(
 
     notes = _pack_notes(llm_data.get("notes"), video_id)
     questions = _pack_questions(llm_data.get("questions"), video_id)
-    if notes:
+    if notes or questions:
         reservation = credit_service.confirm(db, user_id, video_id, reservation)
     else:
         reservation = credit_service.refund(db, user_id, reservation)
@@ -1801,7 +1807,7 @@ def _analyze_with_lines(
 
     remaining = (
         [piece for piece in remaining_slices if slice_promo_ratio(piece.get("block") or "") < 0.28]
-        if notes
+        if (notes or questions)
         else []
     )
     if not job_id:
@@ -1872,6 +1878,7 @@ def _analyze_with_lines(
         dump["analyze_span"] = "full"
         dump["llm_model"] = settings.active_model
         dump["notes_depth"] = 4
+        dump["exam_target"] = exam_target or ""
         for key in extra_keys:
             dump.pop(key, None)
         cache.save(cache_key, dump)
@@ -2025,6 +2032,17 @@ def _continue_analyze_job(
             exam_target=exam_target,
         )
     jobs.finish(job_id, "done")
+    for follower_id, kind in jobs.take_unsettled_followers(job_id):
+        try:
+            from app.database.session import SessionLocal
+
+            settle = SessionLocal()
+            try:
+                credit_service.confirm_charged(settle, follower_id, video_id, kind)
+            finally:
+                settle.close()
+        except Exception:
+            logger.exception("Takipçi confirm başarısız %s", follower_id)
     final = jobs.snapshot(job_id)
     if not final or not final.get("notes") or not final.get("questions"):
         return
@@ -2039,6 +2057,7 @@ def _continue_analyze_job(
         "analyze_span": "full",
         "llm_model": settings.active_model,
         "notes_depth": 4,
+        "exam_target": exam_target or "",
         "job_id": "",
         "job_status": "done",
         "chunks_done": final["chunks_total"],

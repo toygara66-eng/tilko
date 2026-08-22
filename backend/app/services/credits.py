@@ -137,11 +137,23 @@ def is_ad_tier(user: User) -> bool:
 def reset_daily_ads(db: Session, user: User) -> User:
     if user.created_at is None:
         user.created_at = utcnow()
+        db.commit()
+        db.refresh(user)
     today = today_istanbul()
-    if user.last_credit_reset_date != today:
-        user.daily_ad_rewarded_credits = AD_DAILY_LIMIT
-        user.last_credit_reset_date = today
-    db.commit()
+    result = db.execute(
+        update(User)
+        .where(User.user_id == user.user_id)
+        .where(
+            (User.last_credit_reset_date.is_(None))
+            | (User.last_credit_reset_date != today)
+        )
+        .values(
+            daily_ad_rewarded_credits=AD_DAILY_LIMIT,
+            last_credit_reset_date=today,
+        )
+    )
+    if result.rowcount:
+        db.commit()
     db.refresh(user)
     return user
 
@@ -353,13 +365,15 @@ def confirm_charged(
     if not charge_kind or charge_kind == "none":
         return
     if already_converted(db, user_id, video_id):
+        # Çift rezervasyon yarışı: conversion var, kredi iade et.
+        refund_charged(db, user_id, charge_kind)
         return
     db.add(AiConversion(user_id=user_id, video_id=video_id))
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-
+        refund_charged(db, user_id, charge_kind)
 
 
 def snapshot_reservation(

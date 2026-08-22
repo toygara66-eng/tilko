@@ -19,8 +19,8 @@ def _cache_dir() -> Path:
     return Path(__file__).resolve().parents[2] / ".cache"
 
 
-def _lookup_key(video_id: str, subject: str | None) -> str:
-    return f"{video_id}|{(subject or '').strip()}"
+def _lookup_key(video_id: str, subject: str | None, exam_target: str | None = None) -> str:
+    return f"{video_id}|{(subject or '').strip()}|{(exam_target or '').strip()}"
 
 
 def build_key(
@@ -56,13 +56,19 @@ def load(key: str) -> dict | None:
     video_id = str(data.get("video_id") or "")
     if video_id:
         with _index_lock:
-            _index[_lookup_key(video_id, data.get("subject"))] = key
+            _index[
+                _lookup_key(video_id, data.get("subject"), data.get("exam_target"))
+            ] = key
     return data
 
 
-def find_cached(video_id: str, subject: str | None) -> dict | None:
-    """Soru sayısı değişse bile aynı video+ders kaydını kullan."""
-    wanted = _lookup_key(video_id, subject)
+def find_cached(
+    video_id: str,
+    subject: str | None,
+    exam_target: str | None = None,
+) -> dict | None:
+    """Soru sayısı değişse bile aynı video+ders+sınav kaydını kullan."""
+    wanted = _lookup_key(video_id, subject, exam_target)
     with _index_lock:
         key = _index.get(wanted)
     if key:
@@ -73,12 +79,14 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
             and hit.get("questions")
             and str(hit.get("llm_model") or "") == str(settings.active_model or "")
             and int(hit.get("notes_depth") or 0) >= 4
+            and str(hit.get("exam_target") or "").strip() == (exam_target or "").strip()
         ):
             return hit
     cache_dir = _cache_dir()
     if not cache_dir.exists():
         return None
     wanted_subject = (subject or "").strip()
+    wanted_exam = (exam_target or "").strip()
     for path in cache_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -87,6 +95,8 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
         if data.get("video_id") != video_id:
             continue
         if (str(data.get("subject") or "").strip()) != wanted_subject:
+            continue
+        if (str(data.get("exam_target") or "").strip()) != wanted_exam:
             continue
         if data.get("analyze_span") != "full":
             continue
@@ -111,6 +121,10 @@ def save(key: str, payload: dict) -> None:
         video_id = str(payload.get("video_id") or "")
         if video_id:
             with _index_lock:
-                _index[_lookup_key(video_id, payload.get("subject"))] = key
+                _index[
+                    _lookup_key(
+                        video_id, payload.get("subject"), payload.get("exam_target")
+                    )
+                ] = key
     except OSError as exc:
         logger.warning("Önbellek yazılamadı: %s", exc)

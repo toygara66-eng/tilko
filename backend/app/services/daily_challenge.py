@@ -556,7 +556,11 @@ def ensure_today(db: Session, exam_target: str | None = None, user_id: str | Non
         return row
     except IntegrityError:
         db.rollback()
-        legacy = db.scalars(select(DailyChallenge).where(DailyChallenge.date == day)).first()
+        legacy = db.scalars(
+            select(DailyChallenge)
+            .where(DailyChallenge.date == day)
+            .where(DailyChallenge.exam_target == target)
+        ).first()
         if legacy:
             return legacy
         raise
