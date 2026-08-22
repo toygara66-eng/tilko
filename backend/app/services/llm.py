@@ -35,7 +35,7 @@ RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
-ANALYZE_FAST_MODEL = "google/gemini-3.6-flash"
+ANALYZE_FAST_MODEL = "openai/gpt-oss-20b"
 _groq_gate = threading.Lock()
 _groq_next_ok = 0.0
 _provider_lock = threading.Lock()
@@ -118,7 +118,9 @@ def _client() -> tuple[OpenAI, str]:
 
     if settings.llm_provider == "openrouter":
         if _skip_openrouter:
-            pair = _gemini_client(timeout=LLM_HTTP_TIMEOUT) or _groq_fast_client()
+            pair = _groq_fast_client() or (
+                None if _skip_gemini else _gemini_client(timeout=LLM_HTTP_TIMEOUT)
+            )
             if pair:
                 return pair
         if not settings.openrouter_api_key:
@@ -377,40 +379,38 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
     )
 
 
+def _openrouter_fast_model() -> str:
+    model = (settings.openrouter_model or "").strip() or ANALYZE_FAST_MODEL
+    if _openrouter_free_only and not model.endswith(":free"):
+        return "openai/gpt-oss-20b:free"
+    if "gpt-oss-120b" in model:
+        return model.replace("gpt-oss-120b", "gpt-oss-20b")
+    return model
+
+
 def _activate_credit_fallback() -> bool:
-    """Kota bitince Gemini'yi atla, Groq veya OpenRouter :free dene."""
+    """Kota bitince OpenRouter :free, sonra Groq, en sonda Gemini dene."""
     global _skip_openrouter, _openrouter_free_only, _skip_gemini
-    if not _skip_gemini and _groq_fast_client():
-        _skip_gemini = True
-        logger.warning("Gemini kotası doldu; Groq yedeğine geçiliyor.")
-        return True
-    if not _skip_openrouter and _gemini_client() and not _skip_gemini:
-        _skip_openrouter = True
-        logger.warning("OpenRouter kredisi yok; Gemini yedeğine geçiliyor.")
-        return True
     if settings.openrouter_api_key and not _openrouter_free_only:
         _openrouter_free_only = True
         _skip_gemini = True
         logger.warning("Ücretli model reddedildi; OpenRouter ücretsiz model deneniyor.")
         return True
+    if _groq_fast_client():
+        _skip_gemini = True
+        _skip_openrouter = True
+        logger.warning("OpenRouter kotası yok; Groq yedeğine geçiliyor.")
+        return True
+    if _gemini_client() and not _skip_gemini:
+        _skip_openrouter = True
+        logger.warning("OpenRouter/Groq yok; Gemini yedeğine geçiliyor.")
+        return True
     return False
 
 
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
-    """Video analizi düşünme modeli kullanmaz; flash saniyeler içinde biter."""
-    if not _skip_gemini:
-        pair = _gemini_client()
-        if pair:
-            return pair
-    pair = _groq_fast_client()
-    if pair:
-        return pair
+    """Video analizi LLM_PROVIDER yolunu izler; düşünme modelini kullanmaz."""
     if settings.openrouter_api_key and not _skip_openrouter:
-        model = (
-            "openai/gpt-oss-20b:free"
-            if _openrouter_free_only
-            else ANALYZE_FAST_MODEL
-        )
         return (
             _openai_client(
                 api_key=settings.openrouter_api_key,
@@ -421,8 +421,15 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
                     "X-Title": _ascii_header("TILKO"),
                 },
             ),
-            model,
+            _openrouter_fast_model(),
         )
+    pair = _groq_fast_client()
+    if pair:
+        return pair
+    if not _skip_gemini:
+        pair = _gemini_client()
+        if pair:
+            return pair
     if settings.openai_api_key:
         return (
             _openai_client(

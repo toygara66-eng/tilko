@@ -800,6 +800,29 @@ def _fetch_via_llm_youtube(
     errors: list[str] = []
     openrouter_key = (settings.openrouter_api_key or "").strip()
     gemini_key = (settings.gemini_api_key or "").strip()
+    if openrouter_key:
+        models = []
+        for name in (
+            "google/gemini-3.6-flash",
+            "google/gemini-2.5-flash-lite",
+            "google/gemini-2.5-flash",
+        ):
+            if name not in models:
+                models.append(name)
+        for model in models:
+            try:
+                text = _openrouter_text_from_youtube(
+                    video_id, openrouter_key, model, prompt
+                )
+                lines = _lines_from_model_transcript(text)
+                if lines:
+                    return lines
+                errors.append(f"{model}: satır yok")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(str(exc))
+                if "402" in str(exc) or "balance" in str(exc).lower():
+                    break
+
     if gemini_key:
         models = []
         preferred = (settings.gemini_model or "").strip()
@@ -820,33 +843,14 @@ def _fetch_via_llm_youtube(
                 errors.append(f"{model}: satır yok")
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
-
-    if openrouter_key and not gemini_key:
-        models = []
-        for name in (
-            "google/gemini-3.6-flash",
-            "google/gemini-2.5-flash",
-            (settings.openrouter_model or "").strip(),
-        ):
-            if name and name.startswith("google/") and name not in models:
-                models.append(name)
-        for model in models:
-            try:
-                text = _openrouter_text_from_youtube(
-                    video_id, openrouter_key, model, prompt
-                )
-                lines = _lines_from_model_transcript(text)
-                if lines:
-                    return lines
-                errors.append(f"{model}: satır yok")
-            except Exception as exc:  # noqa: BLE001
-                errors.append(str(exc))
+                if "429" in str(exc) or "quota" in str(exc).lower():
+                    continue
 
     joined = " | ".join(errors)
-    if not gemini_key and ("402" in joined or "balance" in joined.lower()):
+    if "402" in joined or "balance" in joined.lower():
         raise ValueError(
-            "YouTube yazıya dökme için Render ortamına GEMINI_API_KEY eklenmeli "
-            "(Google AI Studio). OpenRouter video kredisi bu istek için yetmiyor."
+            "OpenRouter video için kredi istiyor. openrouter.ai/settings/credits "
+            "üzerinden bakiye ekle; Gemini kotası da doluysa yarın tekrar dene."
         )
     raise ValueError(" | ".join(errors) or "LLM ile altyazı alınamadı.")
 

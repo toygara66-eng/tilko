@@ -15,10 +15,12 @@ services:
       - key: LLM_PROVIDER
         value: openrouter
       - key: LLM_FALLBACK
-        value: gemini
+        value: groq
       - key: OPENROUTER_MODEL
         value: openai/gpt-oss-120b
       - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
