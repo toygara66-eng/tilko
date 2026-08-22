@@ -103,19 +103,13 @@ def _run_with_timeout(fn, timeout: float, *args, **kwargs):
 def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker.
 
-    Önce YouTube altyazı izleri (saniyeler), olmazsa Gemini ilk 6 dakikayı okur.
+    Önce YouTube altyazı izleri (saniyeler), olmazsa model videoyu okur.
     """
-    from app.config import settings
-
     errors: list[str] = []
     scrapers = (
-        ()
-        if settings.is_production
-        else (
-            (_fetch_via_innertube, 7),
-            (_fetch_transcript_lines_inner, 7),
-            (_fetch_via_invidious, 8),
-        )
+        (_fetch_via_innertube, 8),
+        (_fetch_transcript_lines_inner, 8),
+        (_fetch_via_invidious, 12),
     )
     for fetcher, limit in scrapers:
         try:
@@ -147,27 +141,6 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
         return lines
     if lines:
         errors.append(f"llm: {len(lines)} satır")
-
-    quota_hit = any("429" in item or "quota" in item.lower() for item in errors)
-    if quota_hit or settings.is_production:
-        for fetcher, limit in (
-            (_fetch_via_innertube, 7),
-            (_fetch_transcript_lines_inner, 7),
-            (_fetch_via_invidious, 8),
-        ):
-            try:
-                lines = _run_with_timeout(fetcher, limit, video_id)
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{fetcher.__name__}: {exc}")
-                continue
-            if not lines or len(lines) < 3:
-                errors.append(f"{fetcher.__name__}: boş")
-                continue
-            mismatch = transcript_off_subject(lines, subject)
-            if mismatch:
-                raise ValueError(mismatch)
-            logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
-            return lines
 
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
     last = errors[-1] if errors else ""

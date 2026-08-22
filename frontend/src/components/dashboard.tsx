@@ -34,6 +34,7 @@ export function Dashboard() {
   const [fenBranch, setFenBranch] = useState("");
   const [count, setCount] = useState(10);
   const [adOpen, setAdOpen] = useState(false);
+  const [transcriptText, setTranscriptText] = useState("");
   const adTier = profile.isAdTier && !profile.isPremium;
   const outOfTrialCredits =
     !profile.isPremium && profile.isInTrial && profile.aiCreditsLeft <= 0;
@@ -65,6 +66,7 @@ export function Dashboard() {
       ad_watched: adWatched,
       subject_type: subjectType,
       is_yks_fen_question: isYksFen,
+      transcript_text: transcriptText,
     });
   }
 
@@ -134,6 +136,18 @@ export function Dashboard() {
             className="h-16 text-base md:text-lg"
             required
           />
+          <details className="rounded-xl border border-zinc-200 bg-white/40 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <summary className="cursor-pointer text-sm text-zinc-600 dark:text-zinc-400">
+              Altyazı gelmezse buraya yapıştır (YouTube → üç nokta → Transkripti göster)
+            </summary>
+            <textarea
+              value={transcriptText}
+              onChange={(e) => setTranscriptText(e.target.value)}
+              rows={6}
+              placeholder="0:00&#10;Dersin ilk cümlesi...&#10;0:15&#10;Devamı..."
+              className="mt-2 w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 dark:border-zinc-700 dark:bg-zinc-950"
+            />
+          </details>
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
               Ders
