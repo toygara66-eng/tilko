@@ -14,6 +14,11 @@ from openai import OpenAI
 from app.config import settings
 from app.services import capture
 from app.services.token_usage import log_openrouter_usage, usage_task
+from app.services.scale import (
+    ServiceBusyError,
+    acquire_llm_slot,
+    release_llm_slot,
+)
 from app.prompts.kpss import (
     COACH_SYSTEM_PROMPT,
     NOTES_SYSTEM_PROMPT,
@@ -724,6 +729,14 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
 
 @log_openrouter_usage
 def _openai_create(messages: list[dict], temperature: float, json_mode: bool):
+    acquire_llm_slot()
+    try:
+        return _openai_create_inner(messages, temperature, json_mode)
+    finally:
+        release_llm_slot()
+
+
+def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bool):
     task = usage_task.get() or ""
     fast = task in ANALYZE_TASKS
     pair = _fast_analyze_client() if fast else None
@@ -849,6 +862,8 @@ def _chat(
                     answer = _chat_openai_compatible(system_prompt, user_prompt, temperature)
                 capture.record(task, system_prompt, user_prompt, answer)
                 return answer
+            except ServiceBusyError:
+                raise
             except FatalLLMError:
                 raise
             except Exception as exc:

@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _JOBS: dict[str, dict[str, Any]] = {}
+MAX_RUNNING_JOBS = 16
 
 
 def create_job(
@@ -40,6 +41,34 @@ def create_job(
             "overlay": overlay,
         }
     return job_id
+
+
+def running_count() -> int:
+    with _lock:
+        return sum(1 for job in _JOBS.values() if job.get("status") == "running")
+
+
+def find_running(video_id: str, subject: str | None) -> dict[str, Any] | None:
+    wanted = (subject or "").strip()
+    with _lock:
+        for job in _JOBS.values():
+            if job.get("status") != "running":
+                continue
+            if job.get("video_id") != video_id:
+                continue
+            if (job.get("subject") or "").strip() != wanted:
+                continue
+            return dict(job)
+    return None
+
+
+def ensure_capacity() -> None:
+    from app.services.scale import ServiceBusyError
+
+    if running_count() >= MAX_RUNNING_JOBS:
+        raise ServiceBusyError(
+            "Sunucu meşgul. Aynı videoyu izleyenler sıraya alındı; 15 saniye sonra dene."
+        )
 
 
 def snapshot(job_id: str) -> dict[str, Any] | None:

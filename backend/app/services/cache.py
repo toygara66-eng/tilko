@@ -1,13 +1,26 @@
 import hashlib
 import json
 import logging
+import threading
 from pathlib import Path
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache"
+_index_lock = threading.Lock()
+_index: dict[str, str] = {}
+
+
+def _cache_dir() -> Path:
+    raw = (settings.database_path or "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve().parent / "analyze-cache"
+    return Path(__file__).resolve().parents[2] / ".cache"
+
+
+def _lookup_key(video_id: str, subject: str | None) -> str:
+    return f"{video_id}|{(subject or '').strip()}"
 
 
 def build_key(
@@ -28,7 +41,7 @@ def build_key(
 
 
 def _path(key: str) -> Path:
-    return CACHE_DIR / f"{key}.json"
+    return _cache_dir() / f"{key}.json"
 
 
 def load(key: str) -> dict | None:
@@ -36,18 +49,31 @@ def load(key: str) -> dict | None:
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Önbellek okunamadı (%s): %s", path.name, exc)
         return None
+    video_id = str(data.get("video_id") or "")
+    if video_id:
+        with _index_lock:
+            _index[_lookup_key(video_id, data.get("subject"))] = key
+    return data
 
 
 def find_cached(video_id: str, subject: str | None) -> dict | None:
     """Soru sayısı değişse bile aynı video+ders kaydını kullan."""
-    if not CACHE_DIR.exists():
+    wanted = _lookup_key(video_id, subject)
+    with _index_lock:
+        key = _index.get(wanted)
+    if key:
+        hit = load(key)
+        if hit and hit.get("notes") and hit.get("questions"):
+            return hit
+    cache_dir = _cache_dir()
+    if not cache_dir.exists():
         return None
     wanted_subject = (subject or "").strip()
-    for path in CACHE_DIR.glob("*.json"):
+    for path in cache_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -59,15 +85,22 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
         if data.get("analyze_span") != "full":
             continue
         if data.get("notes") and data.get("questions"):
+            with _index_lock:
+                _index[wanted] = path.stem
             return data
     return None
 
 
 def save(key: str, payload: dict) -> None:
     try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_dir = _cache_dir()
+        cache_dir.mkdir(parents=True, exist_ok=True)
         _path(key).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        video_id = str(payload.get("video_id") or "")
+        if video_id:
+            with _index_lock:
+                _index[_lookup_key(video_id, payload.get("subject"))] = key
     except OSError as exc:
         logger.warning("Önbellek yazılamadı: %s", exc)

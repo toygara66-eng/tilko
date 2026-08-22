@@ -113,6 +113,12 @@ from app.services.credits import (
     VideoTooLongError,
 )
 from app.services.llm import QuotaExhaustedError, analyze_slice
+from app.services.scale import (
+    ServiceBusyError,
+    claim_work,
+    release_work,
+    wait_work,
+)
 from app.security.auth import actor, jwt_guard, login_user, play_webhook_ok, register_user
 from app.security.rate_limit import limiter
 from app.services.youtube import (
@@ -235,6 +241,67 @@ def auth_login(
     return AuthResponse.model_validate(data)
 
 
+def _busy_http(exc: BaseException) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail=str(exc) or "Sunucu meşgul. 15 saniye sonra tekrar dene.",
+        headers={"Retry-After": "15"},
+    )
+
+
+def _deliver_cached_analyze(
+    *,
+    cached: dict,
+    db: Session,
+    user_id: str,
+    video_id: str,
+    subject: str | None,
+    reservation,
+    exam_target: str | None,
+) -> AnalyzeResponse:
+    reservation = credit_service.confirm(db, user_id, video_id, reservation)
+    extra = {
+        "cached": True,
+        "job_id": "",
+        "job_status": "done",
+        "chunks_done": 1,
+        "chunks_total": 1,
+        **credit_service.overlay(reservation),
+    }
+    response = AnalyzeResponse.model_validate({**cached, **extra})
+    _persist_notebook(
+        user_id=user_id,
+        subject=subject,
+        video_id=video_id,
+        video_url=response.video_url,
+        notes=response.notes,
+        questions=response.questions,
+        persona=response.teacher_persona,
+        exam_target=exam_target,
+        db=db,
+    )
+    return response
+
+
+def _deliver_shared_job(job: dict, reservation) -> AnalyzeResponse:
+    overlay = credit_service.overlay(reservation)
+    return AnalyzeResponse(
+        video_id=job["video_id"],
+        video_url=job["video_url"],
+        subject=job.get("subject") or None,
+        notes=job.get("notes") or [],
+        questions=job.get("questions") or [],
+        teacher_persona=job.get("teacher_persona") or {"catchphrases": [], "tone": "öğretici, net"},
+        job_id=job["id"],
+        job_status=job.get("status") or "running",
+        job_error=job.get("error") or "",
+        chunks_done=int(job.get("chunks_done") or 0),
+        chunks_total=int(job.get("chunks_total") or 1),
+        cached=False,
+        **overlay,
+    )
+
+
 @app.post("/analyze", response_model=AnalyzeResponse)
 @app.post("/convert-video", response_model=AnalyzeResponse)
 @limiter.limit("8/minute")
@@ -322,74 +389,92 @@ def analyze_video(
     )
     cached = cache.load(cache_key) or cache.find_cached(video_id, payload.subject)
     if cached:
-        reservation = credit_service.confirm(db, user_id, video_id, reservation)
-        extra = {
-            "cached": True,
-            "job_id": "",
-            "job_status": "done",
-            "chunks_done": 1,
-            "chunks_total": 1,
-            **credit_service.overlay(reservation),
-        }
-        response = AnalyzeResponse.model_validate({**cached, **extra})
-        _persist_notebook(
-            user_id=user_id,
-            subject=payload.subject,
-            video_id=video_id,
-            video_url=response.video_url,
-            notes=response.notes,
-            questions=response.questions,
-            persona=response.teacher_persona,
-            exam_target=exam_target,
+        return _deliver_cached_analyze(
+            cached=cached,
             db=db,
+            user_id=user_id,
+            video_id=video_id,
+            subject=payload.subject,
+            reservation=reservation,
+            exam_target=exam_target,
         )
-        return response
 
     canonical_url = build_watch_url(video_id)
     overlay = credit_service.overlay(reservation)
-    if lines is None:
-        from app.services import analyze_jobs as jobs
+    from app.services import analyze_jobs as jobs
 
-        job_id = jobs.create_job(
-            user_id=user_id,
-            video_id=video_id,
-            video_url=canonical_url,
-            subject=payload.subject,
-            chunks_total=1,
-            overlay=overlay,
-        )
-        threading.Thread(
-            target=_fetch_then_analyze_job,
-            args=(
-                job_id,
-                user_id,
-                video_id,
-                canonical_url,
-                payload.subject,
-                payload.question_count,
-                exam_target,
-                subject_meta,
-                cache_key,
-                extra_keys,
-                reservation,
-            ),
-            daemon=True,
-            name=f"analyze-{job_id}",
-        ).start()
-        return AnalyzeResponse(
-            video_id=video_id,
-            video_url=canonical_url,
-            subject=payload.subject,
-            notes=[],
-            questions=[],
-            job_id=job_id,
-            job_status="running",
-            chunks_done=0,
-            chunks_total=1,
-            **overlay,
-        )
+    shared = jobs.find_running(video_id, payload.subject)
+    if shared:
+        reservation = credit_service.confirm(db, user_id, video_id, reservation)
+        return _deliver_shared_job(shared, reservation)
+
+    leader = claim_work(video_id, payload.subject)
+    if not leader:
+        wait_work(video_id, payload.subject)
+        cached = cache.load(cache_key) or cache.find_cached(video_id, payload.subject)
+        if cached:
+            return _deliver_cached_analyze(
+                cached=cached,
+                db=db,
+                user_id=user_id,
+                video_id=video_id,
+                subject=payload.subject,
+                reservation=reservation,
+                exam_target=exam_target,
+            )
+        shared = jobs.find_running(video_id, payload.subject)
+        if shared:
+            reservation = credit_service.confirm(db, user_id, video_id, reservation)
+            return _deliver_shared_job(shared, reservation)
+        leader = claim_work(video_id, payload.subject)
+        if not leader:
+            credit_service.refund(db, user_id, reservation)
+            raise _busy_http(
+                ServiceBusyError("Aynı video çözülüyor. 15 saniye sonra tekrar dene.")
+            )
 
     try:
+        jobs.ensure_capacity()
+        if lines is None:
+            job_id = jobs.create_job(
+                user_id=user_id,
+                video_id=video_id,
+                video_url=canonical_url,
+                subject=payload.subject,
+                chunks_total=1,
+                overlay=overlay,
+            )
+            threading.Thread(
+                target=_fetch_then_analyze_job,
+                args=(
+                    job_id,
+                    user_id,
+                    video_id,
+                    canonical_url,
+                    payload.subject,
+                    payload.question_count,
+                    exam_target,
+                    subject_meta,
+                    cache_key,
+                    extra_keys,
+                    reservation,
+                ),
+                daemon=True,
+                name=f"analyze-{job_id}",
+            ).start()
+            return AnalyzeResponse(
+                video_id=video_id,
+                video_url=canonical_url,
+                subject=payload.subject,
+                notes=[],
+                questions=[],
+                job_id=job_id,
+                job_status="running",
+                chunks_done=0,
+                chunks_total=1,
+                **overlay,
+            )
+
         return _analyze_with_lines(
             lines=lines,
             user_id=user_id,
@@ -404,6 +489,9 @@ def analyze_video(
             reservation=reservation,
             db=db,
         )
+    except ServiceBusyError as exc:
+        credit_service.refund(db, user_id, reservation)
+        raise _busy_http(exc) from exc
     except ValueError as exc:
         credit_service.refund(db, user_id, reservation)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -419,18 +507,28 @@ def analyze_video(
             status_code=502,
             detail=f"Altyazı veya LLM adımı başarısız: {exc}",
         ) from exc
+    finally:
+        if leader:
+            release_work(video_id, payload.subject)
 
 
 @app.get("/analyze/jobs/{job_id}", response_model=AnalyzeResponse)
 @limiter.limit("40/minute")
-def analyze_job_status(request: Request, job_id: str) -> AnalyzeResponse:
+def analyze_job_status(
+    request: Request,
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> AnalyzeResponse:
     from app.services import analyze_jobs as jobs
 
     job = jobs.snapshot(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Analiz işi bulunamadı.")
-    if job.get("user_id") != actor(request):
-        raise HTTPException(status_code=403, detail="Bu analiz sana ait değil.")
+    viewer = actor(request)
+    if job.get("user_id") == viewer:
+        overlay = job.get("overlay") or {}
+    else:
+        overlay = credit_service.overlay_view(credit_service.snapshot(db, viewer))
     return AnalyzeResponse(
         video_id=job["video_id"],
         video_url=job["video_url"],
@@ -443,7 +541,7 @@ def analyze_job_status(request: Request, job_id: str) -> AnalyzeResponse:
         job_error=job.get("error") or "",
         chunks_done=job["chunks_done"],
         chunks_total=job["chunks_total"],
-        **(job.get("overlay") or {}),
+        **overlay,
     )
 
 

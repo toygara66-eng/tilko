@@ -333,6 +333,19 @@ def snapshot_reservation(
     )
 
 
+def overlay_view(view: dict) -> dict:
+    return {
+        "ai_credits_left": int(view.get("ai_credits_left") or 0),
+        "ai_credit_limit": int(view.get("ai_credit_limit") or 7),
+        "is_premium": bool(view.get("is_premium")),
+        "is_in_trial_period": bool(view.get("is_in_trial_period")),
+        "is_ad_tier": bool(view.get("is_ad_tier")),
+        "daily_ad_credits": int(view.get("daily_ad_credits") or 0),
+        "daily_ad_limit": int(view.get("daily_ad_limit") or 1),
+        "trial_days_left": int(view.get("trial_days_left") or 0),
+    }
+
+
 def overlay(reservation: CreditReservation) -> dict:
     return {
         "ai_credits_left": reservation.credits_left,
