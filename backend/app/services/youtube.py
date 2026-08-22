@@ -142,36 +142,22 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
     if lines and len(lines) >= 3:
         mismatch = transcript_off_subject(lines, subject)
         if mismatch:
-            try:
-                retry = _run_with_timeout(
-                    _fetch_via_llm_youtube,
-                    90,
-                    video_id,
-                    subject=subject,
-                    strict=True,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Sıkı yazıya dökme başarısız: %s", exc)
-                retry = []
-            if retry and len(retry) >= 3 and not transcript_off_subject(retry, subject):
-                return retry
             raise ValueError(mismatch)
         logger.info("Altyazı LLM ile geldi (%s satır)", len(lines))
         return lines
+    if lines:
+        errors.append(f"llm: {len(lines)} satır")
 
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
-    hint = ""
-    for item in reversed(errors):
-        low = item.lower()
-        if "gemini_api_key" in low or "402" in item or "balance" in low:
-            hint = item.split("llm: ", 1)[-1]
-            break
-        if "timeout" in low:
-            hint = "Video yazıya dökülürken süre doldu. Bir kez daha dene."
-            break
+    last = errors[-1] if errors else ""
+    low = last.lower()
+    detail = last.split("llm: ", 1)[-1].strip()[:220]
+    if "timed out" in low or "timeout" in low:
+        raise ValueError("Video yazıya dökülürken süre doldu. Bir kez daha dene.")
+    if detail:
+        raise ValueError(f"YouTube altyazısı alınamadı. {detail}")
     raise ValueError(
-        hint
-        or "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
+        "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
     )
 
 
@@ -579,14 +565,12 @@ def _transcribe_prompt(subject: str | None = None, *, strict: bool = False) -> s
         else ""
     )
     return (
-        f"Bu YouTube videosu bir {konu} ders kaydı. Konuşmayı Türkçe yazıya dök. "
-        "Videoyu gerçekten izle. İzleyemiyorsan ilk satıra yalnızca VIDEO_OKUNAMADI yaz. "
+        f"Bu YouTube videosu bir {konu} ders kaydı. Sesli konuşmayı Türkçe yazıya dök. "
         f"{extra}"
-        "Kod dersi, programlama veya yazılım uydurma. "
-        "Yalnızca videonun ilk 6 dakikasını cümle cümle yaz; en fazla 80 satır. "
+        "Yalnızca videonun ilk 6 dakikasındaki cümleleri yaz; en fazla 80 satır. "
         "Her satır tam olarak [SANIYE] cümle formatında olsun. "
         "SANIYE tam sayı saniye olsun (dakika:saniye yazma). "
-        "Yalnızca videoda duyulan cümleleri yaz. Giriş, özet veya markdown yazma."
+        "Giriş, özet, markdown veya kod örneği yazma."
     )
 
 
@@ -647,24 +631,25 @@ def _gemini_text_from_youtube(
 ) -> str:
     watch = f"https://www.youtube.com/watch?v={video_id}"
     headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    clip = {
+        "file_data": {"file_uri": watch},
+        "video_metadata": {
+            "start_offset": "0s",
+            "end_offset": "360s",
+            "fps": 0.5,
+        },
+    }
+    clip_camel = {
+        "fileData": {"fileUri": watch},
+        "videoMetadata": {
+            "startOffset": "0s",
+            "endOffset": "360s",
+            "fps": 0.5,
+        },
+    }
     payloads = (
         {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "file_data": {"file_uri": watch},
-                            "video_metadata": {
-                                "start_offset": "0s",
-                                "end_offset": "360s",
-                                "fps": 0.5,
-                            },
-                        },
-                    ],
-                }
-            ],
+            "contents": [{"role": "user", "parts": [{"text": prompt}, clip]}],
             "generationConfig": {
                 "temperature": 0.1,
                 "maxOutputTokens": 2048,
@@ -672,15 +657,7 @@ def _gemini_text_from_youtube(
             },
         },
         {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": prompt},
-                        {"file_data": {"file_uri": watch}},
-                    ],
-                }
-            ],
+            "contents": [{"role": "user", "parts": [{"text": prompt}, clip_camel]}],
             "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048},
         },
     )
@@ -715,7 +692,8 @@ def _gemini_text_from_youtube(
             last = f"{model}: boş yanıt"
             continue
         if _text_says_unwatched(text):
-            raise ValueError(f"{model}: video okunamadı")
+            last = f"{model}: video okunamadı"
+            continue
         return text
     raise ValueError(last or f"{model}: boş yanıt")
 
