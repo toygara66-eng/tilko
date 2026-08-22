@@ -269,23 +269,13 @@ def analyze_video(
                 status_code=403,
                 detail=str(AdRequiredError(title=gamification.address_for(db, user_id))),
             )
-        try:
-            if lines is None:
-                lines = fetch_transcript_lines(video_id)
-            if not lines:
-                raise ValueError("Bu video için altyazı bulunamadı.")
-            credit_service.enforce_duration(
-                user, transcript_duration_seconds(lines), db
-            )
-        except VideoTooLongError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Altyazı veya LLM adımı başarısız: {exc}",
-            ) from exc
+        if lines:
+            try:
+                credit_service.enforce_duration(
+                    user, transcript_duration_seconds(lines), db
+                )
+            except VideoTooLongError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         reservation = credit_service.reserve(
@@ -354,37 +344,65 @@ def analyze_video(
         )
         return response
 
-    try:
-        if lines is None:
-            lines = fetch_transcript_lines(video_id)
-        if not lines:
-            raise ValueError("Bu video için altyazı bulunamadı.")
-        slices = slice_transcript(lines, SLICE_SECONDS)
-        if not slices:
-            raise ValueError("Bu video için altyazı bulunamadı.")
-        first = slices[0]
-        llm_data = analyze_slice(
-            first["block"],
-            payload.subject,
-            min(4, payload.question_count),
-            exam_target,
-            subject_meta["subject_type"],
-            subject_meta["is_yks_fen_question"],
-            "",
-            window_label=first["label"],
-            note_count=5,
+    canonical_url = build_watch_url(video_id)
+    overlay = credit_service.overlay(reservation)
+    if lines is None:
+        from app.services import analyze_jobs as jobs
+
+        job_id = jobs.create_job(
+            user_id=user_id,
+            video_id=video_id,
+            video_url=canonical_url,
+            subject=payload.subject,
+            chunks_total=1,
+            overlay=overlay,
         )
-        try:
-            rag_service.ingest_video_signals(
-                db,
-                user_id=user_id,
-                video_id=video_id,
-                lines=lines,
-                subject=payload.subject,
-                exam_target=exam_target,
-            )
-        except Exception:
-            db.rollback()
+        threading.Thread(
+            target=_fetch_then_analyze_job,
+            args=(
+                job_id,
+                user_id,
+                video_id,
+                canonical_url,
+                payload.subject,
+                payload.question_count,
+                exam_target,
+                subject_meta,
+                cache_key,
+                extra_keys,
+                reservation,
+            ),
+            daemon=True,
+            name=f"analyze-{job_id}",
+        ).start()
+        return AnalyzeResponse(
+            video_id=video_id,
+            video_url=canonical_url,
+            subject=payload.subject,
+            notes=[],
+            questions=[],
+            job_id=job_id,
+            job_status="running",
+            chunks_done=0,
+            chunks_total=1,
+            **overlay,
+        )
+
+    try:
+        return _analyze_with_lines(
+            lines=lines,
+            user_id=user_id,
+            video_id=video_id,
+            canonical_url=canonical_url,
+            subject=payload.subject,
+            question_count=payload.question_count,
+            exam_target=exam_target,
+            subject_meta=subject_meta,
+            cache_key=cache_key,
+            extra_keys=extra_keys,
+            reservation=reservation,
+            db=db,
+        )
     except ValueError as exc:
         credit_service.refund(db, user_id, reservation)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -400,96 +418,6 @@ def analyze_video(
             status_code=502,
             detail=f"Altyazı veya LLM adımı başarısız: {exc}",
         ) from exc
-
-    canonical_url = build_watch_url(video_id)
-    notes = _pack_notes(llm_data.get("notes"), video_id)
-    questions = _pack_questions(llm_data.get("questions"), video_id)
-    if notes and questions:
-        reservation = credit_service.confirm(db, user_id, video_id, reservation)
-    else:
-        reservation = credit_service.refund(db, user_id, reservation)
-    overlay = credit_service.overlay(reservation)
-    from app.services import analyze_jobs as jobs
-
-    remaining = slices[1:] if notes and questions else []
-    job_id = jobs.create_job(
-        user_id=user_id,
-        video_id=video_id,
-        video_url=canonical_url,
-        subject=payload.subject,
-        chunks_total=1 + len(remaining),
-        overlay=overlay,
-    )
-    persona = ai_engine.parse_persona(llm_data.get("teacher_persona")).model_dump()
-    done = 1
-    status = "done" if not remaining else "running"
-    jobs.set_progress(
-        job_id,
-        notes=[item.model_dump() for item in notes],
-        questions=[item.model_dump() for item in questions],
-        persona=persona,
-        chunks_done=done,
-        status=status,
-    )
-    _persist_notebook(
-        user_id=user_id,
-        subject=payload.subject,
-        video_id=video_id,
-        video_url=canonical_url,
-        notes=notes,
-        questions=questions,
-        persona=persona,
-        exam_target=exam_target,
-    )
-    if remaining:
-        threading.Thread(
-            target=_continue_analyze_job,
-            args=(
-                job_id,
-                remaining,
-                user_id,
-                payload.subject,
-                exam_target,
-                subject_meta["subject_type"],
-                subject_meta["is_yks_fen_question"],
-                video_id,
-                cache_key,
-                extra_keys,
-            ),
-            daemon=True,
-            name=f"analyze-{job_id}",
-        ).start()
-    elif notes and questions:
-        dump = AnalyzeResponse(
-            video_id=video_id,
-            video_url=canonical_url,
-            subject=payload.subject,
-            notes=notes,
-            questions=questions,
-            teacher_persona=persona,
-            job_id=job_id,
-            job_status="done",
-            chunks_done=1,
-            chunks_total=1,
-            **overlay,
-        ).model_dump()
-        dump["analyze_span"] = "full"
-        for key in extra_keys:
-            dump.pop(key, None)
-        cache.save(cache_key, dump)
-    return AnalyzeResponse(
-        video_id=video_id,
-        video_url=canonical_url,
-        subject=payload.subject,
-        notes=notes,
-        questions=questions,
-        teacher_persona=persona,
-        job_id=job_id,
-        job_status=status,
-        chunks_done=done,
-        chunks_total=1 + len(remaining),
-        **overlay,
-    )
 
 
 @app.get("/analyze/jobs/{job_id}", response_model=AnalyzeResponse)
@@ -511,6 +439,7 @@ def analyze_job_status(request: Request, job_id: str) -> AnalyzeResponse:
         teacher_persona=job["teacher_persona"],
         job_id=job["id"],
         job_status=job["status"],
+        job_error=job.get("error") or "",
         chunks_done=job["chunks_done"],
         chunks_total=job["chunks_total"],
         **(job.get("overlay") or {}),
@@ -1521,6 +1450,207 @@ def _pack_questions(raw: object, video_id: str, start: int = 1) -> list[Question
         except Exception:
             continue
     return questions
+
+
+def _public_analyze_error(exc: BaseException) -> str:
+    text = str(exc).strip() or "Analiz başarısız."
+    if "api_key" in text.lower() or "bearer" in text.lower():
+        return "Altyazı veya analiz adımı başarısız. Biraz bekleyip tekrar dene."
+    return text[:280]
+
+
+def _analyze_with_lines(
+    *,
+    lines: list[dict],
+    user_id: str,
+    video_id: str,
+    canonical_url: str,
+    subject: str | None,
+    question_count: int,
+    exam_target: str | None,
+    subject_meta: dict,
+    cache_key: str,
+    extra_keys: tuple,
+    reservation,
+    db: Session,
+    job_id: str | None = None,
+) -> AnalyzeResponse:
+    from app.services import rag as rag_service
+    from app.services import analyze_jobs as jobs
+
+    if not lines:
+        raise ValueError("Bu video için altyazı bulunamadı.")
+    slices = slice_transcript(lines, SLICE_SECONDS)
+    if not slices:
+        raise ValueError("Bu video için altyazı bulunamadı.")
+    first = slices[0]
+    llm_data = analyze_slice(
+        first["block"],
+        subject,
+        min(4, question_count),
+        exam_target,
+        subject_meta["subject_type"],
+        subject_meta["is_yks_fen_question"],
+        "",
+        window_label=first["label"],
+        note_count=5,
+    )
+    try:
+        rag_service.ingest_video_signals(
+            db,
+            user_id=user_id,
+            video_id=video_id,
+            lines=lines,
+            subject=subject,
+            exam_target=exam_target,
+        )
+    except Exception:
+        db.rollback()
+
+    notes = _pack_notes(llm_data.get("notes"), video_id)
+    questions = _pack_questions(llm_data.get("questions"), video_id)
+    if notes and questions:
+        reservation = credit_service.confirm(db, user_id, video_id, reservation)
+    else:
+        reservation = credit_service.refund(db, user_id, reservation)
+    overlay = credit_service.overlay(reservation)
+    remaining = slices[1:] if notes and questions else []
+    if not job_id:
+        job_id = jobs.create_job(
+            user_id=user_id,
+            video_id=video_id,
+            video_url=canonical_url,
+            subject=subject,
+            chunks_total=1 + len(remaining),
+            overlay=overlay,
+        )
+    persona = ai_engine.parse_persona(llm_data.get("teacher_persona")).model_dump()
+    done = 1
+    status = "done" if not remaining else "running"
+    jobs.set_progress(
+        job_id,
+        notes=[item.model_dump() for item in notes],
+        questions=[item.model_dump() for item in questions],
+        persona=persona,
+        chunks_done=done,
+        status=status,
+        chunks_total=1 + len(remaining),
+        overlay=overlay,
+    )
+    _persist_notebook(
+        user_id=user_id,
+        subject=subject,
+        video_id=video_id,
+        video_url=canonical_url,
+        notes=notes,
+        questions=questions,
+        persona=persona,
+        exam_target=exam_target,
+        db=db,
+    )
+    if remaining:
+        threading.Thread(
+            target=_continue_analyze_job,
+            args=(
+                job_id,
+                remaining,
+                user_id,
+                subject,
+                exam_target,
+                subject_meta["subject_type"],
+                subject_meta["is_yks_fen_question"],
+                video_id,
+                cache_key,
+                extra_keys,
+            ),
+            daemon=True,
+            name=f"analyze-{job_id}",
+        ).start()
+    elif notes and questions:
+        dump = AnalyzeResponse(
+            video_id=video_id,
+            video_url=canonical_url,
+            subject=subject,
+            notes=notes,
+            questions=questions,
+            teacher_persona=persona,
+            job_id=job_id,
+            job_status="done",
+            chunks_done=1,
+            chunks_total=1,
+            **overlay,
+        ).model_dump()
+        dump["analyze_span"] = "full"
+        for key in extra_keys:
+            dump.pop(key, None)
+        cache.save(cache_key, dump)
+    return AnalyzeResponse(
+        video_id=video_id,
+        video_url=canonical_url,
+        subject=subject,
+        notes=notes,
+        questions=questions,
+        teacher_persona=persona,
+        job_id=job_id,
+        job_status=status,
+        chunks_done=done,
+        chunks_total=1 + len(remaining),
+        **overlay,
+    )
+
+
+def _fetch_then_analyze_job(
+    job_id: str,
+    user_id: str,
+    video_id: str,
+    canonical_url: str,
+    subject: str | None,
+    question_count: int,
+    exam_target: str | None,
+    subject_meta: dict,
+    cache_key: str,
+    extra_keys: tuple,
+    reservation,
+) -> None:
+    from app.database.session import SessionLocal
+    from app.services import analyze_jobs as jobs
+
+    db = SessionLocal()
+    try:
+        lines = fetch_transcript_lines(video_id)
+        if not lines:
+            raise ValueError("Bu video için altyazı bulunamadı.")
+        user = penalty_service.get_or_create_user(db, user_id)
+        if credit_service.is_ad_tier(user) and not credit_service.already_converted(
+            db, user_id, video_id
+        ):
+            credit_service.enforce_duration(
+                user, transcript_duration_seconds(lines), db
+            )
+        _analyze_with_lines(
+            lines=lines,
+            user_id=user_id,
+            video_id=video_id,
+            canonical_url=canonical_url,
+            subject=subject,
+            question_count=question_count,
+            exam_target=exam_target,
+            subject_meta=subject_meta,
+            cache_key=cache_key,
+            extra_keys=extra_keys,
+            reservation=reservation,
+            db=db,
+            job_id=job_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Arka plan analiz %s başarısız: %s", job_id, exc)
+        try:
+            credit_service.refund(db, user_id, reservation)
+        except Exception:
+            logger.exception("Analiz iadesi başarısız %s", job_id)
+        jobs.finish(job_id, "error", error=_public_analyze_error(exc))
+    finally:
+        db.close()
 
 
 def _continue_analyze_job(

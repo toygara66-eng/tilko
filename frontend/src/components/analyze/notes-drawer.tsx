@@ -29,9 +29,9 @@ export function NotesPanel() {
           </p>
           <p className="truncate text-xs text-zinc-500">
             {busy
-              ? result
+              ? result?.notes?.length
                 ? `${result.chunks_done ?? 1}/${result.chunks_total ?? 1} dilim hazır · ${elapsed}s`
-                : `İlk 5 dakika çekiliyor… ${elapsed}s`
+                : `Video yazıya dökülüyor… ${elapsed}s`
               : result
                 ? `${subject || "Ders"} · ${noteCount} not · ${questionCount} soru · Notlarımda durur`
                 : "Analiz bitince burada açılır"}

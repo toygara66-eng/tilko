@@ -97,6 +97,7 @@ class AnalyzeResponse(BaseModel):
     teacher_persona: TeacherPersona = Field(default_factory=TeacherPersona)
     job_id: str = ""
     job_status: str = "done"
+    job_error: str = ""
     chunks_done: int = 1
     chunks_total: int = 1
     ai_credits_left: int = 0

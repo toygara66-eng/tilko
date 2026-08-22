@@ -58,6 +58,8 @@ def set_progress(
     persona: dict,
     chunks_done: int,
     status: str | None = None,
+    chunks_total: int | None = None,
+    overlay: dict | None = None,
 ) -> None:
     with _lock:
         job = _JOBS.get(job_id)
@@ -69,6 +71,10 @@ def set_progress(
         job["chunks_done"] = chunks_done
         if status:
             job["status"] = status
+        if chunks_total is not None:
+            job["chunks_total"] = max(1, chunks_total)
+        if overlay is not None:
+            job["overlay"] = overlay
 
 
 def finish(job_id: str, status: str = "done", error: str = "") -> None:

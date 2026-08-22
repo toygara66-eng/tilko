@@ -92,31 +92,29 @@ def normalize_transcript_lines(raw: list | None) -> list[dict] | None:
 def fetch_transcript_lines(video_id: str) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker.
 
-    YouTube, Render/Vercel IP'lerini kestiği için önce Gemini/OpenRouter
-    (Google videoyu kendisi çeker) denenir.
+    YouTube, Render/Vercel IP'lerini kestiği için asıl yol Gemini/OpenRouter:
+    Google videoyu kendi ağından okur. InnerTube yalnız ev IP'sinde işe yarar.
     """
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+    from app.config import settings
 
     errors: list[str] = []
-    fetchers = (
-        (_fetch_via_llm_youtube, 28),
-        (_fetch_via_innertube, 8),
-    )
-    for fetcher, limit in fetchers:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(fetcher, video_id)
-            try:
-                lines = future.result(timeout=limit)
-            except FuturesTimeout:
-                errors.append(f"{fetcher.__name__}: timeout")
-                continue
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{fetcher.__name__}: {exc}")
-                continue
+    if not settings.is_production:
+        try:
+            lines = _fetch_via_innertube(video_id)
+            if lines:
+                logger.info("Altyazı InnerTube ile geldi (%s satır)", len(lines))
+                return lines
+            errors.append("innertube: boş")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"innertube: {exc}")
+    try:
+        lines = _fetch_via_llm_youtube(video_id)
         if lines:
-            logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
+            logger.info("Altyazı LLM ile geldi (%s satır)", len(lines))
             return lines
-        errors.append(f"{fetcher.__name__}: boş")
+        errors.append("llm: boş")
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"llm: {exc}")
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
     raise ValueError(
         "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
@@ -533,7 +531,7 @@ def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
             ],
             "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192},
         },
-        timeout=26,
+        timeout=120,
         follow_redirects=True,
     )
     if not response.is_success:
@@ -551,57 +549,79 @@ def _gemini_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
 
 def _openrouter_text_from_youtube(video_id: str, api_key: str, model: str) -> str:
     watch = f"https://www.youtube.com/watch?v={video_id}"
-    response = httpx.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://tilko.site",
-            "X-Title": "TILKO",
-        },
-        json={
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://tilko.site",
+        "X-Title": "TILKO",
+    }
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": _TRANSCRIBE_PROMPT},
+                {"type": "video_url", "video_url": {"url": watch}},
+            ],
+        }
+    ]
+    payloads = (
+        {
             "model": model,
             "temperature": 0.1,
             "max_tokens": 8192,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": _TRANSCRIBE_PROMPT},
-                        {"type": "image_url", "image_url": {"url": watch}},
-                    ],
-                }
-            ],
+            "provider": {"only": ["google-ai-studio"], "allow_fallbacks": False},
+            "messages": messages,
         },
-        timeout=26,
-        follow_redirects=True,
+        {
+            "model": model,
+            "temperature": 0.1,
+            "max_tokens": 8192,
+            "messages": messages,
+        },
     )
-    if not response.is_success:
-        raise ValueError(f"openrouter {model}: {response.status_code} {response.text[:180]}")
-    data = response.json()
-    choices = data.get("choices") or []
-    if not choices:
-        raise ValueError("openrouter boş yanıt")
-    message = (choices[0].get("message") or {}).get("content") or ""
-    if isinstance(message, list):
-        message = " ".join(
-            str(part.get("text") or "") for part in message if isinstance(part, dict)
+    last = ""
+    for index, payload in enumerate(payloads):
+        response = httpx.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=120,
+            follow_redirects=True,
         )
-    text = str(message).strip()
-    if not text:
-        raise ValueError("openrouter boş metin")
-    return text
+        if response.is_success:
+            data = response.json()
+            choices = data.get("choices") or []
+            if not choices:
+                last = "openrouter boş yanıt"
+                continue
+            message = (choices[0].get("message") or {}).get("content") or ""
+            if isinstance(message, list):
+                message = " ".join(
+                    str(part.get("text") or "")
+                    for part in message
+                    if isinstance(part, dict)
+                )
+            text = str(message).strip()
+            if text:
+                return text
+            last = "openrouter boş metin"
+            continue
+        last = f"openrouter {model}: {response.status_code} {response.text[:180]}"
+        if index == 0 and response.status_code not in {400, 404}:
+            break
+    raise ValueError(last or "openrouter boş yanıt")
 
 
 def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
     from app.config import settings
 
     errors: list[str] = []
+    openrouter_key = (settings.openrouter_api_key or "").strip()
     gemini_key = (settings.gemini_api_key or "").strip()
     if gemini_key:
         models = []
         preferred = (settings.gemini_model or "").strip()
-        for name in (preferred, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.6-flash"):
+        for name in (preferred, "gemini-3.6-flash"):
             if name and name not in models:
                 models.append(name)
         for model in models:
@@ -614,13 +634,12 @@ def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
 
-    openrouter_key = (settings.openrouter_api_key or "").strip()
     if openrouter_key:
         models = []
         for name in (
+            "google/gemini-3.6-flash",
             "google/gemini-2.5-flash",
             (settings.openrouter_model or "").strip(),
-            "google/gemini-2.0-flash-001",
         ):
             if name and name.startswith("google/") and name not in models:
                 models.append(name)
@@ -634,6 +653,12 @@ def _fetch_via_llm_youtube(video_id: str) -> list[dict]:
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
 
+    joined = " | ".join(errors)
+    if not gemini_key and ("402" in joined or "balance" in joined.lower()):
+        raise ValueError(
+            "YouTube yazıya dökme için Render ortamına GEMINI_API_KEY eklenmeli "
+            "(Google AI Studio). OpenRouter video kredisi bu istek için yetmiyor."
+        )
     raise ValueError(" | ".join(errors) or "LLM ile altyazı alınamadı.")
 
 

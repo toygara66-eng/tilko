@@ -145,6 +145,7 @@ export type AnalyzeResponse = {
   subject?: string | null;
   job_id?: string;
   job_status?: "running" | "done" | "error" | string;
+  job_error?: string;
   chunks_done?: number;
   chunks_total?: number;
   ai_credits_left: number;
