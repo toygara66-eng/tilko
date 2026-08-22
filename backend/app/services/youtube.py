@@ -103,13 +103,19 @@ def _run_with_timeout(fn, timeout: float, *args, **kwargs):
 def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker.
 
-    Önce YouTube altyazı izleri (saniyeler), olmazsa Gemini videoyu okur.
+    Önce YouTube altyazı izleri (saniyeler), olmazsa Gemini ilk 6 dakikayı okur.
     """
+    from app.config import settings
+
     errors: list[str] = []
     scrapers = (
-        (_fetch_via_innertube, 7),
-        (_fetch_transcript_lines_inner, 7),
-        (_fetch_via_invidious, 8),
+        ()
+        if settings.is_production
+        else (
+            (_fetch_via_innertube, 7),
+            (_fetch_transcript_lines_inner, 7),
+            (_fetch_via_invidious, 8),
+        )
     )
     for fetcher, limit in scrapers:
         try:
@@ -128,7 +134,7 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
 
     try:
         lines = _run_with_timeout(
-            _fetch_via_llm_youtube, 85, video_id, subject=subject
+            _fetch_via_llm_youtube, 120, video_id, subject=subject
         )
     except Exception as exc:  # noqa: BLE001
         errors.append(f"llm: {exc}")
@@ -139,7 +145,7 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
             try:
                 retry = _run_with_timeout(
                     _fetch_via_llm_youtube,
-                    85,
+                    90,
                     video_id,
                     subject=subject,
                     strict=True,
@@ -577,7 +583,7 @@ def _transcribe_prompt(subject: str | None = None, *, strict: bool = False) -> s
         "Videoyu gerçekten izle. İzleyemiyorsan ilk satıra yalnızca VIDEO_OKUNAMADI yaz. "
         f"{extra}"
         "Kod dersi, programlama veya yazılım uydurma. "
-        "Önce ilk 12 dakikayı cümle cümle yaz; en fazla 120 satır. "
+        "Yalnızca videonun ilk 6 dakikasını cümle cümle yaz; en fazla 80 satır. "
         "Her satır tam olarak [SANIYE] cümle formatında olsun. "
         "SANIYE tam sayı saniye olsun (dakika:saniye yazma). "
         "Yalnızca videoda duyulan cümleleri yaz. Giriş, özet veya markdown yazma."
@@ -640,10 +646,32 @@ def _gemini_text_from_youtube(
     video_id: str, api_key: str, model: str, prompt: str
 ) -> str:
     watch = f"https://www.youtube.com/watch?v={video_id}"
-    response = httpx.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-        json={
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    payloads = (
+        {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "file_data": {"file_uri": watch},
+                            "video_metadata": {
+                                "start_offset": "0s",
+                                "end_offset": "360s",
+                                "fps": 0.5,
+                            },
+                        },
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+                "maxOutputTokens": 2048,
+                "mediaResolution": "MEDIA_RESOLUTION_LOW",
+            },
+        },
+        {
             "contents": [
                 {
                     "role": "user",
@@ -653,31 +681,43 @@ def _gemini_text_from_youtube(
                     ],
                 }
             ],
-            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096},
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048},
         },
-        timeout=httpx.Timeout(80.0, connect=8.0),
-        follow_redirects=True,
     )
-    if not response.is_success:
-        raise ValueError(f"{model}: {response.status_code} {response.text[:180]}")
-    data = response.json()
-    usage = data.get("usageMetadata") or {}
-    try:
-        prompt_tokens = int(usage.get("promptTokenCount") or 0)
-    except (TypeError, ValueError):
-        prompt_tokens = 0
-    if prompt_tokens:
-        logger.info("Gemini youtube prompt_tokens=%s model=%s", prompt_tokens, model)
-    chunks: list[str] = []
-    for candidate in data.get("candidates") or []:
-        parts = ((candidate.get("content") or {}).get("parts")) or []
-        chunks.extend(str(part.get("text") or "") for part in parts)
-    text = "\n".join(chunk for chunk in chunks if chunk).strip()
-    if not text:
-        raise ValueError(f"{model}: boş yanıt")
-    if _text_says_unwatched(text):
-        raise ValueError(f"{model}: video okunamadı")
-    return text
+    last = ""
+    for payload in payloads:
+        response = httpx.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            headers=headers,
+            json=payload,
+            timeout=httpx.Timeout(100.0, connect=8.0),
+            follow_redirects=True,
+        )
+        if not response.is_success:
+            last = f"{model}: {response.status_code} {response.text[:180]}"
+            if response.status_code != 400:
+                raise ValueError(last)
+            continue
+        data = response.json()
+        usage = data.get("usageMetadata") or {}
+        try:
+            prompt_tokens = int(usage.get("promptTokenCount") or 0)
+        except (TypeError, ValueError):
+            prompt_tokens = 0
+        if prompt_tokens:
+            logger.info("Gemini youtube prompt_tokens=%s model=%s", prompt_tokens, model)
+        chunks: list[str] = []
+        for candidate in data.get("candidates") or []:
+            parts = ((candidate.get("content") or {}).get("parts")) or []
+            chunks.extend(str(part.get("text") or "") for part in parts)
+        text = "\n".join(chunk for chunk in chunks if chunk).strip()
+        if not text:
+            last = f"{model}: boş yanıt"
+            continue
+        if _text_says_unwatched(text):
+            raise ValueError(f"{model}: video okunamadı")
+        return text
+    raise ValueError(last or f"{model}: boş yanıt")
 
 
 def _openrouter_text_from_youtube(
