@@ -15,6 +15,9 @@ Kurallar:
   makam veya yetki adı ekleme. Kurum adlarını altyazıda geçtiği şekliyle tam yaz, kısaltma uydurma.
 - Altyazı bilgiyi eksik veriyorsa notu o kadarıyla yaz; boşluğu tahminle doldurma.
 - Altyazı seçilen dersin konusu değilse (ör. Python, kod, VS Code) o derse ait uydurma not yazma.
+- Tanıtım YASAK: PDF indir, abone ol, beğen, telegram, kitap satışı, kaynak reklamı, kanal
+  tanıtımı, "kolay erişim", "destek ol" gibi satırları not/soru yapma. Bunları yok say.
+- Sadece sınavda çıkacak kavramları yaz (tanım, madde, istisna, yetki, tarih, formül).
 - Her not, konunun anlatılmaya başladığı saniyeye bağlanır (tam sayı).
 - Dil: Türkçe, sade ve öğretici. Öğrenciye "sen" diye hitap edebilirsin.
 - Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.
@@ -155,6 +158,8 @@ timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
 Boşluğu genel kültürle doldurma. Hocanın söylemediği tuzak/istisna uydurma.
+Tanıtım yasak: PDF, abone, beğen, telegram, kitap/kaynak reklamı, kanal CTA → not yazma.
+Yalnızca sınav kavramı (tanım, istisna, yetki, tarih, formül, ayrım) not olsun.
 Her notta "quote" alanı ZORUNLU: altyazıdan aynen kopyalanmış 8-20 kelimelik cümle parçası.
 quote altyazıda birebir geçmeli; uydurma alıntı yasak.
 {rag}

@@ -439,16 +439,42 @@ def _fold_tr(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").casefold()).strip()
 
 
+_PROMO_NOTE_RE = re.compile(
+    r"("
+    r"pdf|abone|beğen|telegram|whatsapp|instagram|"
+    r"ücretsiz\s*pdf|pdf'?i?\s*indir|kolay\s*erişim|destek\s*ol|"
+    r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|hız\s*kat|"
+    r"kanalıma|satın\s*al|sipariş|kampanya|sponsor"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_promo_note(note: dict) -> bool:
+    blob = " ".join(
+        [
+            str(note.get("title") or ""),
+            str(note.get("detail") or ""),
+            str(note.get("mnemonic") or ""),
+            str(note.get("exam_tip") or ""),
+            " ".join(str(p) for p in (note.get("key_points") or [])),
+        ]
+    )
+    return bool(_PROMO_NOTE_RE.search(blob))
+
+
 def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
-    """Altyazıyla örtüşmeyen uydurma notları atar. Uydurma yığını geri verilmez."""
+    """Altyazıyla örtüşmeyen veya tanıtım notlarını atar."""
     source = _content_tokens(transcript)
     folded = _fold_tr(transcript)
     if not notes:
         return []
     if not source:
-        return notes
+        return [n for n in notes if not _is_promo_note(n)]
     kept: list[dict] = []
     for note in notes:
+        if _is_promo_note(note):
+            continue
         quote = str(
             note.get("quote")
             or note.get("alinti")

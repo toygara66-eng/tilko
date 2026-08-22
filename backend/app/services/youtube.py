@@ -1205,6 +1205,38 @@ def slice_transcript(lines: list[dict], window_seconds: int = 300) -> list[dict]
     return slices
 
 
+_PROMO_LINE_RE = re.compile(
+    r"("
+    r"pdf|abone|beğen|bildirim\s*aç|telegram|whatsapp|instagram|discord|"
+    r"ücretsiz\s*pdf|pdf'?i?\s*indir|açıklama\s*link|linke\s*tık|"
+    r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|kitabı\s*alı|"
+    r"kanalıma|abone\s*ol|destek\s*ol|like\s*at|yorum\s*yaz|"
+    r"satın\s*al|sipariş|kampanya|sponsor|reklam\s*ver|"
+    r"kolay\s*erişim|hız\s*kat"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def slice_promo_ratio(block: str) -> float:
+    """Dilimdeki tanıtım/CTA satır oranı (0–1)."""
+    rows = [line for line in (block or "").splitlines() if line.strip()]
+    if not rows:
+        return 1.0
+    hits = sum(1 for line in rows if _PROMO_LINE_RE.search(line))
+    return hits / len(rows)
+
+
+def pick_content_slice(slices: list[dict]) -> tuple[dict, list[dict]]:
+    """İlk analiz için PDF/abone/kitap reklamı dolu dilimi atla; asıl ders dilimini al."""
+    if not slices:
+        raise ValueError("Bu video için altyazı bulunamadı.")
+    for index, piece in enumerate(slices):
+        if slice_promo_ratio(piece.get("block") or "") < 0.28:
+            return piece, slices[index + 1 :]
+    return slices[0], slices[1:]
+
+
 def compact_transcript(lines: list[dict], max_chars: int = 28000) -> str:
     """Tüm videoyu kapsa: sığmazsa satır atlayarak baş-orta-sonu koru."""
     usable = [item for item in lines if item.get("text")]

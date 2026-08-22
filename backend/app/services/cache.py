@@ -35,7 +35,7 @@ def build_key(
     raw = (
         f"{video_id}|{subject or ''}|{question_count}|{exam_target or ''}"
         f"|{subject_type or ''}|{int(bool(is_yks_fen_question))}|r{style_revision}"
-        f"|{settings.llm_provider}|{settings.active_model}|fullspan1|ndepth3"
+        f"|{settings.llm_provider}|{settings.active_model}|fullspan1|ndepth4"
     )
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
 
@@ -72,7 +72,7 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
             and hit.get("notes")
             and hit.get("questions")
             and str(hit.get("llm_model") or "") == str(settings.active_model or "")
-            and int(hit.get("notes_depth") or 0) >= 3
+            and int(hit.get("notes_depth") or 0) >= 4
         ):
             return hit
     cache_dir = _cache_dir()
@@ -92,7 +92,7 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
             continue
         if str(data.get("llm_model") or "") != str(settings.active_model or ""):
             continue
-        if int(data.get("notes_depth") or 0) < 3:
+        if int(data.get("notes_depth") or 0) < 4:
             continue
         if data.get("notes") and data.get("questions"):
             with _index_lock:

@@ -128,6 +128,7 @@ from app.services.youtube import (
     fetch_transcript_lines,
     format_timestamp_label,
     normalize_transcript_lines,
+    pick_content_slice,
     slice_transcript,
     transcript_duration_seconds,
     transcript_off_subject,
@@ -1611,7 +1612,7 @@ def _analyze_with_lines(
     slices = slice_transcript(lines, SLICE_SECONDS)
     if not slices:
         raise ValueError("Bu video için altyazı bulunamadı.")
-    first = slices[0]
+    first, remaining_slices = pick_content_slice(slices)
     llm_data = analyze_slice(
         first["block"],
         subject,
@@ -1637,12 +1638,18 @@ def _analyze_with_lines(
 
     notes = _pack_notes(llm_data.get("notes"), video_id)
     questions = _pack_questions(llm_data.get("questions"), video_id)
-    if notes and questions:
+    if notes:
         reservation = credit_service.confirm(db, user_id, video_id, reservation)
     else:
         reservation = credit_service.refund(db, user_id, reservation)
     overlay = credit_service.overlay(reservation)
-    remaining = slices[1:] if notes and questions else []
+    from app.services.youtube import slice_promo_ratio
+
+    remaining = (
+        [piece for piece in remaining_slices if slice_promo_ratio(piece.get("block") or "") < 0.28]
+        if notes
+        else []
+    )
     if not job_id:
         job_id = jobs.create_job(
             user_id=user_id,
@@ -1710,7 +1717,7 @@ def _analyze_with_lines(
         ).model_dump()
         dump["analyze_span"] = "full"
         dump["llm_model"] = settings.active_model
-        dump["notes_depth"] = 3
+        dump["notes_depth"] = 4
         for key in extra_keys:
             dump.pop(key, None)
         cache.save(cache_key, dump)
@@ -1866,7 +1873,7 @@ def _continue_analyze_job(
         "cached": False,
         "analyze_span": "full",
         "llm_model": settings.active_model,
-        "notes_depth": 3,
+        "notes_depth": 4,
         "job_id": "",
         "job_status": "done",
         "chunks_done": final["chunks_total"],
