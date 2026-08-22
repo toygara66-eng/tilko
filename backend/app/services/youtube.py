@@ -68,15 +68,16 @@ def fetch_transcript_lines(video_id: str) -> list[dict]:
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
     errors: list[str] = []
-    for fetcher in (
-        _fetch_transcript_lines_inner,
-        _fetch_via_innertube,
-        _fetch_via_watch_html,
-    ):
+    fetchers = (
+        (_fetch_via_ytdlp, 28),
+        (_fetch_via_invidious, 10),
+        (_fetch_transcript_lines_inner, 8),
+    )
+    for fetcher, limit in fetchers:
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(fetcher, video_id)
             try:
-                lines = future.result(timeout=18)
+                lines = future.result(timeout=limit)
             except FuturesTimeout:
                 errors.append(f"{fetcher.__name__}: timeout")
                 continue
@@ -84,11 +85,12 @@ def fetch_transcript_lines(video_id: str) -> list[dict]:
                 errors.append(f"{fetcher.__name__}: {exc}")
                 continue
         if lines:
+            logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
             return lines
         errors.append(f"{fetcher.__name__}: boş")
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
     raise ValueError(
-        "YouTube altyazısı alınamadı. Videoda altyazı açık olsun, başka bir ders dene."
+        "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
     )
 
 
@@ -155,6 +157,179 @@ def _download_caption(base_url: str) -> list[dict]:
     if not isinstance(data, dict):
         raise ValueError("Altyazı biçimi okunamadı.")
     return _lines_from_json3(data)
+
+
+_VTT_STAMP = re.compile(
+    r"(?:(\d+):)?(\d{2}):(\d{2})[\.,](\d{3})\s*-->"
+)
+INVIDIOUS_HOSTS = (
+    "https://inv.nadeko.net",
+    "https://invidious.privacyredirect.com",
+    "https://iv.datura.network",
+)
+
+
+def _vtt_seconds(hour: str | None, minute: str, second: str, millis: str) -> int:
+    return int(hour or 0) * 3600 + int(minute) * 60 + int(second)
+
+
+def _lines_from_vtt(text: str) -> list[dict]:
+    lines: list[dict] = []
+    blocks = re.split(r"\n\s*\n", (text or "").replace("\r\n", "\n"))
+    for block in blocks:
+        rows = [
+            row.strip()
+            for row in block.split("\n")
+            if row.strip()
+            and not row.strip().startswith("WEBVTT")
+            and not row.strip().startswith("NOTE")
+            and not row.strip().startswith("Kind:")
+            and not row.strip().startswith("Language:")
+        ]
+        if not rows:
+            continue
+        stamp: int | None = None
+        body: list[str] = []
+        for row in rows:
+            match = _VTT_STAMP.match(row)
+            if match:
+                stamp = _vtt_seconds(*match.groups())
+                continue
+            if row.isdigit():
+                continue
+            cleaned = re.sub(r"<[^>]+>", "", row).replace("&nbsp;", " ").strip()
+            if cleaned:
+                body.append(cleaned)
+        if stamp is None or not body:
+            continue
+        lines.append({"start": stamp, "text": " ".join(body)})
+    return lines
+
+
+def _lines_from_caption_bytes(raw: bytes, ext: str) -> list[dict]:
+    if not raw:
+        return []
+    kind = (ext or "").lower()
+    if kind in {"json3", "json"}:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return _lines_from_json3(data)
+        return []
+    return _lines_from_vtt(raw.decode("utf-8", "replace"))
+
+
+def _pick_ytdlp_track(info: dict) -> dict | None:
+    bags = (info.get("subtitles") or {}, info.get("automatic_captions") or {})
+    preferred = ("tr", "tr-TR", "en", "en-orig", "en-US")
+    for bag in bags:
+        for lang in preferred:
+            tracks = bag.get(lang) or []
+            json3 = next((item for item in tracks if item.get("ext") == "json3" and item.get("url")), None)
+            if json3:
+                return json3
+            other = next(
+                (
+                    item
+                    for item in tracks
+                    if item.get("ext") in {"vtt", "srv3", "ttml"} and item.get("url")
+                ),
+                None,
+            )
+            if other:
+                return other
+    for bag in bags:
+        for tracks in bag.values():
+            json3 = next((item for item in tracks if item.get("ext") == "json3" and item.get("url")), None)
+            if json3:
+                return json3
+    return None
+
+
+def _fetch_via_ytdlp(video_id: str) -> list[dict]:
+    import yt_dlp
+
+    watch = f"https://www.youtube.com/watch?v={video_id}"
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(watch, download=False)
+        if not info:
+            raise ValueError("Video bilgisi alınamadı.")
+        track = _pick_ytdlp_track(info)
+        if not track:
+            raise ValueError("Bu video için altyazı bulunamadı.")
+        caption_url = str(track["url"])
+        ext = str(track.get("ext") or "json3")
+        try:
+            response = ydl.urlopen(caption_url)
+            raw = response.read()
+        except Exception:
+            raw = httpx.get(
+                caption_url,
+                headers={"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
+                timeout=18,
+                follow_redirects=True,
+            ).content
+    lines = _lines_from_caption_bytes(raw, ext)
+    if not lines:
+        raise ValueError("Altyazı boş geldi.")
+    return lines
+
+
+def _fetch_via_invidious(video_id: str) -> list[dict]:
+    last = "Invidious yanıt vermedi."
+    for host in INVIDIOUS_HOSTS:
+        try:
+            listing = httpx.get(
+                f"{host}/api/v1/captions/{video_id}",
+                headers={"User-Agent": WATCH_UA},
+                timeout=8,
+                follow_redirects=True,
+            )
+            listing.raise_for_status()
+            payload = listing.json()
+            captions = payload.get("captions") if isinstance(payload, dict) else payload
+            if not isinstance(captions, list) or not captions:
+                last = f"{host}: liste boş"
+                continue
+            pick = None
+            for lang in ("tr", "en"):
+                pick = next(
+                    (
+                        item
+                        for item in captions
+                        if str(item.get("languageCode") or "").lower().startswith(lang)
+                    ),
+                    None,
+                )
+                if pick:
+                    break
+            pick = pick or captions[0]
+            cap_url = str(pick.get("url") or "")
+            if not cap_url:
+                last = f"{host}: url yok"
+                continue
+            if cap_url.startswith("/"):
+                cap_url = host + cap_url
+            caption = httpx.get(
+                cap_url,
+                headers={"User-Agent": WATCH_UA, "Accept": "text/vtt, text/plain, */*"},
+                timeout=8,
+                follow_redirects=True,
+            )
+            caption.raise_for_status()
+            lines = _lines_from_caption_bytes(caption.content, "vtt")
+            if lines:
+                return lines
+            last = f"{host}: dosya boş"
+        except Exception as exc:  # noqa: BLE001
+            last = f"{host}: {exc}"
+    raise ValueError(last)
 
 
 def _fetch_via_innertube(video_id: str) -> list[dict]:
