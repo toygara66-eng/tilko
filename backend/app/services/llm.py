@@ -833,7 +833,7 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        kwargs["max_tokens"] = 7000
+        kwargs["max_tokens"] = 12000
     model_id = str(model or "")
     if (
         json_mode
@@ -1360,7 +1360,7 @@ def _analyze_combined(
     is_yks_fen_question: bool,
     rag_block: str,
     window_label: str = "",
-    note_count: int = 5,
+    note_count: int = 8,
 ) -> dict:
     from app.services.exams import prompt_block
 
@@ -1368,7 +1368,8 @@ def _analyze_combined(
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Sadece JSON; markdown yok.\n\n"
+        "not, şık veya açıklamaya yazma. Kısa özet yasak; her not 5-8 cümle. "
+        "Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,
@@ -1435,7 +1436,7 @@ def analyze_slice(
     is_yks_fen_question: bool,
     rag_block: str = "",
     window_label: str = "",
-    note_count: int = 5,
+    note_count: int = 8,
 ) -> dict:
     """Tek 5 dakikalık dilimi not + soruya çevirir."""
     return _analyze_combined(

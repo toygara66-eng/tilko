@@ -1,12 +1,14 @@
 NOTES_SYSTEM_PROMPT = """Sen 20 yıllık sınav eğitmeni ve hafıza teknikleri uzmanısın.
-Öğrencilerinin netini yükselten çalışma notları yazıyorsun.
+Öğrenci SADECE senin notlarına bakarak hedef sınavında yüksek puan alabilmeli.
+Kısa özet yasak; her not bir ders kartı gibi dolu olsun.
 
 Yaklaşımın:
-- Videodaki her kavramı öğrencinin HEDEF SINAVINDA çıkacak forma dönüştürürsün: tanım + ayırt edici detay + istisna.
-- Öğrencinin en çok karıştırdığı yakın kavramları açıkça karşılaştırırsın.
-- Her not için akılda kalıcı bir hafıza tekniği (akrostiş, kafiye, zincirleme hikâye, sayı-şekil bağı,
-  benzetme) üretirsin. Teknik somut, kısa ve tekrar edilebilir olmalı.
-- O sınavın o konuda kurduğu klasik tuzağı önceden söylersin.
+- Videodaki her sınav kavramını hedef sınav formuna çevir: tanım + ayırt edici detay +
+  istisna + karıştırılan kavram farkı + hocanın vurgusu.
+- Aynı dilimde geçen her önemli kavram için ayrı not yaz; tek cümlede geçiştirme.
+- Her not için akılda kalıcı hafıza tekniği (akrostiş, kafiye, zincirleme hikâye, sayı-şekil,
+  benzetme) üret. Teknik somut ve tekrar edilebilir olsun.
+- O sınavın klasik tuzağını, çeldiriciyi ve "yanlış sanılan doğru"yu önceden söyle.
 
 Kurallar:
 - Yalnızca verilen altyazıdaki bilgiye dayan. Altyazıda olmayan mevzuat, tarih, rakam, organ,
@@ -87,8 +89,8 @@ Zaman damgalı altyazı (her satır: [saniye] metin):
 {transcript_block}
 ---
 
-Bu bölümdeki en önemli kavramlardan en fazla 8 not üret. Her not 2-4 cümle olsun;
-uzun liste yerine sınavda çıkacak ayrımı yaz.
+Bu bölümdeki sınav değeri olan kavramlardan 6-10 not üret. Kısa özet yasak.
+Öğrenci bu notlara çalışınca o dilimden çıkan soruları çözebilmeli.
 
 Çıktı JSON şeması:
 {{
@@ -99,22 +101,24 @@ uzun liste yerine sınavda çıkacak ayrımı yaz.
   "notes": [
     {{
       "title": "Kavramın kısa adı (3-6 kelime)",
-      "detail": "Kavramın açıklaması. 3-6 cümle. Tanımı ver, ayırt edici özelliği söyle, varsa istisnayı ve karıştırıldığı kavramla farkını yaz. Altyazıdaki rakam, tarih, madde numarası ve isimleri aynen koru.",
+      "detail": "5-8 cümle. 1) Tanım 2) Ayırt edici özellik 3) İstisna / sınır 4) Karıştırılan kavram farkı 5) Hocanın vurgusu. Altyazıdaki rakam, tarih, madde numarası ve isimleri aynen koru.",
       "key_points": [
         "Sınavda sorulabilecek net bilgi kırıntısı",
-        "Tarih / rakam / istisna gibi ezberlenmesi gereken ayrıntı",
-        "Karıştırılan kavramla arasındaki fark"
+        "Tarih / rakam / madde / istisna",
+        "Karıştırılan kavramla fark",
+        "Hocanın 'dikkat' dediği nokta"
       ],
-      "mnemonic": "Akılda kalıcı teknik. Örn: 'YÜRÜtme = YÜRÜyen Cumhurbaşkanı' gibi somut bir bağ, akrostiş veya kısa hikâye. Neden işe yaradığını da ima et.",
-      "exam_tip": "Bu hedef sınavda hangi tuzak kurulur, öğrenci nerede yanılır. 1-2 cümle.",
+      "mnemonic": "Akılda kalıcı teknik. Örn: 'YÜRÜtme = YÜRÜyen Cumhurbaşkanı' gibi somut bağ, akrostiş veya kısa hikâye.",
+      "exam_tip": "Bu hedef sınavda hangi tuzak / çeldirici kurulur, öğrenci nerede yanılır. 2-3 cümle.",
       "timestamp": 0
     }}
   ]
 }}
 
 Kurallar:
-- key_points 2-4 madde olsun, cümle değil bilgi kırıntısı olsun.
+- key_points 4-6 madde olsun; cümle değil bilgi kırıntısı.
 - mnemonic her notta dolu olsun; klişe değil, o kavrama özel olsun.
+- detail en az 5 cümle olsun; tek cümlelik not kabul edilmez.
 - timestamp, o kavramın anlatılmaya başladığı saniye (yukarıdaki köşeli parantez değerlerinden biri).
 - teacher_persona: altyazıdaki hitaplardan 3-8 catchphrase çıkar. Uydurma slogan ekleme.
 """
@@ -127,17 +131,17 @@ def build_combined_analyze_prompt(
     exam_target: str | None = None,
     rag_block: str = "",
     window_label: str = "",
-    note_count: int = 5,
+    note_count: int = 8,
 ) -> str:
     from app.services.exams import label_for, prompt_block
 
     konu = subject or label_for(exam_target)
     count = max(2, min(int(question_count or 4), 6))
-    notes_n = max(3, min(int(note_count or 5), 8))
+    notes_n = max(6, min(int(note_count or 8), 10))
     extra = (rag_block or "").strip()
     rag = f"\n{extra}\n" if extra else ""
     window = (
-        f"Bu dilim: {window_label}. Yalnızca bu 5 dakikayı işle; başka dakikaya not yazma."
+        f"Bu dilim: {window_label}. Yalnızca bu dilimi işle; başka dakikaya not yazma."
         if window_label
         else "Altyazının bu bölümünü işle."
     )
@@ -145,6 +149,8 @@ def build_combined_analyze_prompt(
 
 Konu / ders: {konu}
 {window}
+Hedef: öğrenci SADECE bu notlara çalışarak o dilimden yüksek puan alsın.
+Kısa özet yasak. Her not bir ders kartı gibi dolu olsun.
 timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
@@ -155,7 +161,8 @@ Zaman damgalı altyazı:
 {transcript_block}
 ---
 
-{notes_n} not yaz. Tam {count} soru. Her not 2-3 cümle.
+En az {notes_n} not yaz (dilimde kaç sınav kavramı varsa o kadar, üst sınır 10).
+Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
 
 Çıktı JSON şeması:
 {{
@@ -166,10 +173,10 @@ Zaman damgalı altyazı:
   "notes": [
     {{
       "title": "Kavramın kısa adı",
-      "detail": "2-4 cümle. Tanım, ayırt edici fark, istisna.",
-      "key_points": ["bilgi kırıntısı", "istisna"],
-      "mnemonic": "Kısa hafıza tekniği",
-      "exam_tip": "Sınav tuzağı, 1 cümle",
+      "detail": "5-8 cümle: tanım, ayırt edici fark, istisna, karıştırılan kavram, hocanın vurgusu.",
+      "key_points": ["bilgi kırıntısı", "istisna", "karıştırılan fark", "hoca uyarısı"],
+      "mnemonic": "Kavrama özel hafıza tekniği (1-2 cümle)",
+      "exam_tip": "Sınav tuzağı ve çeldirici, 2-3 cümle",
       "timestamp": 0
     }}
   ],
@@ -178,8 +185,8 @@ Zaman damgalı altyazı:
       "text": "Soru kökü",
       "options": {{"A": "...", "B": "...", "C": "...", "D": "...", "E": "..."}},
       "correct": "C",
-      "explanation": "2 cümle gerekçe",
-      "trap_explanation": "Hocanın kırmızı kalem notu, 2 cümle",
+      "explanation": "3 cümle: neden doğru, diğer şıklar neden elenir",
+      "trap_explanation": "Hocanın kırmızı kalem notu, 2-3 cümle",
       "topic": "Alt konu",
       "difficulty": "orta",
       "timestamp": 0

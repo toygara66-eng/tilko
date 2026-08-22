@@ -1589,13 +1589,13 @@ def _analyze_with_lines(
     llm_data = analyze_slice(
         first["block"],
         subject,
-        min(4, question_count),
+        min(6, question_count),
         exam_target,
         subject_meta["subject_type"],
         subject_meta["is_yks_fen_question"],
         "",
         window_label=first["label"],
-        note_count=5,
+        note_count=8,
     )
     try:
         rag_service.ingest_video_signals(
@@ -1684,6 +1684,7 @@ def _analyze_with_lines(
         ).model_dump()
         dump["analyze_span"] = "full"
         dump["llm_model"] = settings.active_model
+        dump["notes_depth"] = 2
         for key in extra_keys:
             dump.pop(key, None)
         cache.save(cache_key, dump)
@@ -1782,13 +1783,13 @@ def _continue_analyze_job(
             llm_data = analyze_slice(
                 piece["block"],
                 subject,
-                2,
+                3,
                 exam_target,
                 subject_type,
                 is_yks_fen_question,
                 "",
                 window_label=piece.get("label") or "",
-                note_count=5,
+                note_count=8,
             )
         except Exception as exc:
             logger.warning("Dilim atlandı %s: %s", piece.get("label"), exc)
@@ -1839,6 +1840,7 @@ def _continue_analyze_job(
         "cached": False,
         "analyze_span": "full",
         "llm_model": settings.active_model,
+        "notes_depth": 2,
         "job_id": "",
         "job_status": "done",
         "chunks_done": final["chunks_total"],
