@@ -129,7 +129,7 @@ def _client() -> tuple[OpenAI, str]:
                 api_key=settings.groq_api_key,
                 base_url=settings.groq_base_url,
             ),
-            settings.groq_model,
+            _normalize_groq_model(settings.groq_model),
         )
 
     if settings.llm_provider == "cerebras":
@@ -224,9 +224,8 @@ def _fatal_message(raw: str) -> str | None:
         wait = _retry_after(raw)
         if wait is None or wait >= RATE_LIMIT_MAX_WAIT:
             return (
-                "Groq'un günlük ücretsiz jeton sınırı doldu (gpt-oss-120b için 200K/gün). "
-                "Aynı gün devam için GROQ_MODEL=openai/gpt-oss-20b yaz (ayrı kota) "
-                "veya LLM_PROVIDER=ollama ile yerel modele geç."
+                "Groq'un günlük ücretsiz jeton sınırı doldu. "
+                "Cerebras yedeği varsa ona geçilir; yoksa yarın tekrar dene."
             )
     if "insufficient_quota" in text:
         return (
@@ -623,6 +622,19 @@ def _gemini_native_completion(
     raise last or RuntimeError("Gemini (gemini-3.6-flash) yanıt vermedi.")
 
 
+def _normalize_groq_model(raw: str | None) -> str:
+    """Render'da eski GROQ_MODEL=openai/gpt-oss-120b kalmış olabilir; geçerli id'ye çevir."""
+    model = (raw or "").strip() or "llama-3.3-70b-versatile"
+    lowered = model.lower()
+    if (
+        "gpt-oss" in lowered
+        or "120b" in lowered
+        or lowered in {"", "auto", "default"}
+    ):
+        return "llama-3.3-70b-versatile"
+    return model
+
+
 def _gemini_client(timeout=None) -> tuple[OpenAI, str] | None:
     key = (settings.gemini_api_key or "").strip()
     if not key:
@@ -641,16 +653,13 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
     key = (settings.groq_api_key or "").strip()
     if not key:
         return None
-    model = (settings.groq_model or "").strip() or "llama-3.3-70b-versatile"
-    if "gpt-oss-120b" in model:
-        model = model.replace("gpt-oss-120b", "gpt-oss-20b")
     return (
         _openai_client(
             api_key=key,
             base_url=settings.groq_base_url,
             timeout=ANALYZE_HTTP_TIMEOUT,
         ),
-        model,
+        _normalize_groq_model(settings.groq_model),
     )
 
 
@@ -982,12 +991,14 @@ def _chat(
                     ) from exc
                 if _is_timeout(exc):
                     raise
-                if "model_not_found" in str(exc).lower():
+                if "model_not_found" in str(exc).lower() or "error code: 404" in str(exc).lower():
+                    if _activate_credit_fallback():
+                        continue
                     raise ConfigurationError(
-                        f"'{settings.active_model}' bu sağlayıcıda yok. "
-                        "Groq: openai/gpt-oss-120b veya openai/gpt-oss-20b. "
-                        "OpenRouter: openrouter.ai/models listesinden bir id yaz "
-                        "(ücretsiz için sonuna :free ekle)."
+                        f"Model bulunamadı ({_active_name or settings.llm_provider}: "
+                        f"{_normalize_groq_model(settings.groq_model) if (_active_name or settings.llm_provider) == 'groq' else settings.active_model}). "
+                        "Render'da GROQ_MODEL=llama-3.3-70b-versatile yaz; "
+                        "Cerebras anahtarı varsa LLM_FALLBACK=cerebras kalsın."
                     ) from exc
                 if _oversized_request(str(exc)):
                     raise

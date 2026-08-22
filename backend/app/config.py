@@ -63,7 +63,10 @@ class Settings(BaseSettings):
         if self.llm_provider == "huggingface":
             return self.hf_model
         if self.llm_provider == "groq":
-            return self.groq_model
+            model = (self.groq_model or "").strip() or "llama-3.3-70b-versatile"
+            if "gpt-oss" in model.lower() or "120b" in model.lower():
+                return "llama-3.3-70b-versatile"
+            return model
         if self.llm_provider == "cerebras":
             return self.cerebras_model
         if self.llm_provider == "openrouter":
