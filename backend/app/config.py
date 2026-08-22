@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     hf_model: str = "openai/gpt-oss-120b"
     hf_base_url: str = "https://router.huggingface.co/v1"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "llama-3.1-8b-instant"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     cerebras_api_key: str = ""
     cerebras_model: str = "gemma-4-31b"
@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "gemma2:9b"
     ollama_num_ctx: int = 8192
-    llm_provider: str = "gemini"
-    llm_fallback: str = "ollama"
+    llm_provider: str = "cerebras"
+    llm_fallback: str = "groq"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     capture_training_data: bool = False
@@ -63,9 +63,9 @@ class Settings(BaseSettings):
         if self.llm_provider == "huggingface":
             return self.hf_model
         if self.llm_provider == "groq":
-            model = (self.groq_model or "").strip() or "llama-3.3-70b-versatile"
+            model = (self.groq_model or "").strip() or "llama-3.1-8b-instant"
             if "gpt-oss" in model.lower() or "120b" in model.lower():
-                return "llama-3.3-70b-versatile"
+                return "llama-3.1-8b-instant"
             return model
         if self.llm_provider == "cerebras":
             return self.cerebras_model

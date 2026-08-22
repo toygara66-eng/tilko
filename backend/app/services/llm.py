@@ -632,14 +632,14 @@ def _gemini_native_completion(
 
 def _normalize_groq_model(raw: str | None) -> str:
     """Render'da eski GROQ_MODEL=openai/gpt-oss-120b kalmış olabilir; geçerli id'ye çevir."""
-    model = (raw or "").strip() or "llama-3.3-70b-versatile"
+    model = (raw or "").strip() or "llama-3.1-8b-instant"
     lowered = model.lower()
     if (
         "gpt-oss" in lowered
         or "120b" in lowered
         or lowered in {"", "auto", "default"}
     ):
-        return "llama-3.3-70b-versatile"
+        return "llama-3.1-8b-instant"
     return model
 
 
@@ -705,9 +705,9 @@ def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
 
 
 def _provider_chain() -> list[str]:
-    """Analiz yalnızca ücretsiz Groq → Cerebras. OpenRouter/Gemini fatura tuzağına girilmez."""
-    preferred = (settings.llm_provider or "groq").strip().lower()
-    free = ["groq", "cerebras"]
+    """En ucuz yol: Cerebras (1M jeton/gün) → Groq. Fatura yok."""
+    preferred = (settings.llm_provider or "cerebras").strip().lower()
+    free = ["cerebras", "groq"]
     if preferred in free:
         return [preferred] + [name for name in free if name != preferred]
     return list(free)
@@ -755,9 +755,9 @@ def require_analyze_llm() -> None:
     if status["ready"]:
         return
     raise ConfigurationError(
-        "Analiz için Render'da GROQ_API_KEY veya CEREBRAS_API_KEY gerekli. "
-        "OpenRouter/Gemini bu üründe kullanılmıyor (402 fatura hatası). "
-        "console.groq.com veya cloud.cerebras.ai üzerinden ücretsiz anahtar ekle."
+        "Analiz için Render'da CEREBRAS_API_KEY veya GROQ_API_KEY gerekli. "
+        "En ucuz yol: cloud.cerebras.ai (günde 1M jeton) + console.groq.com yedek. "
+        "OpenRouter/Gemini kullanılmıyor."
     )
 
 
@@ -906,9 +906,9 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         ):
             last = exc
             for candidate in (
+                "llama-3.1-8b-instant",
                 "llama-3.3-70b-versatile",
                 "openai/gpt-oss-20b",
-                "llama-3.1-8b-instant",
             ):
                 if candidate == kwargs.get("model"):
                     continue
