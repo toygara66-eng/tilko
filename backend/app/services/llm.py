@@ -41,6 +41,7 @@ _groq_next_ok = 0.0
 _provider_lock = threading.Lock()
 _skip_openrouter = False
 _openrouter_free_only = False
+_skip_gemini = False
 RETRY_AFTER_RE = re.compile(
     r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<mins>\d+)m(?!s))?\s*(?P<num>[\d.]+)\s*(?P<unit>ms|s)",
     re.IGNORECASE,
@@ -196,6 +197,13 @@ def _fatal_message(raw: str) -> str | None:
         return (
             "OpenAI hesabının kredisi bitmiş. backend/.env içinde LLM_PROVIDER=gemini "
             "yapabilir veya OpenAI faturalandırmasını açabilirsin."
+        )
+    if "exceeded your current quota" in text or (
+        "429" in raw and "quota" in text
+    ):
+        return (
+            "Gemini ücretsiz kotası doldu. Birkaç dakika veya yarın tekrar dene. "
+            "Hemen devam için Google AI Studio'da faturalandırmayı aç."
         )
     if "perday" in text.replace(" ", "") or "requests per day" in text:
         return (
@@ -370,24 +378,30 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
 
 
 def _activate_credit_fallback() -> bool:
-    """OpenRouter 402 sonrası Gemini, Groq veya :free model ile bir kez daha dene."""
-    global _skip_openrouter, _openrouter_free_only
-    if not _skip_openrouter and (_gemini_client() or _groq_fast_client()):
+    """Kota bitince Gemini'yi atla, Groq veya OpenRouter :free dene."""
+    global _skip_openrouter, _openrouter_free_only, _skip_gemini
+    if not _skip_gemini and _groq_fast_client():
+        _skip_gemini = True
+        logger.warning("Gemini kotası doldu; Groq yedeğine geçiliyor.")
+        return True
+    if not _skip_openrouter and _gemini_client() and not _skip_gemini:
         _skip_openrouter = True
-        logger.warning("OpenRouter kredisi yok; Gemini/Groq yedeğine geçiliyor.")
+        logger.warning("OpenRouter kredisi yok; Gemini yedeğine geçiliyor.")
         return True
     if settings.openrouter_api_key and not _openrouter_free_only:
         _openrouter_free_only = True
-        logger.warning("OpenRouter ücretli model reddedildi; ücretsiz model deneniyor.")
+        _skip_gemini = True
+        logger.warning("Ücretli model reddedildi; OpenRouter ücretsiz model deneniyor.")
         return True
     return False
 
 
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
     """Video analizi düşünme modeli kullanmaz; flash saniyeler içinde biter."""
-    pair = _gemini_client()
-    if pair:
-        return pair
+    if not _skip_gemini:
+        pair = _gemini_client()
+        if pair:
+            return pair
     pair = _groq_fast_client()
     if pair:
         return pair
@@ -407,7 +421,7 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
                     "X-Title": _ascii_header("TILKO"),
                 },
             ),
-            settings.openrouter_model,
+            model,
         )
     if settings.openai_api_key:
         return (

@@ -148,11 +148,37 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
     if lines:
         errors.append(f"llm: {len(lines)} satır")
 
+    quota_hit = any("429" in item or "quota" in item.lower() for item in errors)
+    if quota_hit or settings.is_production:
+        for fetcher, limit in (
+            (_fetch_via_innertube, 7),
+            (_fetch_transcript_lines_inner, 7),
+            (_fetch_via_invidious, 8),
+        ):
+            try:
+                lines = _run_with_timeout(fetcher, limit, video_id)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{fetcher.__name__}: {exc}")
+                continue
+            if not lines or len(lines) < 3:
+                errors.append(f"{fetcher.__name__}: boş")
+                continue
+            mismatch = transcript_off_subject(lines, subject)
+            if mismatch:
+                raise ValueError(mismatch)
+            logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
+            return lines
+
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
     last = errors[-1] if errors else ""
-    low = last.lower()
+    low = " ".join(errors).lower()
+    if "429" in low or "quota" in low:
+        raise ValueError(
+            "Gemini ücretsiz kotası doldu. Birkaç dakika veya yarın tekrar dene. "
+            "Hemen devam için Google AI Studio'da faturalandırmayı aç."
+        )
     detail = last.split("llm: ", 1)[-1].strip()[:220]
-    if "timed out" in low or "timeout" in low:
+    if "timed out" in last.lower() or "timeout" in last.lower():
         raise ValueError("Video yazıya dökülürken süre doldu. Bir kez daha dene.")
     if detail:
         raise ValueError(f"YouTube altyazısı alınamadı. {detail}")
@@ -777,7 +803,12 @@ def _fetch_via_llm_youtube(
     if gemini_key:
         models = []
         preferred = (settings.gemini_model or "").strip()
-        for name in (preferred, "gemini-3.6-flash"):
+        for name in (
+            "gemini-2.5-flash-lite",
+            "gemini-flash-lite-latest",
+            preferred,
+            "gemini-3.6-flash",
+        ):
             if name and name not in models:
                 models.append(name)
         for model in models:
