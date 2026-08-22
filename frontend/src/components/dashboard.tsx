@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getUserId } from "@/lib/user";
+import { extractYoutubeId } from "@/lib/captions";
 import { isNumericalSubject, subjectsFor } from "@/lib/exams";
 import { useProfile } from "@/components/profile/profile-context";
 import { VideoRecs } from "@/components/diagnostic/video-recs";
@@ -138,8 +139,24 @@ export function Dashboard() {
           />
           <details className="rounded-xl border border-zinc-200 bg-white/40 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/40">
             <summary className="cursor-pointer text-sm text-zinc-600 dark:text-zinc-400">
-              Altyazı gelmezse buraya yapıştır (YouTube → üç nokta → Transkripti göster)
+              Altyazı gelmezse transkripti buraya yapıştır
             </summary>
+            <p className="mt-2 text-xs text-zinc-500">
+              YouTube → üç nokta → Transkripti göster, veya{" "}
+              {extractYoutubeId(url) ? (
+                <a
+                  href={`https://youtubetotranscript.com/transcript?v=${extractYoutubeId(url)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-orange-600 underline dark:text-orange-300"
+                >
+                  youtubetotranscript.com’da aç
+                </a>
+              ) : (
+                "youtubetotranscript.com"
+              )}
+              , kopyala, yapıştır.
+            </p>
             <textarea
               value={transcriptText}
               onChange={(e) => setTranscriptText(e.target.value)}

@@ -107,6 +107,7 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
     """
     errors: list[str] = []
     scrapers = (
+        (_fetch_via_youtubetotranscript, 12),
         (_fetch_via_innertube, 8),
         (_fetch_transcript_lines_inner, 8),
         (_fetch_via_invidious, 12),
@@ -236,6 +237,10 @@ INVIDIOUS_HOSTS = (
     "https://invidious.nerdvpn.de",
     "https://invidious.f5.si",
     "https://yt.chocolatemoo53.com",
+)
+_YTT_SEGMENT = re.compile(
+    r'data-start="([\d.]+)"[^>]*>\s*(.*?)\s*</span>',
+    re.IGNORECASE | re.DOTALL,
 )
 _XML_CAPTION = re.compile(
     r'<text[^>]*start="([^"]+)"[^>]*>(.*?)</text>',
@@ -375,6 +380,44 @@ def _fetch_via_ytdlp(video_id: str) -> list[dict]:
     lines = _lines_from_caption_bytes(raw, ext)
     if not lines:
         raise ValueError("Altyazı boş geldi.")
+    return lines
+
+
+def _lines_from_web_transcript_html(html_text: str) -> list[dict]:
+    lines: list[dict] = []
+    for match in _YTT_SEGMENT.finditer(html_text or ""):
+        text = re.sub(r"<[^>]+>", " ", html.unescape(match.group(2)))
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text or text in {"♪", "[♪♪♪]"}:
+            continue
+        lines.append({"start": int(float(match.group(1))), "text": text})
+    return lines
+
+
+def _fetch_via_youtubetotranscript(video_id: str) -> list[dict]:
+    """youtubetotranscript.com sayfasındaki damgalı transkripti okur."""
+    url = f"https://youtubetotranscript.com/transcript?v={video_id}"
+    response = httpx.get(
+        url,
+        headers={
+            "User-Agent": WATCH_UA,
+            "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+            "Referer": "https://youtubetotranscript.com/",
+        },
+        timeout=12,
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    html_text = response.text or ""
+    low = html_text.lower()
+    if "just a moment" in low or "cf-browser-verification" in low:
+        raise ValueError("Cloudflare bot koruması")
+    if "transcript-segment" not in html_text and 'data-start="' not in html_text:
+        raise ValueError("Sayfada transkript yok")
+    lines = _lines_from_web_transcript_html(html_text)
+    if len(lines) < 3:
+        raise ValueError("Transkript satırı yetersiz")
     return lines
 
 
