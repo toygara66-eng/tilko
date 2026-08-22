@@ -173,6 +173,8 @@ def _client() -> tuple[OpenAI, str]:
 
 def _is_gemini_quota_error(raw: str) -> bool:
     text = raw.lower()
+    if "payment_required" in text or "payment required" in text:
+        return "quota" in text or "billing" in text or "gemini" in text
     googleish = (
         "generativelanguage.googleapis.com" in text
         or "gemini" in text
@@ -180,7 +182,23 @@ def _is_gemini_quota_error(raw: str) -> bool:
         or "resource_exhausted" in text
     )
     return googleish and (
-        "quota" in text or "resource_exhausted" in text or "429" in raw
+        "quota" in text
+        or "resource_exhausted" in text
+        or "429" in raw
+        or "402" in raw
+    )
+
+
+def _is_payment_or_credit_error(raw: str) -> bool:
+    text = raw.lower()
+    return (
+        "payment_required" in text
+        or "payment required" in text
+        or "error code: 402" in text
+        or "billing tab" in text
+        or "insufficient credits" in text
+        or "insufficient_quota" in text
+        or ("requires at least" in text and "credit" in text)
     )
 
 
@@ -200,25 +218,20 @@ def _fatal_message(raw: str) -> str | None:
             "LLM_PROVIDER=ollama yaparak yerel modele geç (ücretsiz, yavaş), "
             "LLM_PROVIDER=gemini yaz (günde 20 istek) veya HF PRO'ya abone ol."
         )
-    if (
-        "insufficient credits" in text
-        or "requires at least" in text
-        or (
-            ("credit" in text or "balance" in text)
-            and (
-                settings.llm_provider == "openrouter"
-                or "openrouter" in text
-            )
+    if _is_payment_or_credit_error(raw) or (
+        ("credit" in text or "balance" in text)
+        and (
+            settings.llm_provider == "openrouter"
+            or "openrouter" in text
+            or _active_name == "openrouter"
         )
     ):
         if _chain_index > 0:
             return (
-                "Ücretsiz yedekler de yanıt vermedi. Groq (console.groq.com) ve "
-                "Cerebras (cloud.cerebras.ai, günde 1M jeton) anahtarlarını Render'a ekle."
+                "Ücretsiz yedekler de yanıt vermedi. Render'da GROQ_API_KEY ve "
+                "CEREBRAS_API_KEY dolu olsun."
             )
-        return (
-            "OpenRouter kredin bitmiş. Groq/Cerebras yedeğine geçiliyor."
-        )
+        return "Ücretli kota/kredi bitti; Groq/Cerebras yedeğine geçiliyor."
     if "tokens per day" in text or ("per day" in text and settings.llm_provider == "groq"):
         # Rolling TPD: 'try again in 5m' ise beklemek yeterli; saatlerceyse gerçekten bitti.
         wait = _retry_after(raw)
@@ -227,17 +240,12 @@ def _fatal_message(raw: str) -> str | None:
                 "Groq'un günlük ücretsiz jeton sınırı doldu. "
                 "Cerebras yedeği varsa ona geçilir; yoksa yarın tekrar dene."
             )
-    if "insufficient_quota" in text:
-        return (
-            "OpenAI hesabının kredisi bitmiş. backend/.env içinde LLM_PROVIDER=gemini "
-            "yapabilir veya OpenAI faturalandırmasını açabilirsin."
-        )
     if _is_gemini_quota_error(raw) or (
         "exceeded your current quota" in text
         or ("429" in raw and "quota" in text and "gemini" in text)
     ):
-        if _groq_fast_client():
-            return "Gemini ücretsiz kotası doldu; Groq yedeğine geçiliyor."
+        if _groq_fast_client() or _cerebras_client():
+            return "Gemini ücretsiz kotası doldu; ücretsiz yedeğe geçiliyor."
         return (
             "Gemini ücretsiz kotası doldu. Yarın tekrar dene."
         )
@@ -697,10 +705,15 @@ def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
 
 
 def _provider_chain() -> list[str]:
-    primary = (settings.llm_provider or "groq").strip().lower()
-    rest = ["groq", "cerebras", "openrouter", "gemini"]
-    ordered = [primary] + [name for name in rest if name != primary]
-    return ordered
+    """Analizde önce ücretsiz Groq/Cerebras; eski OpenRouter/Gemini birincil kalsa bile."""
+    preferred = (settings.llm_provider or "groq").strip().lower()
+    free = ["groq", "cerebras"]
+    paid = ["openrouter", "gemini"]
+    if preferred in {"openai", "huggingface", "ollama"}:
+        return [preferred] + free + paid
+    if preferred in free:
+        return [preferred] + [name for name in free + paid if name != preferred]
+    return free + paid
 
 
 def _named_client(name: str) -> tuple[OpenAI, str] | None:
@@ -767,24 +780,21 @@ def _activate_credit_fallback() -> bool:
     global _skip_openrouter, _openrouter_free_only, _skip_gemini, _chain_index, _active_name
     with _provider_lock:
         _openrouter_free_only = True
+        _skip_openrouter = True
+        _skip_gemini = True
         chain = _provider_chain()
         _chain_index += 1
         while _chain_index < len(chain):
             name = chain[_chain_index]
-            if name == "openrouter":
-                _skip_openrouter = False
-            if name == "gemini" and _skip_gemini:
+            if name in {"openrouter", "gemini"}:
                 _chain_index += 1
                 continue
             pair = _named_client(name)
             if pair:
-                if name != "openrouter":
-                    _skip_openrouter = True
                 _active_name = name
                 logger.warning("Yedek sağlayıcı: %s / %s", name, pair[1])
                 return True
             _chain_index += 1
-        _skip_gemini = True
         return False
 
 
@@ -978,7 +988,7 @@ def _chat(
             except Exception as exc:
                 fatal = _fatal_message(str(exc))
                 if fatal:
-                    if _is_gemini_quota_error(str(exc)):
+                    if _is_gemini_quota_error(str(exc)) or _is_payment_or_credit_error(str(exc)):
                         _skip_gemini = True
                     if _activate_credit_fallback():
                         continue
