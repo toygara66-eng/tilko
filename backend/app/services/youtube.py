@@ -107,6 +107,7 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
     """
     errors: list[str] = []
     scrapers = (
+        (_fetch_via_youtube_transcript_ai, 12),
         (_fetch_via_youtubetotranscript, 12),
         (_fetch_via_youtube_transcript_io, 12),
         (_fetch_via_innertube, 8),
@@ -249,6 +250,9 @@ _YTI_CUE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _YTI_CLOCK = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
+_YTAI_LINE = re.compile(
+    r"^\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\]\s*(.+)$"
+)
 _XML_CAPTION = re.compile(
     r'<text[^>]*start="([^"]+)"[^>]*>(.*?)</text>',
     re.IGNORECASE | re.DOTALL,
@@ -399,6 +403,54 @@ def _lines_from_web_transcript_html(html_text: str) -> list[dict]:
             continue
         lines.append({"start": int(float(match.group(1))), "text": text})
     return lines
+
+
+def _lines_from_transcript_ai_txt(text: str) -> list[dict]:
+    lines: list[dict] = []
+    for row in (text or "").splitlines():
+        match = _YTAI_LINE.match(row.strip())
+        if not match:
+            continue
+        hour, minute, second, body = match.groups()
+        start = int(hour or 0) * 3600 + int(minute) * 60 + int(second)
+        cleaned = _yti_clean_text(body)
+        if not cleaned or cleaned in {"♪", "[♪♪♪]"}:
+            continue
+        lines.append({"start": start, "text": cleaned[:800]})
+        if len(lines) >= 20000:
+            break
+    return lines
+
+
+def _fetch_via_youtube_transcript_ai(video_id: str) -> list[dict]:
+    """youtube-transcript.ai: anahtarsız, damgalı düz metin."""
+    last = "boş"
+    for lang in ("tr", None):
+        url = f"https://youtube-transcript.ai/transcript/{video_id}.txt"
+        if lang:
+            url += f"?lang={lang}"
+        response = httpx.get(
+            url,
+            headers={
+                "User-Agent": WATCH_UA,
+                "Accept": "text/markdown, text/plain, */*",
+                "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+            },
+            timeout=12,
+            follow_redirects=True,
+        )
+        body = response.text or ""
+        low = body.lower()
+        if "just a moment" in low or "cf-browser-verification" in low:
+            raise ValueError("Cloudflare bot koruması")
+        if response.status_code >= 400:
+            last = f"HTTP {response.status_code}"
+            continue
+        lines = _lines_from_transcript_ai_txt(body)
+        if len(lines) >= 3:
+            return lines
+        last = f"lang={lang or 'auto'} yetersiz"
+    raise ValueError(last)
 
 
 def _fetch_via_youtubetotranscript(video_id: str) -> list[dict]:

@@ -36,6 +36,7 @@ export function Dashboard() {
   const [count, setCount] = useState(10);
   const [adOpen, setAdOpen] = useState(false);
   const [transcriptText, setTranscriptText] = useState("");
+  const youtubeId = extractYoutubeId(url);
   const adTier = profile.isAdTier && !profile.isPremium;
   const outOfTrialCredits =
     !profile.isPremium && profile.isInTrial && profile.aiCreditsLeft <= 0;
@@ -143,19 +144,28 @@ export function Dashboard() {
             </summary>
             <p className="mt-2 text-xs text-zinc-500">
               YouTube → üç nokta → Transkripti göster, veya{" "}
-              {extractYoutubeId(url) ? (
+              {youtubeId ? (
                 <>
                   <a
-                    href={`https://youtubetotranscript.com/transcript?v=${extractYoutubeId(url)}`}
+                    href={`https://youtube-transcript.ai/transcript/${youtubeId}.txt?lang=tr`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-orange-600 underline dark:text-orange-300"
                   >
-                    youtubetotranscript.com
+                    youtube-transcript.ai
+                  </a>
+                  {" (düz metin) / "}
+                  <a
+                    href={`https://youtubetotranscript.com/transcript?v=${youtubeId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-orange-600 underline dark:text-orange-300"
+                  >
+                    youtubetotranscript
                   </a>
                   {" / "}
                   <a
-                    href={`https://www.youtube-transcript.io/videos?id=${extractYoutubeId(url)}`}
+                    href={`https://www.youtube-transcript.io/videos?id=${youtubeId}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-orange-600 underline dark:text-orange-300"
@@ -164,7 +174,7 @@ export function Dashboard() {
                   </a>
                 </>
               ) : (
-                "youtubetotranscript.com / youtube-transcript.io"
+                "youtube-transcript.ai / youtubetotranscript / youtube-transcript.io"
               )}
               , kopyala, yapıştır.
             </p>

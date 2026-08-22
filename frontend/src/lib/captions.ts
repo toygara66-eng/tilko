@@ -9,7 +9,9 @@ const IOS_UA =
   "com.google.ios.youtube/20.10.38 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)";
 const RELAYS = ["https://inv.nadeko.net", "https://yt.chocolatemoo53.com"];
 const STAMP_LINE = /^(?:\[)?(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:\])?(?:\s+(.+))?$/;
+const CLOCK_BRACKET = /^\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\]\s*(.+)$/;
 const BRACKET_STAMP = /^\[(\d+)\]\s*(.+)$/;
+const TRANSCRIPT_AI = "https://youtube-transcript.ai/transcript";
 
 function captionProxyUrls(id: string): string[] {
   const urls = [`${API_BASE.replace(/\/$/, "")}/captions/${encodeURIComponent(id)}`];
@@ -133,10 +135,43 @@ function linesFromVtt(raw: string): CaptionLine[] {
   return lines;
 }
 
+function linesFromClockBrackets(raw: string): CaptionLine[] {
+  const lines: CaptionLine[] = [];
+  for (const row of raw.split("\n")) {
+    const match = row.trim().match(CLOCK_BRACKET);
+    if (!match) continue;
+    const text = cleanText(match[4] || "");
+    if (!text) continue;
+    lines.push({
+      start: stampToSeconds(match[1], match[2], match[3]),
+      text,
+    });
+  }
+  return lines;
+}
+
+async function fetchViaTranscriptAi(id: string): Promise<CaptionLine[]> {
+  for (const lang of ["tr", ""]) {
+    const url = `${TRANSCRIPT_AI}/${id}.txt${lang ? `?lang=${lang}` : ""}`;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+      if (!response.ok) continue;
+      const parsed = linesFromClockBrackets(await response.text());
+      if (parsed.length >= 3) return parsed;
+    } catch {
+      /* sonraki dil / kaynak */
+    }
+  }
+  return [];
+}
+
 /** YouTube "Transkripti göster" kopyası, SRT veya [saniye] satırları. */
 export function parseTranscriptPaste(raw: string): CaptionLine[] {
   const text = (raw || "").replace(/\r\n/g, "\n").trim();
   if (!text) return [];
+
+  const clock = linesFromClockBrackets(text);
+  if (clock.length >= 3) return clock;
 
   const bracket: CaptionLine[] = [];
   for (const row of text.split("\n")) {
@@ -288,6 +323,13 @@ export async function fetchCaptionsForVideo(
 ): Promise<CaptionLine[]> {
   const id = extractYoutubeId(videoUrl);
   if (!id) return [];
+
+  try {
+    const hosted = await fetchViaTranscriptAi(id);
+    if (hosted.length >= 3) return hosted;
+  } catch {
+    /* CORS veya kota; sonraki kaynak */
+  }
 
   try {
     const direct = await fetchViaInnertube(id);
