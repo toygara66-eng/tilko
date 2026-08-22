@@ -19,8 +19,16 @@ def _cache_dir() -> Path:
     return Path(__file__).resolve().parents[2] / ".cache"
 
 
-def _lookup_key(video_id: str, subject: str | None, exam_target: str | None = None) -> str:
-    return f"{video_id}|{(subject or '').strip()}|{(exam_target or '').strip()}"
+def _lookup_key(
+    video_id: str,
+    subject: str | None,
+    exam_target: str | None = None,
+    focus_bucket: int = 0,
+) -> str:
+    return (
+        f"{video_id}|{(subject or '').strip()}|{(exam_target or '').strip()}"
+        f"|f{int(focus_bucket or 0)}"
+    )
 
 
 def build_key(
@@ -31,11 +39,13 @@ def build_key(
     subject_type: str | None = None,
     is_yks_fen_question: bool = False,
     style_revision: int = 0,
+    focus_bucket: int = 0,
 ) -> str:
     raw = (
         f"{video_id}|{subject or ''}|{question_count}|{exam_target or ''}"
         f"|{subject_type or ''}|{int(bool(is_yks_fen_question))}|r{style_revision}"
-        f"|{settings.llm_provider}|{settings.active_model}|fullspan1|ndepth4"
+        f"|f{int(focus_bucket or 0)}"
+        f"|{settings.llm_provider}|{settings.active_model}|fullspan1|ndepth5"
     )
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
 
@@ -57,7 +67,12 @@ def load(key: str) -> dict | None:
     if video_id:
         with _index_lock:
             _index[
-                _lookup_key(video_id, data.get("subject"), data.get("exam_target"))
+                _lookup_key(
+                    video_id,
+                    data.get("subject"),
+                    data.get("exam_target"),
+                    int(data.get("focus_bucket") or 0),
+                )
             ] = key
     return data
 
@@ -66,9 +81,11 @@ def find_cached(
     video_id: str,
     subject: str | None,
     exam_target: str | None = None,
+    focus_bucket: int = 0,
 ) -> dict | None:
-    """Soru sayısı değişse bile aynı video+ders+sınav kaydını kullan."""
-    wanted = _lookup_key(video_id, subject, exam_target)
+    """Soru sayısı değişse bile aynı video+ders+sınav+odak kaydını kullan."""
+    bucket = int(focus_bucket or 0)
+    wanted = _lookup_key(video_id, subject, exam_target, bucket)
     with _index_lock:
         key = _index.get(wanted)
     if key:
@@ -78,7 +95,8 @@ def find_cached(
             and hit.get("notes")
             and hit.get("questions")
             and str(hit.get("llm_model") or "") == str(settings.active_model or "")
-            and int(hit.get("notes_depth") or 0) >= 4
+            and int(hit.get("notes_depth") or 0) >= 5
+            and int(hit.get("focus_bucket") or 0) == bucket
             and str(hit.get("exam_target") or "").strip() == (exam_target or "").strip()
         ):
             return hit
@@ -98,11 +116,13 @@ def find_cached(
             continue
         if (str(data.get("exam_target") or "").strip()) != wanted_exam:
             continue
+        if int(data.get("focus_bucket") or 0) != bucket:
+            continue
         if data.get("analyze_span") != "full":
             continue
         if str(data.get("llm_model") or "") != str(settings.active_model or ""):
             continue
-        if int(data.get("notes_depth") or 0) < 4:
+        if int(data.get("notes_depth") or 0) < 5:
             continue
         if data.get("notes") and data.get("questions"):
             with _index_lock:
@@ -123,7 +143,10 @@ def save(key: str, payload: dict) -> None:
             with _index_lock:
                 _index[
                     _lookup_key(
-                        video_id, payload.get("subject"), payload.get("exam_target")
+                        video_id,
+                        payload.get("subject"),
+                        payload.get("exam_target"),
+                        int(payload.get("focus_bucket") or 0),
                     )
                 ] = key
     except OSError as exc:

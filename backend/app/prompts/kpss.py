@@ -16,8 +16,11 @@ Kurallar:
 - Altyazı bilgiyi eksik veriyorsa notu o kadarıyla yaz; boşluğu tahminle doldurma.
 - Altyazı seçilen dersin konusu değilse (ör. Python, kod, VS Code) o derse ait uydurma not yazma.
 - Tanıtım YASAK: PDF indir, abone ol, beğen, telegram, kitap satışı, kaynak reklamı, kanal
-  tanıtımı, "kolay erişim", "destek ol" gibi satırları not/soru yapma. Bunları yok say.
-- Sadece sınavda çıkacak kavramları yaz (tanım, madde, istisna, yetki, tarih, formül).
+  tanıtımı, "kolay erişim", "destek ol", korsan kitap, indirim kodu, yayınevi övgüsü,
+  sosyal medya eleştirisi, "başarıya koş / sınavı fethet" sloganları, genel motivasyon
+  cümleleri not/soru yapma. Bunları yok say.
+- Sadece sınavda çıkacak kavramları yaz (tanım, madde, istisna, yetki, tarih, formül,
+  dil bilgisi kuralı, örnek cümle analizi). Motivasyon ve "nasıl çalış" meta konuşması not değil.
 - Her not, konunun anlatılmaya başladığı saniyeye bağlanır (tam sayı).
 - Dil: Türkçe, sade ve öğretici. Öğrenciye "sen" diye hitap edebilirsin.
 - Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.

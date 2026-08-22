@@ -132,8 +132,10 @@ from app.security.rate_limit import limiter
 from app.services.youtube import (
     YOUTUBE_ID_RE,
     build_watch_url,
+    extract_start_seconds,
     extract_video_id,
     fetch_transcript_lines,
+    focus_bucket as youtube_focus_bucket,
     format_timestamp_label,
     normalize_transcript_lines,
     pick_content_slice,
@@ -373,6 +375,8 @@ def analyze_video(
         video_id = extract_video_id(video_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    focus_start = extract_start_seconds(video_url)
+    focus_bkt = youtube_focus_bucket(focus_start, SLICE_SECONDS)
     try:
         require_analyze_llm()
     except ConfigurationError as exc:
@@ -445,9 +449,10 @@ def analyze_video(
         subject_meta["subject_type"],
         subject_meta["is_yks_fen_question"],
         rag_service.style_revision(db, exam_target),
+        focus_bucket=focus_bkt,
     )
     cached = cache.load(cache_key) or cache.find_cached(
-        video_id, payload.subject, exam_target
+        video_id, payload.subject, exam_target, focus_bucket=focus_bkt
     )
     if cached:
         return _deliver_cached_analyze(
@@ -460,11 +465,13 @@ def analyze_video(
             exam_target=exam_target,
         )
 
-    canonical_url = build_watch_url(video_id)
+    canonical_url = build_watch_url(
+        video_id, focus_start if focus_start > 0 else None
+    )
     overlay = credit_service.overlay(reservation)
     from app.services import analyze_jobs as jobs
 
-    shared = jobs.find_running(video_id, payload.subject)
+    shared = jobs.find_running(video_id, payload.subject, focus_bucket=focus_bkt)
     if shared:
         status = shared.get("status") or "running"
         notes = shared.get("notes") or []
@@ -491,11 +498,11 @@ def analyze_video(
             exam_target=exam_target,
         )
 
-    leader = claim_work(video_id, payload.subject)
+    leader = claim_work(video_id, payload.subject, focus_bkt)
     if not leader:
-        wait_work(video_id, payload.subject)
+        wait_work(video_id, payload.subject, focus_bucket=focus_bkt)
         cached = cache.load(cache_key) or cache.find_cached(
-            video_id, payload.subject, exam_target
+            video_id, payload.subject, exam_target, focus_bucket=focus_bkt
         )
         if cached:
             return _deliver_cached_analyze(
@@ -507,7 +514,7 @@ def analyze_video(
                 reservation=reservation,
                 exam_target=exam_target,
             )
-        shared = jobs.find_running(video_id, payload.subject)
+        shared = jobs.find_running(video_id, payload.subject, focus_bucket=focus_bkt)
         if shared:
             status = shared.get("status") or "running"
             notes = shared.get("notes") or []
@@ -533,7 +540,7 @@ def analyze_video(
                 subject=payload.subject,
                 exam_target=exam_target,
             )
-        leader = claim_work(video_id, payload.subject)
+        leader = claim_work(video_id, payload.subject, focus_bkt)
         if not leader:
             credit_service.refund(db, user_id, reservation)
             raise _busy_http(
@@ -551,6 +558,7 @@ def analyze_video(
                 subject=payload.subject,
                 chunks_total=1,
                 overlay=overlay,
+                focus_bucket=focus_bkt,
             )
             hold_lock = True
             threading.Thread(
@@ -567,6 +575,8 @@ def analyze_video(
                     cache_key,
                     extra_keys,
                     reservation,
+                    focus_start,
+                    focus_bkt,
                 ),
                 daemon=True,
                 name=f"analyze-{job_id}",
@@ -597,6 +607,8 @@ def analyze_video(
             extra_keys=extra_keys,
             reservation=reservation,
             db=db,
+            focus_start=focus_start,
+            focus_bucket=focus_bkt,
         )
     except ServiceBusyError as exc:
         credit_service.refund(db, user_id, reservation)
@@ -621,7 +633,7 @@ def analyze_video(
         ) from exc
     finally:
         if leader and not hold_lock:
-            release_work(video_id, payload.subject)
+            release_work(video_id, payload.subject, focus_bkt)
 
 
 @app.get("/analyze/jobs/{job_id}", response_model=AnalyzeResponse)
@@ -1760,6 +1772,8 @@ def _analyze_with_lines(
     reservation,
     db: Session,
     job_id: str | None = None,
+    focus_start: int = 0,
+    focus_bucket: int = 0,
 ) -> AnalyzeResponse:
     from app.services import rag as rag_service
     from app.services import analyze_jobs as jobs
@@ -1772,18 +1786,35 @@ def _analyze_with_lines(
     slices = slice_transcript(lines, SLICE_SECONDS)
     if not slices:
         raise ValueError("Bu video için altyazı bulunamadı.")
-    first, remaining_slices = pick_content_slice(slices)
-    llm_data = analyze_slice(
-        first["block"],
-        subject,
-        min(6, question_count),
-        exam_target,
-        subject_meta["subject_type"],
-        subject_meta["is_yks_fen_question"],
-        "",
-        window_label=first["label"],
-        note_count=8,
-    )
+    first, remaining_slices = pick_content_slice(slices, prefer_start=focus_start)
+    candidates = [first, *remaining_slices]
+    llm_data = None
+    chosen_idx = 0
+    last_err: BaseException | None = None
+    for idx, piece in enumerate(candidates[:6]):
+        try:
+            llm_data = analyze_slice(
+                piece["block"],
+                subject,
+                min(6, question_count),
+                exam_target,
+                subject_meta["subject_type"],
+                subject_meta["is_yks_fen_question"],
+                "",
+                window_label=piece["label"],
+                note_count=8,
+            )
+            chosen_idx = idx
+            first = piece
+            break
+        except RuntimeError as exc:
+            last_err = exc
+            continue
+    if llm_data is None:
+        raise last_err or RuntimeError(
+            "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
+        )
+    remaining_slices = candidates[chosen_idx + 1 :]
     try:
         rag_service.ingest_video_signals(
             db,
@@ -1806,7 +1837,11 @@ def _analyze_with_lines(
     from app.services.youtube import slice_promo_ratio
 
     remaining = (
-        [piece for piece in remaining_slices if slice_promo_ratio(piece.get("block") or "") < 0.28]
+        [
+            piece
+            for piece in remaining_slices
+            if slice_promo_ratio(piece.get("block") or "") < 0.22
+        ]
         if (notes or questions)
         else []
     )
@@ -1818,6 +1853,7 @@ def _analyze_with_lines(
             subject=subject,
             chunks_total=1 + len(remaining),
             overlay=overlay,
+            focus_bucket=focus_bucket,
         )
     persona = ai_engine.parse_persona(llm_data.get("teacher_persona")).model_dump()
     done = 1
@@ -1877,7 +1913,9 @@ def _analyze_with_lines(
         ).model_dump()
         dump["analyze_span"] = "full"
         dump["llm_model"] = settings.active_model
-        dump["notes_depth"] = 4
+        dump["notes_depth"] = 5
+        dump["focus_bucket"] = int(focus_bucket or 0)
+        dump["focus_start"] = int(focus_start or 0)
         dump["exam_target"] = exam_target or ""
         for key in extra_keys:
             dump.pop(key, None)
@@ -1909,6 +1947,8 @@ def _fetch_then_analyze_job(
     cache_key: str,
     extra_keys: tuple,
     reservation,
+    focus_start: int = 0,
+    focus_bucket: int = 0,
 ) -> None:
     from app.database.session import SessionLocal
     from app.services import analyze_jobs as jobs
@@ -1939,6 +1979,8 @@ def _fetch_then_analyze_job(
             reservation=reservation,
             db=db,
             job_id=job_id,
+            focus_start=focus_start,
+            focus_bucket=focus_bucket,
         )
         for follower_id, kind in jobs.take_unsettled_followers(job_id):
             try:
@@ -1958,7 +2000,7 @@ def _fetch_then_analyze_job(
             except Exception:
                 logger.exception("Takipçi iadesi başarısız %s", follower_id)
     finally:
-        release_work(video_id, subject)
+        release_work(video_id, subject, focus_bucket)
         db.close()
 
 
@@ -2056,7 +2098,8 @@ def _continue_analyze_job(
         "cached": False,
         "analyze_span": "full",
         "llm_model": settings.active_model,
-        "notes_depth": 4,
+        "notes_depth": 5,
+        "focus_bucket": int(final.get("focus_bucket") or 0),
         "exam_target": exam_target or "",
         "job_id": "",
         "job_status": "done",

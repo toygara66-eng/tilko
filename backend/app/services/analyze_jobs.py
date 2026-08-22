@@ -22,6 +22,7 @@ def create_job(
     subject: str | None,
     chunks_total: int,
     overlay: dict,
+    focus_bucket: int = 0,
 ) -> str:
     job_id = uuid.uuid4().hex
     with _lock:
@@ -31,6 +32,7 @@ def create_job(
             "video_id": video_id,
             "video_url": video_url,
             "subject": subject or "",
+            "focus_bucket": int(focus_bucket or 0),
             "status": "running",
             "chunks_done": 0,
             "chunks_total": max(1, chunks_total),
@@ -48,8 +50,11 @@ def running_count() -> int:
         return sum(1 for job in _JOBS.values() if job.get("status") == "running")
 
 
-def find_running(video_id: str, subject: str | None) -> dict[str, Any] | None:
+def find_running(
+    video_id: str, subject: str | None, focus_bucket: int = 0
+) -> dict[str, Any] | None:
     wanted = (subject or "").strip()
+    bucket = int(focus_bucket or 0)
     with _lock:
         for job in _JOBS.values():
             if job.get("status") != "running":
@@ -57,6 +62,8 @@ def find_running(video_id: str, subject: str | None) -> dict[str, Any] | None:
             if job.get("video_id") != video_id:
                 continue
             if (job.get("subject") or "").strip() != wanted:
+                continue
+            if int(job.get("focus_bucket") or 0) != bucket:
                 continue
             return dict(job)
     return None

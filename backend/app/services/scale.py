@@ -25,8 +25,8 @@ _work_lock = threading.Lock()
 _work_events: dict[str, threading.Event] = {}
 
 
-def work_key(video_id: str, subject: str | None) -> str:
-    return f"{video_id}|{(subject or '').strip().lower()}"
+def work_key(video_id: str, subject: str | None, focus_bucket: int = 0) -> str:
+    return f"{video_id}|{(subject or '').strip().lower()}|f{int(focus_bucket or 0)}"
 
 
 def acquire_llm_slot() -> None:
@@ -52,9 +52,11 @@ def release_llm_slot() -> None:
     _llm_slots.release()
 
 
-def claim_work(video_id: str, subject: str | None) -> bool:
+def claim_work(
+    video_id: str, subject: str | None, focus_bucket: int = 0
+) -> bool:
     """True: sen LLM çalıştır. False: başka biri aynı videoyu çözüyor, bekle."""
-    key = work_key(video_id, subject)
+    key = work_key(video_id, subject, focus_bucket)
     with _work_lock:
         if key in _work_events:
             return False
@@ -62,8 +64,13 @@ def claim_work(video_id: str, subject: str | None) -> bool:
         return True
 
 
-def wait_work(video_id: str, subject: str | None, timeout: float = WORK_WAIT) -> bool:
-    key = work_key(video_id, subject)
+def wait_work(
+    video_id: str,
+    subject: str | None,
+    timeout: float = WORK_WAIT,
+    focus_bucket: int = 0,
+) -> bool:
+    key = work_key(video_id, subject, focus_bucket)
     with _work_lock:
         event = _work_events.get(key)
     if event is None:
@@ -71,8 +78,10 @@ def wait_work(video_id: str, subject: str | None, timeout: float = WORK_WAIT) ->
     return event.wait(timeout)
 
 
-def release_work(video_id: str, subject: str | None) -> None:
-    key = work_key(video_id, subject)
+def release_work(
+    video_id: str, subject: str | None, focus_bucket: int = 0
+) -> None:
+    key = work_key(video_id, subject, focus_bucket)
     with _work_lock:
         event = _work_events.pop(key, None)
     if event is not None:

@@ -42,6 +42,42 @@ def extract_video_id(video_url: str) -> str:
     return candidate
 
 
+_T_COMPOUND_RE = re.compile(
+    r"^(?:(?P<h>\d+)h)?(?:(?P<m>\d+)m)?(?:(?P<s>\d+)s)?$",
+    re.IGNORECASE,
+)
+
+
+def extract_start_seconds(video_url: str) -> int:
+    """YouTube URL'deki t= / start= (örn. t=11348s, t=1h30m) saniyeye çevirir."""
+    parsed = urlparse(str(video_url or "").strip())
+    qs = parse_qs(parsed.query)
+    raw = (qs.get("t") or qs.get("start") or [""])[0].strip()
+    if not raw:
+        frag = (parsed.fragment or "").strip()
+        if frag.lower().startswith("t="):
+            raw = frag[2:].strip()
+    if not raw:
+        return 0
+    if raw.isdigit():
+        return max(0, int(raw))
+    plain = re.fullmatch(r"(\d+)s?", raw, re.IGNORECASE)
+    if plain:
+        return max(0, int(plain.group(1)))
+    compound = _T_COMPOUND_RE.fullmatch(raw)
+    if compound and any(compound.group(g) for g in ("h", "m", "s")):
+        hours = int(compound.group("h") or 0)
+        minutes = int(compound.group("m") or 0)
+        secs = int(compound.group("s") or 0)
+        return max(0, hours * 3600 + minutes * 60 + secs)
+    return 0
+
+
+def focus_bucket(start_seconds: int, window: int = 300) -> int:
+    """Aynı ~5 dk odak için önbellek/iş anahtarı."""
+    return max(0, int(start_seconds or 0)) // max(1, int(window or 300))
+
+
 def format_timestamp_label(seconds: int) -> str:
     minutes, secs = divmod(max(0, seconds), 60)
     hours, minutes = divmod(minutes, 60)
@@ -1207,12 +1243,15 @@ def slice_transcript(lines: list[dict], window_seconds: int = 300) -> list[dict]
 
 _PROMO_LINE_RE = re.compile(
     r"("
-    r"pdf|abone|beğen|bildirim\s*aç|telegram|whatsapp|instagram|discord|"
-    r"ücretsiz\s*pdf|pdf'?i?\s*indir|açıklama\s*link|linke\s*tık|"
-    r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|kitabı\s*alı|"
-    r"kanalıma|abone\s*ol|destek\s*ol|like\s*at|yorum\s*yaz|"
-    r"satın\s*al|sipariş|kampanya|sponsor|reklam\s*ver|"
-    r"kolay\s*erişim|hız\s*kat"
+    r"pdf|abone|beğen|bildirim|telegram|whatsapp|instagram|discord|tiktok|"
+    r"ücretsiz\s*pdf|pdf'?i?\s*indir|açıklama\s*link|linke?\s*tık|"
+    r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|kitabı\s*alı|kitap\s*(tavsiye|öner)|"
+    r"kanalıma|abone\s*ol|destek\s*ol|like\s*at|yorum\s*yaz|subscribe|"
+    r"satın\s*al|sipariş|kampanya|sponsor|reklam|"
+    r"kolay\s*erişim|hız\s*kat|"
+    r"korsan|indirim|yayınevi|yayinevi|promosyon|çekiliş|hediye\s*kod|"
+    r"sosyal\s*medya|eleştiri|pinli\s*yorum|sabitlenmiş|"
+    r"başarıya\s*koş|sınavı\s*fethet|birebir\s*uyumlu"
     r")",
     re.IGNORECASE,
 )
@@ -1227,14 +1266,31 @@ def slice_promo_ratio(block: str) -> float:
     return hits / len(rows)
 
 
-def pick_content_slice(slices: list[dict]) -> tuple[dict, list[dict]]:
-    """İlk analiz için PDF/abone/kitap reklamı dolu dilimi atla; asıl ders dilimini al."""
+def pick_content_slice(
+    slices: list[dict],
+    prefer_start: int | None = None,
+    *,
+    max_promo: float = 0.22,
+) -> tuple[dict, list[dict]]:
+    """URL t= odak + tanıtım dilimi atla; asıl ders dilimini al."""
     if not slices:
         raise ValueError("Bu video için altyazı bulunamadı.")
-    for index, piece in enumerate(slices):
-        if slice_promo_ratio(piece.get("block") or "") < 0.28:
-            return piece, slices[index + 1 :]
-    return slices[0], slices[1:]
+    start_idx = 0
+    focus = int(prefer_start or 0)
+    if focus > 0:
+        for index, piece in enumerate(slices):
+            st = int(piece.get("start") or 0)
+            en = int(piece.get("end") or st)
+            if en >= focus or st >= focus:
+                start_idx = index
+                break
+        else:
+            start_idx = len(slices) - 1
+    pool = slices[start_idx:]
+    for offset, piece in enumerate(pool):
+        if slice_promo_ratio(piece.get("block") or "") < max_promo:
+            return piece, pool[offset + 1 :]
+    return pool[0], pool[1:]
 
 
 def compact_transcript(lines: list[dict], max_chars: int = 28000) -> str:

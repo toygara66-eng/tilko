@@ -441,10 +441,15 @@ def _fold_tr(text: str) -> str:
 
 _PROMO_NOTE_RE = re.compile(
     r"("
-    r"pdf|abone|beğen|telegram|whatsapp|instagram|"
+    r"pdf|abone|beğen|telegram|whatsapp|instagram|discord|"
     r"ücretsiz\s*pdf|pdf'?i?\s*indir|kolay\s*erişim|destek\s*ol|"
     r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|hız\s*kat|"
-    r"kanalıma|satın\s*al|sipariş|kampanya|sponsor"
+    r"kanalıma|satın\s*al|sipariş|kampanya|sponsor|"
+    r"korsan|indirim\s*kod|yayınevi|yayinevi|sosyal\s*medya|"
+    r"başarıya\s*koş|sınavı\s*fethet|birebir\s*uyumlu|"
+    r"eleştirel\s*düşünme\s*beceri|farklı\s*kaynaklardan\s*bilgi|"
+    r"doğru\s*kaynakları\s*seç|zaman\s*yönetimi\s*çok\s*önemli|"
+    r"genel\s*tekrar|lisans\s*hedefi"
     r")",
     re.IGNORECASE,
 )
@@ -1536,13 +1541,18 @@ def _analyze_combined(
         )
     )
     notes = _ground_notes(_coerce_notes(result), chunk)
+    questions: list[dict] = []
+    seen: set[str] = set()
+    _collect([result], questions, seen, count)
+    questions = _ground_questions(questions, chunk)
     if not notes:
         logger.warning("Birleşik analiz boş not döndü; kısa not denemesi.")
         result = _as_dict(
             _chat(
                 NOTES_SYSTEM_PROMPT
                 + "\nKısa Türkçe sınav notu yaz. Sadece JSON. notes boş olamaz. "
-                "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça.",
+                "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça. "
+                "Tanıtım, korsan kitap, indirim, abone, kaynak reklamı YASAK.",
                 (
                     f"Ders: {subject or 'KPSS'}\nAltyazı:\n{chunk[:4000]}\n\n"
                     "En az 3 not yaz. Şema: "
@@ -1554,14 +1564,26 @@ def _analyze_combined(
             )
         )
         notes = _ground_notes(_coerce_notes(result), chunk)
+        _collect([result], questions, seen, count)
+        questions = _ground_questions(questions, chunk)
     if not notes:
         raise RuntimeError(
             "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
         )
-    questions: list[dict] = []
-    seen: set[str] = set()
-    _collect([result], questions, seen, count)
-    questions = _ground_questions(questions, chunk)
+    if len(questions) < max(2, count // 2):
+        try:
+            more = generate_questions(
+                notes,
+                subject,
+                count,
+                persona=None,
+                exam_target=exam_target,
+                subject_type=subject_type,
+                is_yks_fen_question=is_yks_fen_question,
+            )
+            _collect([{"questions": more}], questions, seen, count)
+        except Exception:
+            logger.exception("Dilim soru tamamlaması başarısız")
     persona = merge_personas([result.get("teacher_persona")])
     return {
         "notes": notes,
