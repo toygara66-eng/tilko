@@ -1,11 +1,20 @@
+import json
+import logging
 import re
 from math import ceil
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 from youtube_transcript_api import YouTubeTranscriptApi
 
 
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+logger = logging.getLogger(__name__)
+WATCH_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+PLAYER_URL = "https://www.youtube.com/youtubei/v1/player"
 
 
 def extract_video_id(video_url: str) -> str:
@@ -58,14 +67,29 @@ def fetch_transcript_lines(video_id: str) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker (TR tercih, yoksa mevcut ilk dil)."""
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_fetch_transcript_lines_inner, video_id)
-        try:
-            return future.result(timeout=25)
-        except FuturesTimeout as exc:
-            raise ValueError(
-                "YouTube altyazısı gecikti. Linki kontrol edip tekrar dene."
-            ) from exc
+    errors: list[str] = []
+    for fetcher in (
+        _fetch_transcript_lines_inner,
+        _fetch_via_innertube,
+        _fetch_via_watch_html,
+    ):
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(fetcher, video_id)
+            try:
+                lines = future.result(timeout=18)
+            except FuturesTimeout:
+                errors.append(f"{fetcher.__name__}: timeout")
+                continue
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{fetcher.__name__}: {exc}")
+                continue
+        if lines:
+            return lines
+        errors.append(f"{fetcher.__name__}: boş")
+    logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
+    raise ValueError(
+        "YouTube altyazısı alınamadı. Videoda altyazı açık olsun, başka bir ders dene."
+    )
 
 
 def _fetch_transcript_lines_inner(video_id: str) -> list[dict]:
@@ -82,8 +106,112 @@ def _fetch_transcript_lines_inner(video_id: str) -> list[dict]:
     for snippet in transcript:
         start = int(float(_snippet_field(snippet, "start", 0)))
         text = str(_snippet_field(snippet, "text", "")).replace("\n", " ").strip()
-        lines.append({"start": start, "text": text})
+        if text:
+            lines.append({"start": start, "text": text})
     return lines
+
+
+def _pick_caption_track(tracks: list[dict]) -> dict | None:
+    if not tracks:
+        return None
+    for lang in ("tr", "tr-TR"):
+        for track in tracks:
+            code = str(track.get("languageCode") or "").lower()
+            if code == lang.lower() or code.startswith("tr"):
+                return track
+    return tracks[0]
+
+
+def _lines_from_json3(payload: dict) -> list[dict]:
+    lines: list[dict] = []
+    for event in payload.get("events") or []:
+        if not isinstance(event, dict):
+            continue
+        segs = event.get("segs") or []
+        text = " ".join(
+            str(seg.get("utf8") or "").replace("\n", " ").strip()
+            for seg in segs
+            if isinstance(seg, dict)
+        ).strip()
+        if not text:
+            continue
+        start_ms = event.get("tStartMs") or 0
+        lines.append({"start": int(float(start_ms) / 1000), "text": text})
+    return lines
+
+
+def _download_caption(base_url: str) -> list[dict]:
+    url = base_url
+    if "fmt=" not in url:
+        url += ("&" if "?" in url else "?") + "fmt=json3"
+    response = httpx.get(
+        url,
+        headers={"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
+        timeout=18,
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Altyazı biçimi okunamadı.")
+    return _lines_from_json3(data)
+
+
+def _fetch_via_innertube(video_id: str) -> list[dict]:
+    payload = {
+        "context": {
+            "client": {
+                "clientName": "WEB",
+                "clientVersion": "2.20240815.00.00",
+                "hl": "tr",
+                "gl": "TR",
+            }
+        },
+        "videoId": video_id,
+    }
+    response = httpx.post(
+        PLAYER_URL,
+        json=payload,
+        headers={"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
+        timeout=18,
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    data = response.json()
+    tracks = (
+        data.get("captions", {})
+        .get("playerCaptionsTracklistRenderer", {})
+        .get("captionTracks")
+        or []
+    )
+    track = _pick_caption_track(tracks)
+    if not track or not track.get("baseUrl"):
+        raise ValueError("Bu video için altyazı bulunamadı.")
+    return _download_caption(str(track["baseUrl"]))
+
+
+def _fetch_via_watch_html(video_id: str) -> list[dict]:
+    watch = httpx.get(
+        f"https://www.youtube.com/watch?v={video_id}&hl=tr",
+        headers={"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
+        timeout=18,
+        follow_redirects=True,
+    )
+    watch.raise_for_status()
+    match = re.search(r"ytInitialPlayerResponse\s*=\s*(\{.+?\});\s*(?:var|</script>)", watch.text)
+    if not match:
+        raise ValueError("YouTube oynatıcı yanıtı okunamadı.")
+    data = json.loads(match.group(1))
+    tracks = (
+        data.get("captions", {})
+        .get("playerCaptionsTracklistRenderer", {})
+        .get("captionTracks")
+        or []
+    )
+    track = _pick_caption_track(tracks)
+    if not track or not track.get("baseUrl"):
+        raise ValueError("Bu video için altyazı bulunamadı.")
+    return _download_caption(str(track["baseUrl"]))
 
 
 def transcript_as_prompt_block(lines: list[dict]) -> str:

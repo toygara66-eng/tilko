@@ -758,7 +758,21 @@ JSON:
 }}
 """
     try:
-        data = complete_json(diagnostic_system(title, exam_target), prompt, temperature=0.5, task="diagnostic")
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                complete_json,
+                diagnostic_system(title, exam_target),
+                prompt,
+                0.5,
+                "diagnostic",
+            )
+            try:
+                data = future.result(timeout=12)
+            except FuturesTimeout as exc:
+                logger.warning("Teşhis LLM 12sn aştı, yerelde özetlendi: %s", exc)
+                return fallback_summary(graded, checkup=False, previous=None, title=title)
     except Exception as exc:
         logger.warning("Teşhis LLM düştü, yerelde özetlendi: %s", exc)
         return fallback_summary(graded, checkup=False, previous=None, title=title)
@@ -799,7 +813,20 @@ JSON:
 }}
 """
     try:
-        data = complete_json(diagnostic_system(title, exam_target), prompt, temperature=0.5, task="checkup")
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                complete_json,
+                diagnostic_system(title, exam_target),
+                prompt,
+                0.5,
+                "checkup",
+            )
+            try:
+                data = future.result(timeout=12)
+            except FuturesTimeout:
+                data = {}
     except Exception as exc:
         logger.warning("Check-up LLM düştü, yerelde özetlendi: %s", exc)
         local = fallback_summary(graded, checkup=True, previous=previous, title=title)
@@ -968,7 +995,11 @@ def submit_baseline(db: Session, user_id: str, answers: list[dict]) -> dict:
     from app.services.exams import exam_of
 
     exam_target = exam_of(db, user_id)
-    analysis = llm_baseline(graded, title, exam_target)
+    try:
+        analysis = llm_baseline(graded, title, exam_target)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Teşhis özeti yerelde üretildi: %s", exc)
+        analysis = fallback_summary(graded, checkup=False, previous=None, title=title)
     user = get_or_create_user(db, user_id)
     user.is_tested = True
     user.baseline_score = float(graded["score"])

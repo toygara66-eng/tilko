@@ -51,15 +51,16 @@ export async function probeIntegrity(): Promise<"ok" | "pirate"> {
   if (previewTrap()) return "pirate";
 
   if (nativeAndroid() && !window.TilkoIntegrity) {
-    for (let i = 0; i < 10; i += 1) {
-      await sleep(80);
+    for (let i = 0; i < 25; i += 1) {
+      await sleep(100);
       if (window.TilkoIntegrity) break;
     }
   }
 
   const bridge = window.TilkoIntegrity;
   if (!bridge) {
-    return nativeAndroid() ? "pirate" : "ok";
+    // Köprü henüz yoksa tuzak açma — debug APK ve ilk boyama korsan değil.
+    return "ok";
   }
 
   try {

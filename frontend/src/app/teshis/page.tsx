@@ -75,7 +75,21 @@ export default function TeshisPage() {
               8 soru. Ana sayfaya buradan geçersin.
             </p>
           </div>
-          {error ? <p className="text-sm text-red-500">{error}</p> : null}
+          {error ? (
+            <div className="space-y-3">
+              <p className="text-sm text-red-500">{error}</p>
+              <Button
+                type="button"
+                className="h-12 w-full"
+                onClick={() => {
+                  apply({ isTested: true });
+                  router.replace("/");
+                }}
+              >
+                Av’a geç
+              </Button>
+            </div>
+          ) : null}
           {report ? (
             <div className="space-y-4">
               <p className="text-base leading-relaxed text-zinc-800 dark:text-zinc-100">
@@ -113,7 +127,9 @@ export default function TeshisPage() {
                 </div>
               ) : null}
               <Button asChild className="h-12 w-full">
-                <Link href="/">Av’a geç</Link>
+                <Link href="/" onClick={() => apply({ isTested: true })}>
+                  Av’a geç
+                </Link>
               </Button>
             </div>
           ) : questions.length ? (

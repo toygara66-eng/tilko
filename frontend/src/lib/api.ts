@@ -663,6 +663,7 @@ export function submitDiagnostic(
   return request<DiagnosticReport>("/diagnostic/submit", {
     method: "POST",
     body: JSON.stringify({ user_id: userId, answers }),
+    signal: AbortSignal.timeout(25_000),
   });
 }
 
