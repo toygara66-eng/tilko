@@ -13,9 +13,15 @@ services:
       - key: APP_ENV
         value: production
       - key: LLM_PROVIDER
-        value: cerebras
+        value: nebius
       - key: LLM_FALLBACK
-        value: groq
+        value: cerebras
+      - key: NEBIUS_MODEL
+        value: google/gemma-3-27b-it
+      - key: NEBIUS_BASE_URL
+        value: https://api.tokenfactory.nebius.com/v1/
+      - key: NEBIUS_API_KEY
+        sync: false
       - key: GROQ_MODEL
         value: llama-3.1-8b-instant
       - key: OPENROUTER_MODEL

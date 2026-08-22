@@ -22,14 +22,17 @@ class Settings(BaseSettings):
     cerebras_api_key: str = ""
     cerebras_model: str = "gemma-4-31b"
     cerebras_base_url: str = "https://api.cerebras.ai/v1"
+    nebius_api_key: str = ""
+    nebius_model: str = "google/gemma-3-27b-it"
+    nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1/"
     openrouter_api_key: str = ""
     openrouter_model: str = "nvidia/nemotron-3-nano-30b-a3b:free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "gemma2:9b"
     ollama_num_ctx: int = 8192
-    llm_provider: str = "cerebras"
-    llm_fallback: str = "groq"
+    llm_provider: str = "nebius"
+    llm_fallback: str = "cerebras"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     capture_training_data: bool = False
@@ -69,16 +72,16 @@ class Settings(BaseSettings):
             return model
         if self.llm_provider == "cerebras":
             return self.cerebras_model
+        if self.llm_provider == "nebius":
+            return self.nebius_model
         if self.llm_provider == "openrouter":
             return self.openrouter_model
         return self.openai_model
 
     @property
     def is_tight_free_tier(self) -> bool:
-        """Ücretsiz katmanlarda istek boyutu ve paralellik kısılır."""
-        if self.llm_provider == "groq":
-            return True
-        if self.llm_provider == "cerebras":
+        """Ücretsiz / dar kota katmanlarında istek boyutu ve paralellik kısılır."""
+        if self.llm_provider in {"groq", "cerebras", "nebius"}:
             return True
         if self.llm_provider == "openrouter":
             return self.openrouter_model.endswith(":free")

@@ -187,6 +187,7 @@ def health() -> dict:
     body = {
         "status": "ok" if (not settings.is_production or llm["ready"]) else "degraded",
         "llm_ready": bool(llm["ready"]),
+        "nebius": bool(llm.get("nebius")),
         "groq": bool(llm["groq"]),
         "cerebras": bool(llm["cerebras"]),
     }

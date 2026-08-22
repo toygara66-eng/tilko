@@ -141,6 +141,15 @@ def _client() -> tuple[OpenAI, str]:
             )
         return pair
 
+    if settings.llm_provider == "nebius":
+        pair = _nebius_client(timeout=LLM_HTTP_TIMEOUT)
+        if not pair:
+            raise ConfigurationError(
+                "NEBIUS_API_KEY tanımlı değil. tokenfactory.nebius.com adresinden "
+                "anahtar al (yeni hesapta genelde deneme kredisi var)."
+            )
+        return pair
+
     if settings.llm_provider == "openrouter":
         if _chain_index > 0:
             pair = _fast_analyze_client()
@@ -686,6 +695,24 @@ def _cerebras_client(timeout=None) -> tuple[OpenAI, str] | None:
     )
 
 
+def _nebius_client(timeout=None) -> tuple[OpenAI, str] | None:
+    key = (settings.nebius_api_key or "").strip()
+    if not key:
+        return None
+    model = (settings.nebius_model or "").strip() or "google/gemma-3-27b-it"
+    base = (settings.nebius_base_url or "").strip() or "https://api.tokenfactory.nebius.com/v1/"
+    if not base.endswith("/"):
+        base += "/"
+    return (
+        _openai_client(
+            api_key=key,
+            base_url=base,
+            timeout=timeout or ANALYZE_HTTP_TIMEOUT,
+        ),
+        model,
+    )
+
+
 def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
     key = (settings.openrouter_api_key or "").strip()
     if not key or _skip_openrouter:
@@ -705,15 +732,17 @@ def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
 
 
 def _provider_chain() -> list[str]:
-    """En ucuz yol: Cerebras (1M jeton/gün) → Groq. Fatura yok."""
-    preferred = (settings.llm_provider or "cerebras").strip().lower()
-    free = ["cerebras", "groq"]
-    if preferred in free:
-        return [preferred] + [name for name in free if name != preferred]
-    return list(free)
+    """Nebius birincil; kota/kredi bitince Cerebras → Groq."""
+    preferred = (settings.llm_provider or "nebius").strip().lower()
+    chain = ["nebius", "cerebras", "groq"]
+    if preferred in chain:
+        return [preferred] + [name for name in chain if name != preferred]
+    return list(chain)
 
 
 def _named_client(name: str) -> tuple[OpenAI, str] | None:
+    if name == "nebius":
+        return _nebius_client()
     if name == "groq":
         return _groq_fast_client()
     if name == "cerebras":
@@ -737,16 +766,23 @@ def _named_client(name: str) -> tuple[OpenAI, str] | None:
 
 
 def analyze_llm_ready() -> dict[str, bool | str]:
-    """Render env kontrolü: analiz için Groq veya Cerebras şart."""
+    """Render env: Nebius / Cerebras / Groq."""
+    nebius = bool((settings.nebius_api_key or "").strip())
     groq = bool((settings.groq_api_key or "").strip())
     cerebras = bool((settings.cerebras_api_key or "").strip())
+    model = ""
+    if nebius:
+        model = (settings.nebius_model or "").strip() or "google/gemma-3-27b-it"
+    elif cerebras:
+        model = (settings.cerebras_model or "").strip() or "gemma-4-31b"
+    elif groq:
+        model = _normalize_groq_model(settings.groq_model)
     return {
+        "nebius": nebius,
         "groq": groq,
         "cerebras": cerebras,
-        "ready": groq or cerebras,
-        "model": _normalize_groq_model(settings.groq_model) if groq else (
-            (settings.cerebras_model or "gemma-4-31b") if cerebras else ""
-        ),
+        "ready": nebius or groq or cerebras,
+        "model": model,
     }
 
 
@@ -755,9 +791,8 @@ def require_analyze_llm() -> None:
     if status["ready"]:
         return
     raise ConfigurationError(
-        "Analiz için Render'da CEREBRAS_API_KEY veya GROQ_API_KEY gerekli. "
-        "En ucuz yol: cloud.cerebras.ai (günde 1M jeton) + console.groq.com yedek. "
-        "OpenRouter/Gemini kullanılmıyor."
+        "Analiz için NEBIUS_API_KEY (önerilen) veya CEREBRAS_API_KEY / GROQ_API_KEY gerekli. "
+        "Nebius: tokenfactory.nebius.com — anahtarı Render Environment'a yaz."
     )
 
 
@@ -783,6 +818,11 @@ def _is_openrouter_client(client: OpenAI) -> bool:
 def _is_cerebras_client(client: OpenAI) -> bool:
     base = str(getattr(client, "base_url", "") or "")
     return "cerebras.ai" in base
+
+
+def _is_nebius_client(client: OpenAI) -> bool:
+    base = str(getattr(client, "base_url", "") or "")
+    return "nebius.com" in base or "nebius.ai" in base
 
 
 def _rotate_openrouter(exc: Exception) -> bool:
@@ -832,7 +872,8 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
             _active_name = name
             return pair
     raise ConfigurationError(
-        "GROQ_API_KEY / CEREBRAS_API_KEY tanımlı değil. Render Environment'a ekle."
+        "NEBIUS_API_KEY / CEREBRAS_API_KEY / GROQ_API_KEY tanımlı değil. "
+        "Render Environment'a NEBIUS_API_KEY ekle (tokenfactory.nebius.com)."
     )
 
 

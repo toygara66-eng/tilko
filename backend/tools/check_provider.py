@@ -26,6 +26,7 @@ MODEL_FIELDS = {
     "gemini": "gemini_model",
     "groq": "groq_model",
     "cerebras": "cerebras_model",
+    "nebius": "nebius_model",
     "openrouter": "openrouter_model",
     "huggingface": "hf_model",
     "ollama": "ollama_model",
@@ -42,7 +43,7 @@ ORNEK_ALTYAZI = (
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", help="Bu çalıştırma için modeli geçici olarak değiştirir")
-    parser.add_argument("--provider", help="openai | gemini | groq | openrouter | huggingface | ollama")
+    parser.add_argument("--provider", help="nebius | cerebras | groq | openrouter | gemini | huggingface | ollama")
     args = parser.parse_args()
 
     if args.provider:
