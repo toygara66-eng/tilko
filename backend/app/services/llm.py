@@ -38,10 +38,6 @@ ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-3.6-flash"
-GEMINI_CHAT_MODELS = (
-    "gemini-3.6-flash",
-    "gemini-2.5-flash",
-)
 OPENROUTER_FREE_MODELS = (
     "nvidia/nemotron-3-nano-30b-a3b:free",
     "nvidia/nemotron-3.5-lightning:free",
@@ -479,11 +475,7 @@ def _gemini_model_id() -> str:
 
 
 def _gemini_models_to_try() -> list[str]:
-    ordered: list[str] = []
-    for name in (GEMINI_CHAT_MODEL, (settings.gemini_model or "").strip(), *GEMINI_CHAT_MODELS):
-        if name and name not in ordered:
-            ordered.append(name)
-    return ordered
+    return [GEMINI_CHAT_MODEL]
 
 
 def _is_gemini_client(client: OpenAI) -> bool:
@@ -559,9 +551,10 @@ def _gemini_native_completion(
                 last = exc
                 continue
         if response.status_code == 404:
-            last = RuntimeError(f"{name} bu anahtarda yok")
-            logger.warning("Gemini model yok: %s", name)
-            continue
+            raise ConfigurationError(
+                "GEMINI_MODEL=gemini-3.6-flash bu anahtarda yok. "
+                "Google AI Studio'da 3.6 Flash'i aç veya anahtarı yenile."
+            )
         if not response.is_success:
             last = RuntimeError(f"{name}: {response.status_code} {response.text[:240]}")
             logger.warning("Gemini %s reddetti: %s", name, response.status_code)

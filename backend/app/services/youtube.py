@@ -1099,17 +1099,7 @@ def _fetch_via_llm_youtube(
                     break
 
     if gemini_key:
-        models = []
-        preferred = (settings.gemini_model or "").strip()
-        for name in (
-            "gemini-3.6-flash",
-            preferred,
-            "gemini-2.5-flash",
-            "gemini-flash-lite-latest",
-        ):
-            if name and name not in models:
-                models.append(name)
-        for model in models:
+        for model in ("gemini-3.6-flash",):
             try:
                 text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
                 lines = _lines_from_model_transcript(text)
