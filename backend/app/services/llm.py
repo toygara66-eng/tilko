@@ -56,7 +56,8 @@ _provider_lock = threading.Lock()
 _skip_openrouter = False
 _openrouter_free_only = False
 _skip_gemini = False
-_credit_stage = 0
+_chain_index = 0
+_active_name = ""
 RETRY_AFTER_RE = re.compile(
     r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<mins>\d+)m(?!s))?\s*(?P<num>[\d.]+)\s*(?P<unit>ms|s)",
     re.IGNORECASE,
@@ -131,17 +132,18 @@ def _client() -> tuple[OpenAI, str]:
             settings.groq_model,
         )
 
+    if settings.llm_provider == "cerebras":
+        pair = _cerebras_client(timeout=LLM_HTTP_TIMEOUT)
+        if not pair:
+            raise ConfigurationError(
+                "CEREBRAS_API_KEY tanımlı değil. cloud.cerebras.ai adresinden "
+                "ücretsiz anahtar al (kart istemez, günde ~1M jeton)."
+            )
+        return pair
+
     if settings.llm_provider == "openrouter":
-        if _skip_openrouter:
-            pair = None
-            if _credit_stage == 1:
-                pair = _groq_fast_client()
-            elif _credit_stage == 2 and not _skip_gemini:
-                pair = _gemini_client(timeout=LLM_HTTP_TIMEOUT)
-            else:
-                pair = _groq_fast_client() or (
-                    None if _skip_gemini else _gemini_client(timeout=LLM_HTTP_TIMEOUT)
-                )
+        if _chain_index > 0:
+            pair = _fast_analyze_client()
             if pair:
                 return pair
         if not settings.openrouter_api_key:
@@ -209,18 +211,13 @@ def _fatal_message(raw: str) -> str | None:
             )
         )
     ):
-        if not (settings.gemini_api_key or "").strip():
+        if _chain_index > 0:
             return (
-                "OpenRouter kredin bitmiş. Render ortamına GEMINI_API_KEY ekle "
-                "(Google AI Studio) ve GEMINI_MODEL=gemini-3.6-flash olsun."
-            )
-        if _credit_stage >= 1:
-            return (
-                "OpenRouter kredin bitmiş. Gemini yedeği (gemini-3.6-flash) de "
-                "yanıt vermedi."
+                "Ücretsiz yedekler de yanıt vermedi. Groq (console.groq.com) ve "
+                "Cerebras (cloud.cerebras.ai, günde 1M jeton) anahtarlarını Render'a ekle."
             )
         return (
-            "OpenRouter kredin bitmiş. Gemini yedeği (gemini-3.6-flash) deneniyor."
+            "OpenRouter kredin bitmiş. Groq/Cerebras yedeğine geçiliyor."
         )
     if "tokens per day" in text or ("per day" in text and settings.llm_provider == "groq"):
         # Rolling TPD: 'try again in 5m' ise beklemek yeterli; saatlerceyse gerçekten bitti.
@@ -620,7 +617,7 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
     key = (settings.groq_api_key or "").strip()
     if not key:
         return None
-    model = settings.groq_model or "openai/gpt-oss-20b"
+    model = (settings.groq_model or "").strip() or "llama-3.1-8b-instant"
     if "gpt-oss-120b" in model:
         model = model.replace("gpt-oss-120b", "gpt-oss-20b")
     return (
@@ -631,6 +628,69 @@ def _groq_fast_client() -> tuple[OpenAI, str] | None:
         ),
         model,
     )
+
+
+def _cerebras_client(timeout=None) -> tuple[OpenAI, str] | None:
+    key = (settings.cerebras_api_key or "").strip()
+    if not key:
+        return None
+    model = (settings.cerebras_model or "").strip() or "gemma-4-31b"
+    return (
+        _openai_client(
+            api_key=key,
+            base_url=settings.cerebras_base_url or "https://api.cerebras.ai/v1",
+            timeout=timeout or ANALYZE_HTTP_TIMEOUT,
+        ),
+        model,
+    )
+
+
+def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
+    key = (settings.openrouter_api_key or "").strip()
+    if not key or _skip_openrouter:
+        return None
+    return (
+        _openai_client(
+            api_key=key,
+            base_url=settings.openrouter_base_url,
+            timeout=ANALYZE_HTTP_TIMEOUT,
+            default_headers={
+                "HTTP-Referer": "https://tilko.site",
+                "X-Title": _ascii_header("TILKO"),
+            },
+        ),
+        _openrouter_fast_model(),
+    )
+
+
+def _provider_chain() -> list[str]:
+    primary = (settings.llm_provider or "groq").strip().lower()
+    rest = ["groq", "cerebras", "openrouter", "gemini"]
+    ordered = [primary] + [name for name in rest if name != primary]
+    return ordered
+
+
+def _named_client(name: str) -> tuple[OpenAI, str] | None:
+    if name == "groq":
+        return _groq_fast_client()
+    if name == "cerebras":
+        return _cerebras_client()
+    if name == "openrouter":
+        return _openrouter_analyze_client()
+    if name == "gemini":
+        return None if _skip_gemini else _gemini_client()
+    if name == "huggingface":
+        if not (settings.hf_api_key or "").strip():
+            return None
+        return (
+            _openai_client(api_key=settings.hf_api_key, base_url=settings.hf_base_url),
+            settings.hf_model,
+        )
+    if name == "openai":
+        if not (settings.openai_api_key or "").strip():
+            return None
+        return _openai_client(api_key=settings.openai_api_key), "gpt-4o-mini"
+    return None
 
 
 def _openrouter_fast_model() -> str:
@@ -652,6 +712,11 @@ def _is_openrouter_client(client: OpenAI) -> bool:
     return "openrouter.ai" in base
 
 
+def _is_cerebras_client(client: OpenAI) -> bool:
+    base = str(getattr(client, "base_url", "") or "")
+    return "cerebras.ai" in base
+
+
 def _rotate_openrouter(exc: Exception) -> bool:
     raw = str(exc).lower()
     return (
@@ -665,58 +730,43 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _activate_credit_fallback() -> bool:
-    """Kota bitince Groq, Gemini kotası yoksa Gemini dene."""
-    global _skip_openrouter, _openrouter_free_only, _skip_gemini, _credit_stage
+    """Kota bitince sıradaki ücretsiz sağlayıcıya geç (Groq → Cerebras)."""
+    global _skip_openrouter, _openrouter_free_only, _skip_gemini, _chain_index, _active_name
     with _provider_lock:
         _openrouter_free_only = True
-        if _credit_stage < 1:
-            if _groq_fast_client():
-                _credit_stage = 1
-                _skip_openrouter = True
-                logger.warning("OpenRouter/Gemini kotası yok; Groq yedeğine geçiliyor.")
+        chain = _provider_chain()
+        _chain_index += 1
+        while _chain_index < len(chain):
+            name = chain[_chain_index]
+            if name == "openrouter":
+                _skip_openrouter = False
+            if name == "gemini" and _skip_gemini:
+                _chain_index += 1
+                continue
+            pair = _named_client(name)
+            if pair:
+                if name != "openrouter":
+                    _skip_openrouter = True
+                _active_name = name
+                logger.warning("Yedek sağlayıcı: %s / %s", name, pair[1])
                 return True
-            _credit_stage = 1
-        if _credit_stage < 2:
-            if _gemini_client() and not _skip_gemini:
-                _credit_stage = 2
-                _skip_openrouter = True
-                logger.warning(
-                    "Groq yok veya düştü; Gemini yedeğine geçiliyor (%s).",
-                    GEMINI_CHAT_MODEL,
-                )
-                return True
-            _credit_stage = 2
-        _credit_stage = 3
+            _chain_index += 1
         _skip_gemini = True
         return False
 
 
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
-    """Video analizi LLM_PROVIDER yolunu izler; düşünme modelini kullanmaz."""
-    if _credit_stage == 1:
-        return _groq_fast_client()
-    if _credit_stage == 2:
-        return None if _skip_gemini else _gemini_client()
-    if settings.openrouter_api_key and not _skip_openrouter:
-        return (
-            _openai_client(
-                api_key=settings.openrouter_api_key,
-                base_url=settings.openrouter_base_url,
-                timeout=ANALYZE_HTTP_TIMEOUT,
-                default_headers={
-                    "HTTP-Referer": "https://tilko.site",
-                    "X-Title": _ascii_header("TILKO"),
-                },
-            ),
-            _openrouter_fast_model(),
-        )
-    pair = _gemini_client() if not _skip_gemini else None
-    if pair:
-        return pair
-    pair = _groq_fast_client()
-    if pair:
-        return pair
+    """Analiz: LLM_PROVIDER, olmazsa Groq / Cerebras. OpenRouter anahtarı yolu ele geçirmez."""
+    global _active_name
+    chain = _provider_chain()
+    start = max(0, min(_chain_index, len(chain) - 1))
+    for name in chain[start:]:
+        pair = _named_client(name)
+        if pair:
+            _active_name = name
+            return pair
     if settings.openai_api_key:
+        _active_name = "openai"
         return (
             _openai_client(
                 api_key=settings.openai_api_key,
@@ -761,7 +811,8 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
     if fast:
         kwargs["max_tokens"] = 7000
     if json_mode and not str(model or "").endswith(":free"):
-        kwargs["response_format"] = {"type": "json_object"}
+        if not _is_cerebras_client(client):
+            kwargs["response_format"] = {"type": "json_object"}
     if extra:
         kwargs["extra_body"] = extra
     if _is_gemini_client(client) or str(model or "").startswith("gemini-"):
@@ -786,6 +837,24 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
                     if not _rotate_openrouter(retry_exc):
                         raise
             raise last
+        if _active_name == "groq" and (
+            "model_not_found" in text or "error code: 404" in text
+        ):
+            last = exc
+            for candidate in (
+                "llama-3.1-8b-instant",
+                "llama-3.3-70b-versatile",
+                "openai/gpt-oss-20b",
+            ):
+                if candidate == kwargs.get("model"):
+                    continue
+                kwargs["model"] = candidate
+                logger.warning("Groq model kaydırıldı: %s", candidate)
+                try:
+                    return client.chat.completions.create(**kwargs)
+                except Exception as retry_exc:
+                    last = retry_exc
+            raise last
         raise
 
 
@@ -799,10 +868,10 @@ def _chat_openai_compatible(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    free = str(_openrouter_fast_model() if settings.llm_provider == "openrouter" else "").endswith(
+    free = str(_openrouter_fast_model() if _active_name == "openrouter" else "").endswith(
         ":free"
     )
-    use_json = (not free) or _credit_stage == 2 or settings.llm_provider == "gemini"
+    use_json = (not free) and _active_name not in {"cerebras"}
     try:
         response = _openai_create(messages, temperature, json_mode=use_json)
     except Exception as exc:
@@ -828,7 +897,7 @@ def _chat_openai_compatible(
 
 def _throttle_groq() -> None:
     """Ücretsiz katmanda 8K TPM var; çağrılar arasında yer açılmazsa 429 yağar."""
-    if settings.llm_provider != "groq" and _credit_stage != 1:
+    if _active_name != "groq" and settings.llm_provider != "groq":
         return
     global _groq_next_ok
     with _groq_gate:
@@ -848,7 +917,7 @@ def _chat(
     task: str = "genel",
 ) -> dict:
     """Kota/geçici hatalarda artan bekleme ile yeniden dener."""
-    global _skip_gemini, _credit_stage
+    global _skip_gemini, _chain_index
     last_error: Exception | None = None
     attempt = 0
     task_token = usage_task.set(task or "genel")
@@ -871,8 +940,6 @@ def _chat(
                 if fatal:
                     if _is_gemini_quota_error(str(exc)):
                         _skip_gemini = True
-                        if _credit_stage < 1:
-                            _credit_stage = 1
                     if _activate_credit_fallback():
                         continue
                     raise QuotaExhaustedError(fatal) from exc

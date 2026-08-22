@@ -25,6 +25,7 @@ MODEL_FIELDS = {
     "openai": "openai_model",
     "gemini": "gemini_model",
     "groq": "groq_model",
+    "cerebras": "cerebras_model",
     "openrouter": "openrouter_model",
     "huggingface": "hf_model",
     "ollama": "ollama_model",

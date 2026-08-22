@@ -17,8 +17,11 @@ class Settings(BaseSettings):
     hf_model: str = "openai/gpt-oss-120b"
     hf_base_url: str = "https://router.huggingface.co/v1"
     groq_api_key: str = ""
-    groq_model: str = "openai/gpt-oss-120b"
+    groq_model: str = "llama-3.1-8b-instant"
     groq_base_url: str = "https://api.groq.com/openai/v1"
+    cerebras_api_key: str = ""
+    cerebras_model: str = "gemma-4-31b"
+    cerebras_base_url: str = "https://api.cerebras.ai/v1"
     openrouter_api_key: str = ""
     openrouter_model: str = "nvidia/nemotron-3-nano-30b-a3b:free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -61,6 +64,8 @@ class Settings(BaseSettings):
             return self.hf_model
         if self.llm_provider == "groq":
             return self.groq_model
+        if self.llm_provider == "cerebras":
+            return self.cerebras_model
         if self.llm_provider == "openrouter":
             return self.openrouter_model
         return self.openai_model
@@ -69,6 +74,8 @@ class Settings(BaseSettings):
     def is_tight_free_tier(self) -> bool:
         """Ücretsiz katmanlarda istek boyutu ve paralellik kısılır."""
         if self.llm_provider == "groq":
+            return True
+        if self.llm_provider == "cerebras":
             return True
         if self.llm_provider == "openrouter":
             return self.openrouter_model.endswith(":free")
