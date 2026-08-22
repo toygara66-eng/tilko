@@ -89,51 +89,84 @@ def normalize_transcript_lines(raw: list | None) -> list[dict] | None:
     return lines if len(lines) >= 3 else None
 
 
+def _run_with_timeout(fn, timeout: float, *args, **kwargs):
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(fn, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout)
+        except FuturesTimeout as exc:
+            raise ValueError("timeout") from exc
+
+
 def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker.
 
-    YouTube, Render/Vercel IP'lerini kestiği için asıl yol Gemini/OpenRouter:
-    Google videoyu kendi ağından okur. InnerTube yalnız ev IP'sinde işe yarar.
+    Önce YouTube altyazı izleri (saniyeler), olmazsa Gemini videoyu okur.
     """
-    from app.config import settings
-
     errors: list[str] = []
-    lines: list[dict] = []
-    if not settings.is_production:
+    scrapers = (
+        (_fetch_via_innertube, 7),
+        (_fetch_transcript_lines_inner, 7),
+        (_fetch_via_invidious, 8),
+    )
+    for fetcher, limit in scrapers:
         try:
-            lines = _fetch_via_innertube(video_id)
-            if lines:
-                logger.info("Altyazı InnerTube ile geldi (%s satır)", len(lines))
+            lines = _run_with_timeout(fetcher, limit, video_id)
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"innertube: {exc}")
-            lines = []
-    from_llm = False
-    if not lines:
-        try:
-            lines = _fetch_via_llm_youtube(video_id, subject=subject)
-            from_llm = True
-            if lines:
-                logger.info("Altyazı LLM ile geldi (%s satır)", len(lines))
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"llm: {exc}")
-            lines = []
-    if not lines:
-        logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
-        raise ValueError(
-            "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
+            errors.append(f"{fetcher.__name__}: {exc}")
+            continue
+        if not lines or len(lines) < 3:
+            errors.append(f"{fetcher.__name__}: boş")
+            continue
+        mismatch = transcript_off_subject(lines, subject)
+        if mismatch:
+            raise ValueError(mismatch)
+        logger.info("Altyazı %s ile geldi (%s satır)", fetcher.__name__, len(lines))
+        return lines
+
+    try:
+        lines = _run_with_timeout(
+            _fetch_via_llm_youtube, 85, video_id, subject=subject
         )
-    mismatch = transcript_off_subject(lines, subject)
-    if mismatch:
-        if from_llm:
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"llm: {exc}")
+        lines = []
+    if lines and len(lines) >= 3:
+        mismatch = transcript_off_subject(lines, subject)
+        if mismatch:
             try:
-                retry = _fetch_via_llm_youtube(video_id, subject=subject, strict=True)
+                retry = _run_with_timeout(
+                    _fetch_via_llm_youtube,
+                    85,
+                    video_id,
+                    subject=subject,
+                    strict=True,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Sıkı yazıya dökme başarısız: %s", exc)
                 retry = []
-            if retry and not transcript_off_subject(retry, subject):
+            if retry and len(retry) >= 3 and not transcript_off_subject(retry, subject):
                 return retry
-        raise ValueError(mismatch)
-    return lines
+            raise ValueError(mismatch)
+        logger.info("Altyazı LLM ile geldi (%s satır)", len(lines))
+        return lines
+
+    logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
+    hint = ""
+    for item in reversed(errors):
+        low = item.lower()
+        if "gemini_api_key" in low or "402" in item or "balance" in low:
+            hint = item.split("llm: ", 1)[-1]
+            break
+        if "timeout" in low:
+            hint = "Video yazıya dökülürken süre doldu. Bir kez daha dene."
+            break
+    raise ValueError(
+        hint
+        or "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
+    )
 
 
 def _fetch_transcript_lines_inner(video_id: str) -> list[dict]:
@@ -458,7 +491,7 @@ def _fetch_via_innertube(video_id: str) -> list[dict]:
                     "racyCheckOk": True,
                 },
                 headers=spec["headers"],
-                timeout=16,
+                timeout=6,
                 follow_redirects=True,
             )
             response.raise_for_status()
@@ -544,6 +577,7 @@ def _transcribe_prompt(subject: str | None = None, *, strict: bool = False) -> s
         "Videoyu gerçekten izle. İzleyemiyorsan ilk satıra yalnızca VIDEO_OKUNAMADI yaz. "
         f"{extra}"
         "Kod dersi, programlama veya yazılım uydurma. "
+        "Önce ilk 12 dakikayı cümle cümle yaz; en fazla 120 satır. "
         "Her satır tam olarak [SANIYE] cümle formatında olsun. "
         "SANIYE tam sayı saniye olsun (dakika:saniye yazma). "
         "Yalnızca videoda duyulan cümleleri yaz. Giriş, özet veya markdown yazma."
@@ -619,9 +653,9 @@ def _gemini_text_from_youtube(
                     ],
                 }
             ],
-            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192},
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096},
         },
-        timeout=120,
+        timeout=httpx.Timeout(80.0, connect=8.0),
         follow_redirects=True,
     )
     if not response.is_success:
@@ -634,8 +668,6 @@ def _gemini_text_from_youtube(
         prompt_tokens = 0
     if prompt_tokens:
         logger.info("Gemini youtube prompt_tokens=%s model=%s", prompt_tokens, model)
-    if 0 < prompt_tokens < 800:
-        raise ValueError(f"{model}: video modele girmedi")
     chunks: list[str] = []
     for candidate in data.get("candidates") or []:
         parts = ((candidate.get("content") or {}).get("parts")) or []
@@ -688,7 +720,7 @@ def _openrouter_text_from_youtube(
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=120,
+            timeout=httpx.Timeout(25.0, connect=8.0),
             follow_redirects=True,
         )
         if response.is_success:
@@ -740,7 +772,7 @@ def _fetch_via_llm_youtube(
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
 
-    if openrouter_key:
+    if openrouter_key and not gemini_key:
         models = []
         for name in (
             "google/gemini-3.6-flash",
