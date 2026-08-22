@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Lightbulb, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { submitFeedback, type FeedbackCategory } from "@/lib/api";
@@ -28,14 +29,24 @@ function FeedbackModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busy) onClose();
     };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open, busy, onClose]);
 
   useEffect(() => {
@@ -68,11 +79,11 @@ function FeedbackModal({
     }
   }
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-end justify-center overflow-y-auto overscroll-contain bg-zinc-950/70 p-4 pt-10 backdrop-blur-sm sm:items-center sm:pt-4"
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -81,7 +92,7 @@ function FeedbackModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="glow-orange relative w-full max-w-md overflow-hidden rounded-2xl border-2 border-orange-400/80 bg-white/85 p-6 backdrop-blur-xl dark:bg-zinc-950/85"
+        className="glow-orange relative my-auto w-full max-w-md max-h-[min(92dvh,40rem)] overflow-y-auto rounded-2xl border-2 border-orange-400/80 bg-white/95 p-6 shadow-xl backdrop-blur-xl dark:bg-zinc-950/95"
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(251,146,60,0.22),transparent_60%)]" />
         <div className="relative space-y-4">
@@ -169,7 +180,8 @@ function FeedbackModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
