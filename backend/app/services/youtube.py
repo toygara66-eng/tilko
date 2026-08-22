@@ -1102,10 +1102,10 @@ def _fetch_via_llm_youtube(
         models = []
         preferred = (settings.gemini_model or "").strip()
         for name in (
-            "gemini-2.5-flash-lite",
-            "gemini-flash-lite-latest",
-            preferred,
             "gemini-3.6-flash",
+            preferred,
+            "gemini-2.5-flash",
+            "gemini-flash-lite-latest",
         ):
             if name and name not in models:
                 models.append(name)

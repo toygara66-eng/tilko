@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     youtube_transcript_io_token: str = ""
 
     @property
+    def chunk_chars(self) -> int:
+        return self.analyze_prompt_chars
+
+    @property
     def is_local(self) -> bool:
         return self.llm_provider == "ollama"
 

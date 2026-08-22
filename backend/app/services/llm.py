@@ -4,6 +4,7 @@ import re
 import threading
 import time
 import unicodedata
+from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from math import ceil
 
@@ -36,6 +37,11 @@ LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
+GEMINI_CHAT_MODEL = "gemini-3.6-flash"
+GEMINI_CHAT_MODELS = (
+    "gemini-3.6-flash",
+    "gemini-2.5-flash",
+)
 OPENROUTER_FREE_MODELS = (
     "nvidia/nemotron-3-nano-30b-a3b:free",
     "nvidia/nemotron-3.5-lightning:free",
@@ -49,6 +55,7 @@ _provider_lock = threading.Lock()
 _skip_openrouter = False
 _openrouter_free_only = False
 _skip_gemini = False
+_credit_stage = 0
 RETRY_AFTER_RE = re.compile(
     r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<mins>\d+)m(?!s))?\s*(?P<num>[\d.]+)\s*(?P<unit>ms|s)",
     re.IGNORECASE,
@@ -95,7 +102,7 @@ def _client() -> tuple[OpenAI, str]:
                 api_key=settings.gemini_api_key,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             ),
-            settings.gemini_model,
+            _gemini_model_id(),
         )
 
     if settings.llm_provider == "huggingface":
@@ -125,9 +132,11 @@ def _client() -> tuple[OpenAI, str]:
 
     if settings.llm_provider == "openrouter":
         if _skip_openrouter:
-            pair = _groq_fast_client() or (
-                None if _skip_gemini else _gemini_client(timeout=LLM_HTTP_TIMEOUT)
-            )
+            pair = None
+            if _credit_stage == 2:
+                pair = _groq_fast_client()
+            else:
+                pair = _gemini_client(timeout=LLM_HTTP_TIMEOUT) or _groq_fast_client()
             if pair:
                 return pair
         if not settings.openrouter_api_key:
@@ -184,12 +193,16 @@ def _fatal_message(raw: str) -> str | None:
     ):
         if not (settings.gemini_api_key or "").strip():
             return (
-                "OpenRouter kredin bitmiş. Para yatırma: Render ortamına "
-                "GEMINI_API_KEY ekle (Google AI Studio, ücretsiz katman yeter)."
+                "OpenRouter kredin bitmiş. Render ortamına GEMINI_API_KEY ekle "
+                "(Google AI Studio) ve GEMINI_MODEL=gemini-3.6-flash olsun."
+            )
+        if _credit_stage >= 1:
+            return (
+                "OpenRouter kredin bitmiş. Gemini yedeği (gemini-3.6-flash) de "
+                "yanıt vermedi."
             )
         return (
-            "OpenRouter kredin bitmiş. Gemini yedeği de yanıt vermedi. "
-            "GEMINI_MODEL=gemini-3.6-flash olduğundan emin ol."
+            "OpenRouter kredin bitmiş. Gemini yedeği (gemini-3.6-flash) deneniyor."
         )
     if "tokens per day" in text or ("per day" in text and settings.llm_provider == "groq"):
         # Rolling TPD: 'try again in 5m' ise beklemek yeterli; saatlerceyse gerçekten bitti.
@@ -461,18 +474,125 @@ def _reasoning_extra() -> dict:
     return {"reasoning": {"effort": "minimal", "exclude": True}}
 
 
+def _gemini_model_id() -> str:
+    return GEMINI_CHAT_MODEL
+
+
+def _gemini_models_to_try() -> list[str]:
+    ordered: list[str] = []
+    for name in (GEMINI_CHAT_MODEL, (settings.gemini_model or "").strip(), *GEMINI_CHAT_MODELS):
+        if name and name not in ordered:
+            ordered.append(name)
+    return ordered
+
+
+def _is_gemini_client(client: OpenAI) -> bool:
+    base = str(getattr(client, "base_url", "") or "")
+    return "generativelanguage.googleapis.com" in base
+
+
+def _as_chat_response(text: str, model: str):
+    message = SimpleNamespace(content=text)
+    choice = SimpleNamespace(message=message)
+    return SimpleNamespace(choices=[choice], model=model, usage=None)
+
+
+def _gemini_native_completion(
+    messages: list[dict],
+    temperature: float,
+    json_mode: bool,
+) -> object:
+    key = (settings.gemini_api_key or "").strip()
+    if not key:
+        raise ConfigurationError("GEMINI_API_KEY tanımlı değil.")
+    system = ""
+    user_parts: list[str] = []
+    for message in messages:
+        role = str(message.get("role") or "")
+        content = str(message.get("content") or "")
+        if role == "system":
+            system = content
+        elif content:
+            user_parts.append(content)
+    user = "\n\n".join(user_parts).strip()
+    last: Exception | None = None
+    for name in _gemini_models_to_try():
+        generation = {
+            "temperature": temperature,
+            "maxOutputTokens": 7000,
+            "thinkingConfig": {"thinkingBudget": 0},
+        }
+        if json_mode:
+            generation["responseMimeType"] = "application/json"
+        payload: dict = {
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": generation,
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{name}:generateContent"
+        )
+        try:
+            response = httpx.post(
+                url,
+                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                json=payload,
+                timeout=ANALYZE_HTTP_TIMEOUT,
+            )
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            logger.warning("Gemini %s ağ hatası: %s", name, exc)
+            continue
+        if response.status_code == 400 and "thinking" in (response.text or "").lower():
+            generation.pop("thinkingConfig", None)
+            payload["generationConfig"] = generation
+            try:
+                response = httpx.post(
+                    url,
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=ANALYZE_HTTP_TIMEOUT,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+                continue
+        if response.status_code == 404:
+            last = RuntimeError(f"{name} bu anahtarda yok")
+            logger.warning("Gemini model yok: %s", name)
+            continue
+        if not response.is_success:
+            last = RuntimeError(f"{name}: {response.status_code} {response.text[:240]}")
+            logger.warning("Gemini %s reddetti: %s", name, response.status_code)
+            if response.status_code in {401, 403}:
+                raise last
+            continue
+        data = response.json()
+        chunks: list[str] = []
+        for candidate in data.get("candidates") or []:
+            parts = ((candidate.get("content") or {}).get("parts")) or []
+            chunks.extend(str(part.get("text") or "") for part in parts)
+        text = "\n".join(chunk for chunk in chunks if chunk).strip()
+        if not text:
+            last = RuntimeError(f"{name}: boş yanıt")
+            continue
+        logger.info("Gemini yedek yanıtı: %s (%s karakter)", name, len(text))
+        return _as_chat_response(text, name)
+    raise last or RuntimeError("Gemini (gemini-3.6-flash) yanıt vermedi.")
+
+
 def _gemini_client(timeout=None) -> tuple[OpenAI, str] | None:
     key = (settings.gemini_api_key or "").strip()
     if not key:
         return None
-    model = (settings.gemini_model or "").strip() or "gemini-3.6-flash"
     return (
         _openai_client(
             api_key=key,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             timeout=timeout or ANALYZE_HTTP_TIMEOUT,
         ),
-        model,
+        _gemini_model_id(),
     )
 
 
@@ -525,29 +645,39 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _activate_credit_fallback() -> bool:
-    """Kota bitince OpenRouter :free, sonra Groq, en sonda Gemini dene."""
-    global _skip_openrouter, _openrouter_free_only, _skip_gemini
-    already_free = (settings.openrouter_model or "").endswith(":free")
-    if settings.openrouter_api_key and not _openrouter_free_only and not already_free:
+    """Kota bitince Gemini 3.6 Flash, olmazsa Groq dene."""
+    global _skip_openrouter, _openrouter_free_only, _skip_gemini, _credit_stage
+    with _provider_lock:
         _openrouter_free_only = True
+        if _credit_stage < 1:
+            if _gemini_client():
+                _credit_stage = 1
+                _skip_openrouter = True
+                _skip_gemini = False
+                logger.warning(
+                    "OpenRouter kotası yok; Gemini yedeğine geçiliyor (%s).",
+                    GEMINI_CHAT_MODEL,
+                )
+                return True
+            _credit_stage = 1
+        if _credit_stage < 2:
+            if _groq_fast_client():
+                _credit_stage = 2
+                _skip_openrouter = True
+                logger.warning("Gemini yedeği yok veya düştü; Groq deneniyor.")
+                return True
+            _credit_stage = 2
+        _credit_stage = 3
         _skip_gemini = True
-        logger.warning("Ücretli model reddedildi; OpenRouter ücretsiz model deneniyor.")
-        return True
-    _openrouter_free_only = True
-    if _groq_fast_client():
-        _skip_gemini = True
-        _skip_openrouter = True
-        logger.warning("OpenRouter kotası yok; Groq yedeğine geçiliyor.")
-        return True
-    if _gemini_client() and not _skip_gemini:
-        _skip_openrouter = True
-        logger.warning("OpenRouter/Groq yok; Gemini yedeğine geçiliyor.")
-        return True
-    return False
+        return False
 
 
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
     """Video analizi LLM_PROVIDER yolunu izler; düşünme modelini kullanmaz."""
+    if _credit_stage == 1:
+        return _gemini_client()
+    if _credit_stage == 2:
+        return _groq_fast_client()
     if settings.openrouter_api_key and not _skip_openrouter:
         return (
             _openai_client(
@@ -561,13 +691,12 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
             ),
             _openrouter_fast_model(),
         )
+    pair = _gemini_client() if not _skip_gemini else None
+    if pair:
+        return pair
     pair = _groq_fast_client()
     if pair:
         return pair
-    if not _skip_gemini:
-        pair = _gemini_client()
-        if pair:
-            return pair
     if settings.openai_api_key:
         return (
             _openai_client(
@@ -608,6 +737,8 @@ def _openai_create(messages: list[dict], temperature: float, json_mode: bool):
         kwargs["response_format"] = {"type": "json_object"}
     if extra:
         kwargs["extra_body"] = extra
+    if _is_gemini_client(client) or str(model or "").startswith("gemini-"):
+        return _gemini_native_completion(messages, temperature, json_mode)
     try:
         return client.chat.completions.create(**kwargs)
     except Exception as exc:
@@ -644,7 +775,7 @@ def _chat_openai_compatible(
     free = str(_openrouter_fast_model() if settings.llm_provider == "openrouter" else "").endswith(
         ":free"
     )
-    use_json = not free
+    use_json = (not free) or _credit_stage == 1 or settings.llm_provider == "gemini"
     try:
         response = _openai_create(messages, temperature, json_mode=use_json)
     except Exception as exc:
