@@ -112,7 +112,7 @@ from app.services.credits import (
     QuotaExceededError as CreditQuotaExceededError,
     VideoTooLongError,
 )
-from app.services.llm import QuotaExhaustedError, analyze_slice
+from app.services.llm import ConfigurationError, QuotaExhaustedError, analyze_slice, require_analyze_llm
 from app.services.scale import (
     ServiceBusyError,
     claim_work,
@@ -180,14 +180,20 @@ def index() -> FileResponse:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    if settings.is_production:
-        return {"status": "ok"}
-    return {
-        "status": "ok",
-        "provider": settings.llm_provider,
-        "model": settings.active_model,
+def health() -> dict:
+    from app.services.llm import analyze_llm_ready
+
+    llm = analyze_llm_ready()
+    body = {
+        "status": "ok" if (not settings.is_production or llm["ready"]) else "degraded",
+        "llm_ready": bool(llm["ready"]),
+        "groq": bool(llm["groq"]),
+        "cerebras": bool(llm["cerebras"]),
     }
+    if not settings.is_production:
+        body["provider"] = settings.llm_provider
+        body["model"] = str(llm.get("model") or settings.active_model)
+    return body
 
 
 @app.get("/captions/{video_id}")
@@ -318,6 +324,10 @@ def analyze_video(
         video_id = extract_video_id(video_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        require_analyze_llm()
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     lines = normalize_transcript_lines(
         [item.model_dump() for item in payload.transcript_lines]
@@ -498,6 +508,9 @@ def analyze_video(
     except QuotaExhaustedError as exc:
         credit_service.refund(db, user_id, reservation)
         raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        credit_service.refund(db, user_id, reservation)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError as exc:
         credit_service.refund(db, user_id, reservation)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

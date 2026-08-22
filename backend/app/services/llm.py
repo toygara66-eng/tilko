@@ -705,15 +705,12 @@ def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
 
 
 def _provider_chain() -> list[str]:
-    """Analizde önce ücretsiz Groq/Cerebras; eski OpenRouter/Gemini birincil kalsa bile."""
+    """Analiz yalnızca ücretsiz Groq → Cerebras. OpenRouter/Gemini fatura tuzağına girilmez."""
     preferred = (settings.llm_provider or "groq").strip().lower()
     free = ["groq", "cerebras"]
-    paid = ["openrouter", "gemini"]
-    if preferred in {"openai", "huggingface", "ollama"}:
-        return [preferred] + free + paid
     if preferred in free:
-        return [preferred] + [name for name in free + paid if name != preferred]
-    return free + paid
+        return [preferred] + [name for name in free if name != preferred]
+    return list(free)
 
 
 def _named_client(name: str) -> tuple[OpenAI, str] | None:
@@ -737,6 +734,31 @@ def _named_client(name: str) -> tuple[OpenAI, str] | None:
             return None
         return _openai_client(api_key=settings.openai_api_key), "gpt-4o-mini"
     return None
+
+
+def analyze_llm_ready() -> dict[str, bool | str]:
+    """Render env kontrolü: analiz için Groq veya Cerebras şart."""
+    groq = bool((settings.groq_api_key or "").strip())
+    cerebras = bool((settings.cerebras_api_key or "").strip())
+    return {
+        "groq": groq,
+        "cerebras": cerebras,
+        "ready": groq or cerebras,
+        "model": _normalize_groq_model(settings.groq_model) if groq else (
+            (settings.cerebras_model or "gemma-4-31b") if cerebras else ""
+        ),
+    }
+
+
+def require_analyze_llm() -> None:
+    status = analyze_llm_ready()
+    if status["ready"]:
+        return
+    raise ConfigurationError(
+        "Analiz için Render'da GROQ_API_KEY veya CEREBRAS_API_KEY gerekli. "
+        "OpenRouter/Gemini bu üründe kullanılmıyor (402 fatura hatası). "
+        "console.groq.com veya cloud.cerebras.ai üzerinden ücretsiz anahtar ekle."
+    )
 
 
 def _openrouter_fast_model() -> str:
@@ -799,8 +821,9 @@ def _activate_credit_fallback() -> bool:
 
 
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
-    """Analiz: LLM_PROVIDER, olmazsa Groq / Cerebras. OpenRouter anahtarı yolu ele geçirmez."""
+    """Analiz: yalnızca Groq / Cerebras. Fatura veren sağlayıcı yok."""
     global _active_name
+    require_analyze_llm()
     chain = _provider_chain()
     start = max(0, min(_chain_index, len(chain) - 1))
     for name in chain[start:]:
@@ -808,16 +831,9 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
         if pair:
             _active_name = name
             return pair
-    if settings.openai_api_key:
-        _active_name = "openai"
-        return (
-            _openai_client(
-                api_key=settings.openai_api_key,
-                timeout=ANALYZE_HTTP_TIMEOUT,
-            ),
-            "gpt-4o-mini",
-        )
-    return None
+    raise ConfigurationError(
+        "GROQ_API_KEY / CEREBRAS_API_KEY tanımlı değil. Render Environment'a ekle."
+    )
 
 
 @log_openrouter_usage
