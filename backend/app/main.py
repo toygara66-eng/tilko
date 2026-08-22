@@ -1683,6 +1683,7 @@ def _analyze_with_lines(
             **overlay,
         ).model_dump()
         dump["analyze_span"] = "full"
+        dump["llm_model"] = settings.active_model
         for key in extra_keys:
             dump.pop(key, None)
         cache.save(cache_key, dump)
@@ -1837,6 +1838,7 @@ def _continue_analyze_job(
         "teacher_persona": final["teacher_persona"],
         "cached": False,
         "analyze_span": "full",
+        "llm_model": settings.active_model,
         "job_id": "",
         "job_status": "done",
         "chunks_done": final["chunks_total"],

@@ -67,7 +67,12 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
         key = _index.get(wanted)
     if key:
         hit = load(key)
-        if hit and hit.get("notes") and hit.get("questions"):
+        if (
+            hit
+            and hit.get("notes")
+            and hit.get("questions")
+            and str(hit.get("llm_model") or "") == str(settings.active_model or "")
+        ):
             return hit
     cache_dir = _cache_dir()
     if not cache_dir.exists():
@@ -83,6 +88,8 @@ def find_cached(video_id: str, subject: str | None) -> dict | None:
         if (str(data.get("subject") or "").strip()) != wanted_subject:
             continue
         if data.get("analyze_span") != "full":
+            continue
+        if str(data.get("llm_model") or "") != str(settings.active_model or ""):
             continue
         if data.get("notes") and data.get("questions"):
             with _index_lock:
