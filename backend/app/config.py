@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     cerebras_model: str = "gemma-4-31b"
     cerebras_base_url: str = "https://api.cerebras.ai/v1"
     nebius_api_key: str = ""
-    nebius_model: str = "google/gemma-3-27b-it"
+    nebius_model: str = "Qwen/Qwen3-32B"
     nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1/"
     openrouter_api_key: str = ""
     openrouter_model: str = "nvidia/nemotron-3-nano-30b-a3b:free"

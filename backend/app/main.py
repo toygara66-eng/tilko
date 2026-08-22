@@ -1710,7 +1710,7 @@ def _analyze_with_lines(
         ).model_dump()
         dump["analyze_span"] = "full"
         dump["llm_model"] = settings.active_model
-        dump["notes_depth"] = 2
+        dump["notes_depth"] = 3
         for key in extra_keys:
             dump.pop(key, None)
         cache.save(cache_key, dump)
@@ -1866,7 +1866,7 @@ def _continue_analyze_job(
         "cached": False,
         "analyze_span": "full",
         "llm_model": settings.active_model,
-        "notes_depth": 2,
+        "notes_depth": 3,
         "job_id": "",
         "job_status": "done",
         "chunks_done": final["chunks_total"],

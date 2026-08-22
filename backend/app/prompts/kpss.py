@@ -155,6 +155,8 @@ timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
 Boşluğu genel kültürle doldurma. Hocanın söylemediği tuzak/istisna uydurma.
+Her notta "quote" alanı ZORUNLU: altyazıdan aynen kopyalanmış 8-20 kelimelik cümle parçası.
+quote altyazıda birebir geçmeli; uydurma alıntı yasak.
 {rag}
 Zaman damgalı altyazı:
 ---
@@ -173,7 +175,8 @@ Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
   "notes": [
     {{
       "title": "Kavramın kısa adı",
-      "detail": "5-8 cümle: tanım, ayırt edici fark, istisna, karıştırılan kavram, hocanın vurgusu.",
+      "quote": "Altyazıdan birebir 8-20 kelime",
+      "detail": "5-8 cümle: yalnızca altyazıdaki bilgi. Tanım, ayırt edici fark, istisna, karıştırılan kavram, hocanın vurgusu.",
       "key_points": ["bilgi kırıntısı", "istisna", "karıştırılan fark", "hoca uyarısı"],
       "mnemonic": "Kavrama özel hafıza tekniği (1-2 cümle)",
       "exam_tip": "Sınav tuzağı ve çeldirici, 2-3 cümle",

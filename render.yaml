@@ -17,7 +17,7 @@ services:
       - key: LLM_FALLBACK
         value: cerebras
       - key: NEBIUS_MODEL
-        value: google/gemma-3-27b-it
+        value: Qwen/Qwen3-32B
       - key: NEBIUS_BASE_URL
         value: https://api.tokenfactory.nebius.com/v1/
       - key: NEBIUS_API_KEY

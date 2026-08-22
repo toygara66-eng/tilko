@@ -48,7 +48,7 @@ function Set-Env([string]$key, [string]$value) {
 
 Set-Env "LLM_PROVIDER" "nebius"
 Set-Env "LLM_FALLBACK" "cerebras"
-Set-Env "NEBIUS_MODEL" "google/gemma-3-27b-it"
+Set-Env "NEBIUS_MODEL" "Qwen/Qwen3-32B"
 Set-Env "NEBIUS_BASE_URL" "https://api.tokenfactory.nebius.com/v1/"
 Set-Env "CEREBRAS_MODEL" "gemma-4-31b"
 Set-Env "GROQ_MODEL" "llama-3.1-8b-instant"

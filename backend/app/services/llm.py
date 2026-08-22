@@ -435,13 +435,26 @@ def _content_tokens(text: str) -> set[str]:
     return {part.lower() for part in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü0-9]{5,}", text or "")}
 
 
+def _fold_tr(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").casefold()).strip()
+
+
 def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
-    """Altyazıyla hiç örtüşmeyen uydurma notları atar."""
+    """Altyazıyla örtüşmeyen uydurma notları atar. Uydurma yığını geri verilmez."""
     source = _content_tokens(transcript)
-    if not source or not notes:
+    folded = _fold_tr(transcript)
+    if not notes:
+        return []
+    if not source:
         return notes
     kept: list[dict] = []
     for note in notes:
+        quote = str(
+            note.get("quote")
+            or note.get("alinti")
+            or note.get("alıntı")
+            or ""
+        ).strip()
         blob = " ".join(
             [
                 str(note.get("title") or ""),
@@ -449,10 +462,33 @@ def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
                 " ".join(str(p) for p in (note.get("key_points") or [])),
             ]
         )
-        overlap = _content_tokens(blob) & source
-        if len(overlap) >= 2:
+        quote_ok = len(quote) >= 10 and _fold_tr(quote) in folded
+        tokens = _content_tokens(blob)
+        overlap = tokens & source
+        ratio = len(overlap) / max(len(tokens), 1)
+        if quote_ok or (len(overlap) >= 4 and ratio >= 0.22):
             kept.append(note)
-    return kept or notes
+    return kept
+
+
+def _ground_questions(questions: list[dict], transcript: str) -> list[dict]:
+    source = _content_tokens(transcript)
+    if not questions or not source:
+        return questions
+    kept: list[dict] = []
+    for item in questions:
+        options = item.get("options") or {}
+        blob = " ".join(
+            [
+                str(item.get("text") or ""),
+                str(item.get("explanation") or ""),
+                " ".join(str(v) for v in options.values()),
+            ]
+        )
+        overlap = _content_tokens(blob) & source
+        if len(overlap) >= 3:
+            kept.append(item)
+    return kept or questions
 
 
 def _extract_json(raw: str) -> dict:
@@ -699,7 +735,7 @@ def _nebius_client(timeout=None) -> tuple[OpenAI, str] | None:
     key = (settings.nebius_api_key or "").strip()
     if not key:
         return None
-    model = (settings.nebius_model or "").strip() or "google/gemma-3-27b-it"
+    model = (settings.nebius_model or "").strip() or "Qwen/Qwen3-32B"
     base = (settings.nebius_base_url or "").strip() or "https://api.tokenfactory.nebius.com/v1/"
     if not base.endswith("/"):
         base += "/"
@@ -732,9 +768,11 @@ def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
 
 
 def _provider_chain() -> list[str]:
-    """Nebius birincil; kota/kredi bitince Cerebras → Groq."""
+    """Nebius kalite; yedek Cerebras. Groq 8B analizde uydurma üretir, zincirde yok."""
     preferred = (settings.llm_provider or "nebius").strip().lower()
-    chain = ["nebius", "cerebras", "groq"]
+    chain = ["nebius", "cerebras"]
+    if preferred == "groq":
+        return ["groq", "nebius", "cerebras"]
     if preferred in chain:
         return [preferred] + [name for name in chain if name != preferred]
     return list(chain)
@@ -772,7 +810,7 @@ def analyze_llm_ready() -> dict[str, bool | str]:
     cerebras = bool((settings.cerebras_api_key or "").strip())
     model = ""
     if nebius:
-        model = (settings.nebius_model or "").strip() or "google/gemma-3-27b-it"
+        model = (settings.nebius_model or "").strip() or "Qwen/Qwen3-32B"
     elif cerebras:
         model = (settings.cerebras_model or "").strip() or "gemma-4-31b"
     elif groq:
@@ -1467,7 +1505,7 @@ def _analyze_combined(
                 window_label,
                 note_count,
             ),
-            temperature=0.2,
+            temperature=0.1,
             task="analyze",
         )
     )
@@ -1478,25 +1516,26 @@ def _analyze_combined(
             _chat(
                 NOTES_SYSTEM_PROMPT
                 + "\nKısa Türkçe sınav notu yaz. Sadece JSON. notes boş olamaz. "
-                "Altyazıda yoksa uydurma.",
+                "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça.",
                 (
                     f"Ders: {subject or 'KPSS'}\nAltyazı:\n{chunk[:4000]}\n\n"
                     "En az 3 not yaz. Şema: "
-                    '{"notes":[{"title":"...","detail":"...","key_points":["..."],'
+                    '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
                 ),
-                temperature=0.2,
+                temperature=0.1,
                 task="analyze",
             )
         )
         notes = _ground_notes(_coerce_notes(result), chunk)
     if not notes:
         raise RuntimeError(
-            "Model not yazamadı. Ücretsiz model boş yanıt verdi; bir kez daha dene."
+            "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
         )
     questions: list[dict] = []
     seen: set[str] = set()
     _collect([result], questions, seen, count)
+    questions = _ground_questions(questions, chunk)
     persona = merge_personas([result.get("teacher_persona")])
     return {
         "notes": notes,
