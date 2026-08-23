@@ -296,7 +296,7 @@ export function Dashboard() {
             <p className="text-sm text-orange-700 dark:text-orange-200">
               {result
                 ? `İlk dilimler hazır (${result.chunks_done ?? 1}/${result.chunks_total ?? 1}). Kalan 5 dakikalar kendiliğinden ekleniyor.`
-                : `Altyazı çekilip ilk 5 dakika yazılıyor (${elapsed}s).`}
+                : `Hazırlanıyor… ${elapsed}s`}
             </p>
           ) : null}
           {result && !busy ? (
