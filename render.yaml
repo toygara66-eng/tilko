@@ -13,9 +13,9 @@ services:
       - key: APP_ENV
         value: production
       - key: LLM_PROVIDER
-        value: nebius
+        value: gemini
       - key: LLM_FALLBACK
-        value: cerebras
+        value: ""
       - key: NEBIUS_MODEL
         value: Qwen/Qwen3-32B
       - key: NEBIUS_BASE_URL
@@ -37,7 +37,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-3.6-flash
+        value: gemini-2.5-flash
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_API_SECRET

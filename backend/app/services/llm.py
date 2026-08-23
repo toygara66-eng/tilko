@@ -42,7 +42,12 @@ LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-GEMINI_CHAT_MODEL = "gemini-3.6-flash"
+GEMINI_CHAT_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL_FALLBACKS = (
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash-lite",
+)
 OPENROUTER_FREE_MODELS = (
     "nvidia/nemotron-3-nano-30b-a3b:free",
     "nvidia/nemotron-3.5-lightning:free",
@@ -601,11 +606,13 @@ def _reasoning_extra() -> dict:
 
 
 def _gemini_model_id() -> str:
-    return GEMINI_CHAT_MODEL
+    return (settings.gemini_model or "").strip() or GEMINI_CHAT_MODEL
 
 
 def _gemini_models_to_try() -> list[str]:
-    return [GEMINI_CHAT_MODEL]
+    primary = _gemini_model_id()
+    ordered = [primary, *[m for m in GEMINI_MODEL_FALLBACKS if m != primary]]
+    return ordered
 
 
 def _is_gemini_client(client: OpenAI) -> bool:
@@ -681,10 +688,11 @@ def _gemini_native_completion(
                 last = exc
                 continue
         if response.status_code == 404:
-            raise ConfigurationError(
-                "GEMINI_MODEL=gemini-3.6-flash bu anahtarda yok. "
-                "Google AI Studio'da 3.6 Flash'i aç veya anahtarı yenile."
+            logger.warning("Gemini model yok, sıradaki deneniyor: %s", name)
+            last = ConfigurationError(
+                f"GEMINI_MODEL={name} bu anahtarda yok; yedek model deneniyor."
             )
+            continue
         if response.status_code == 429:
             raise RuntimeError(
                 f"{name}: 429 You exceeded your current quota. {response.text[:200]}"
@@ -704,9 +712,9 @@ def _gemini_native_completion(
         if not text:
             last = RuntimeError(f"{name}: boş yanıt")
             continue
-        logger.info("Gemini yedek yanıtı: %s (%s karakter)", name, len(text))
+        logger.info("Gemini yanıtı: %s (%s karakter)", name, len(text))
         return _as_chat_response(text, name)
-    raise last or RuntimeError("Gemini (gemini-3.6-flash) yanıt vermedi.")
+    raise last or RuntimeError("Gemini yanıt vermedi.")
 
 
 def _normalize_groq_model(raw: str | None) -> str:
