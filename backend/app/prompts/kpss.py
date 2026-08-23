@@ -142,8 +142,8 @@ def build_combined_analyze_prompt(
     from app.services.exams import label_for, prompt_block
 
     konu = subject or label_for(exam_target)
-    notes_n = max(3, min(int(note_count or 3), 4))
-    count = max(2, min(int(question_count or 3), 3))
+    notes_n = max(6, min(int(note_count or 8), 10))
+    count = max(3, min(int(question_count or 5), 6))
     extra = (rag_block or "").strip()
     rag = f"\n{extra}\n" if extra else ""
     window = (
@@ -156,7 +156,8 @@ def build_combined_analyze_prompt(
 Konu / ders: {konu}
 {window}
 Hedef: öğrenci SADECE bu notlara çalışarak o dilimden yüksek puan alsın.
-Kısa özet yasak. Her not bir ders kartı gibi dolu olsun.
+Kısa özet yasak. Her not bir ders kartı gibi dolu olsun (5-8 cümle).
+Her notta: net tanım, kritik istisna/ayrım, ÖSYM tuzağı, kısa örnek.
 timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
@@ -171,7 +172,7 @@ Zaman damgalı altyazı:
 {transcript_block}
 ---
 
-En az {notes_n} not yaz (üst sınır 4). Kısa tut; jeton harcama.
+En az {notes_n} detaylı not yaz (üst sınır 10). Özet geçme.
 Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
 
 Çıktı JSON şeması:

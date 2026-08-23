@@ -104,10 +104,10 @@ class Settings(BaseSettings):
         if self.is_local:
             return 6000
         if self.llm_provider == "gemini":
-            return 4500
+            return 10000
         if self.is_tight_free_tier:
-            return 4500
-        return 12000
+            return 8000
+        return 16000
 
     @property
     def questions_per_call(self) -> int:

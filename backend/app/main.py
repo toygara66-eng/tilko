@@ -1825,26 +1825,55 @@ def _analyze_with_lines(
     llm_data = None
     chosen_idx = 0
     last_err: BaseException | None = None
-    # En fazla 1 dilim — ikinci dilim = ikinci fatura.
-    for idx, piece in enumerate(candidates[:1]):
-        try:
-            llm_data = analyze_slice(
-                piece["block"],
-                subject,
-                min(3, question_count),
-                exam_target,
-                subject_meta["subject_type"],
-                subject_meta["is_yks_fen_question"],
-                "",
-                window_label=piece["label"],
-                note_count=3,
-            )
-            chosen_idx = idx
-            first = piece
-            break
-        except RuntimeError as exc:
-            last_err = exc
-            continue
+    # Tek LLM çağrısı: 1-2 komşu dilimi birleştir → daha detaylı not, ek fatura yok.
+    from app.services.youtube import slice_promo_ratio
+
+    primary = candidates[0]
+    block = str(primary.get("block") or "")
+    label = str(primary.get("label") or "")
+    if len(candidates) > 1:
+        nxt = candidates[1]
+        if slice_promo_ratio(str(nxt.get("block") or "")) < 0.22:
+            merged = (block + "\n" + str(nxt.get("block") or "")).strip()
+            if len(merged) > len(block):
+                block = merged
+                label = f"{label} + {nxt.get('label') or ''}".strip(" +")
+    try:
+        llm_data = analyze_slice(
+            block,
+            subject,
+            min(6, max(4, question_count)),
+            exam_target,
+            subject_meta["subject_type"],
+            subject_meta["is_yks_fen_question"],
+            "",
+            window_label=label,
+            note_count=8,
+        )
+        chosen_idx = 0
+        first = primary
+    except RuntimeError as exc:
+        last_err = exc
+        llm_data = None
+        for idx, piece in enumerate(candidates[1:3], start=1):
+            try:
+                llm_data = analyze_slice(
+                    piece["block"],
+                    subject,
+                    min(6, max(4, question_count)),
+                    exam_target,
+                    subject_meta["subject_type"],
+                    subject_meta["is_yks_fen_question"],
+                    "",
+                    window_label=piece["label"],
+                    note_count=8,
+                )
+                chosen_idx = idx
+                first = piece
+                break
+            except RuntimeError as inner:
+                last_err = inner
+                continue
     if llm_data is None:
         raise last_err or RuntimeError(
             "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."

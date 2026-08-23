@@ -708,7 +708,7 @@ def _gemini_native_completion(
     for name in _gemini_models_to_try():
         generation = {
             "temperature": temperature,
-            "maxOutputTokens": 1400,
+            "maxOutputTokens": 4500,
             "thinkingConfig": {"thinkingBudget": 0},
         }
         if json_mode:
@@ -1110,7 +1110,7 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        kwargs["max_tokens"] = 1600
+        kwargs["max_tokens"] = 4500
     model_id = str(model or "")
     if (
         json_mode
@@ -1666,16 +1666,16 @@ def _analyze_combined(
 ) -> dict:
     from app.services.exams import prompt_block
 
-    count = max(2, min(int(question_count or 3), 3))
-    notes_wanted = max(3, min(int(note_count or 3), 4))
-    # Kısa dilim = düşük Gemini/Groq faturası.
-    hard_cap = max(2800, min(int(settings.analyze_prompt_chars), 4500))
+    count = max(3, min(int(question_count or 5), 6))
+    notes_wanted = max(6, min(int(note_count or 8), 10))
+    # Tek çağrıda zengin bağlam; kısa özet değil detaylı ders kartı.
+    hard_cap = max(6000, min(int(settings.analyze_prompt_chars), 12000))
     work = (chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Her not 3-5 cümle. "
-        "Sadece JSON; markdown yok.\n\n"
+        "not, şık veya açıklamaya yazma. Kısa özet YASAK; her not 5-8 cümle, "
+        "tanım + istisna + sınav tuzağı + örnek. Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,
@@ -1705,7 +1705,27 @@ def _analyze_combined(
     _collect([result], questions, seen, count)
     questions = _ground_questions(questions, work)
     if not notes:
-        # İkinci LLM turu YOK — maliyet. Ham notları kullan.
+        logger.warning("Birleşik analiz boş not; kısa ama zorunlu not denemesi.")
+        result = _as_dict(
+            _chat(
+                NOTES_SYSTEM_PROMPT
+                + "\nTürkçe sınav notu yaz. Sadece JSON. notes boş olamaz. "
+                "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça. "
+                "Her not en az 4 cümle. Tanıtım/PDF/abone YASAK.",
+                (
+                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{work[:6000]}\n\n"
+                    "En az 5 detaylı not yaz. Şema: "
+                    '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
+                    '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
+                ),
+                temperature=0.1,
+                task="analyze",
+            )
+        )
+        notes = _ground_notes(_coerce_notes(result), work)
+        _collect([result], questions, seen, count)
+        questions = _ground_questions(questions, work)
+    if not notes:
         raw_notes = [
             note
             for note in _coerce_notes(result)
@@ -1713,13 +1733,26 @@ def _analyze_combined(
             and (note.get("detail") or note.get("title"))
         ]
         if raw_notes:
-            logger.warning("Grounding boş; ham %s not (ek LLM yok).", len(raw_notes))
-            notes = raw_notes[:4]
+            logger.warning("Grounding boş; ham %s not kullanılıyor.", len(raw_notes))
+            notes = raw_notes[:10]
         else:
             raise RuntimeError(
                 "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
             )
-    # Ek generate_questions çağrısı yok — birleşik JSON yeterli.
+    if len(questions) < max(2, count // 2):
+        try:
+            more = generate_questions(
+                notes,
+                subject,
+                count,
+                persona=None,
+                exam_target=exam_target,
+                subject_type=subject_type,
+                is_yks_fen_question=is_yks_fen_question,
+            )
+            _collect([{"questions": more}], questions, seen, count)
+        except Exception:
+            logger.exception("Dilim soru tamamlaması başarısız")
     persona = merge_personas([result.get("teacher_persona")])
     return {
         "notes": notes,
