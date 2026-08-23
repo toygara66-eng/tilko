@@ -15,6 +15,7 @@ import { analyzeVideo, getAnalyzeJob, type AnalyzeResponse } from "@/lib/api";
 import {
   fetchCaptionsForVideo,
   parseTranscriptPaste,
+  extractYoutubeId,
 } from "@/lib/captions";
 import { getUserId } from "@/lib/user";
 import { useProfile } from "@/components/profile/profile-context";
@@ -112,14 +113,23 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const job = useRef(0);
   const busyRef = useRef(false);
   const resumed = useRef(false);
+  const lastDoneVideo = useRef("");
   const pathRef = useRef(pathname);
   pathRef.current = pathname;
 
   const goNotebook = useCallback(
-    (data: AnalyzeResponse) => {
+    (data: AnalyzeResponse, videoUrl: string) => {
       if ((data.notes?.length || 0) === 0 || stillRunning(data)) return;
       bumpNotebook();
-      // Sadece analiz sayfasındayken Notlarım'a geç; panelde okumayı bozma.
+      const vid =
+        (data.video_id || "").trim() || extractYoutubeId(videoUrl) || "";
+      // Aynı video tekrar: paneli açma, Notlarım'a zorla gitme.
+      if (vid && vid === lastDoneVideo.current) {
+        setPanelOpen(false);
+        return;
+      }
+      if (vid) lastDoneVideo.current = vid;
+      setPanelOpen(false);
       if (pathRef.current === "/analiz") {
         router.push("/notlarim");
       }
@@ -170,7 +180,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           }
           remember(next, videoUrl, topic);
           if (!stillRunning(next)) {
-            goNotebook(next);
+            goNotebook(next, videoUrl);
             return;
           }
         } catch (err) {
@@ -199,11 +209,17 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
     setSubject(saved.subject);
     if (resumed.current) return;
     resumed.current = true;
-    if (!stillRunning(saved.result) || !saved.result.job_id) return;
+    if (!stillRunning(saved.result) || !saved.result.job_id) {
+      const vid =
+        (saved.result.video_id || "").trim() ||
+        extractYoutubeId(saved.url) ||
+        "";
+      if (vid) lastDoneVideo.current = vid;
+      return;
+    }
     const token = ++job.current;
     busyRef.current = true;
     setBusy(true);
-    setPanelOpen(true);
     void pollUntilDone(saved.result.job_id, token, saved.url, saved.subject).finally(
       () => {
         if (token === job.current) {
@@ -229,16 +245,54 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const startAnalyze = useCallback(
     async (input: AnalyzeStartInput) => {
       if (busyRef.current) return;
+      const nextId = extractYoutubeId(input.video_url);
+      const sameVideo =
+        Boolean(nextId) &&
+        (nextId === lastDoneVideo.current ||
+          nextId === extractYoutubeId(url) ||
+          nextId === (result?.video_id || ""));
+      const alreadyReady =
+        sameVideo &&
+        (result?.notes?.length || 0) > 0 &&
+        !stillRunning(result!);
+
+      setError("");
+      setUrl(input.video_url);
+      setSubject(input.subject || "");
+      setPanelOpen(false);
+
+      // Aynı link + hazır not varsa paneli/busy'yi hiç açma.
+      if (alreadyReady) {
+        lastDoneVideo.current = nextId;
+        void (async () => {
+          try {
+            const data = await analyzeVideo({
+              video_url: input.video_url,
+              user_id: getUserId(),
+              subject: input.subject,
+              question_count: input.question_count,
+              ad_watched: input.ad_watched,
+              subject_type: input.subject_type,
+              is_yks_fen_question: input.is_yks_fen_question,
+            });
+            if (data.notes?.length) {
+              remember(data, input.video_url, input.subject || "");
+              void refresh();
+            }
+          } catch {
+            /* yereldeki not kalsın */
+          }
+        })();
+        return;
+      }
+
       const token = ++job.current;
       const startedAt = Date.now();
       busyRef.current = true;
       setBusy(true);
-      setError("");
-      // Eski sonucu gizle → aynı linkte de “hazırlanıyor” görünsün.
-      setResult(null);
-      setUrl(input.video_url);
-      setSubject(input.subject || "");
-      setPanelOpen(true);
+      if (!sameVideo) {
+        setResult(null);
+      }
       const topic = input.subject || "";
       const pasted = parseTranscriptPaste(input.transcript_text || "");
 
@@ -258,7 +312,6 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         });
 
       try {
-        // Önce altyazısız dene: sunucu önbellekteyse LLM/altyazı yok, anında döner.
         let data =
           pasted.length >= 3 ? await run(pasted) : await run(undefined);
         if (token !== job.current) return;
@@ -278,18 +331,19 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        await holdPreparing(startedAt, Boolean(data.cached));
+        if (!(data.cached || sameVideo)) {
+          await holdPreparing(startedAt, false);
+        }
         if (token !== job.current) return;
         remember(data, input.video_url, topic);
         void refresh();
         if (stillRunning(data) && data.job_id) {
           await pollUntilDone(data.job_id, token, input.video_url, topic);
         } else {
-          goNotebook(data);
+          goNotebook(data, input.video_url);
         }
       } catch (err) {
         if (token !== job.current) return;
-        // Önbellek kaçtı / altyazı lazım: bir kez altyazıyla dene.
         const msg = err instanceof Error ? err.message : "Analiz başarısız";
         if (pasted.length < 3 && /altyazı|transkript|subtitle/i.test(msg)) {
           try {
@@ -298,14 +352,16 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
             if (captions.length >= 3) {
               const data = await run(captions);
               if (token !== job.current) return;
-              await holdPreparing(startedAt, Boolean(data.cached));
+              if (!(data.cached || sameVideo)) {
+                await holdPreparing(startedAt, false);
+              }
               if (token !== job.current) return;
               remember(data, input.video_url, topic);
               void refresh();
               if (stillRunning(data) && data.job_id) {
                 await pollUntilDone(data.job_id, token, input.video_url, topic);
               } else {
-                goNotebook(data);
+                goNotebook(data, input.video_url);
               }
               return;
             }
@@ -322,7 +378,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [pollUntilDone, refresh, remember, goNotebook],
+    [pollUntilDone, refresh, remember, goNotebook, url, result],
   );
 
   const value = useMemo(
