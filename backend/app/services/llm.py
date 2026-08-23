@@ -38,8 +38,9 @@ NON_WORD_RE = re.compile(r"[^a-z0-9]+")
 CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
-LLM_HTTP_TIMEOUT = httpx.Timeout(90.0, connect=12.0)
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(50.0, connect=8.0)
+LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
+# Gemini free/yavaş yanıt + Render CPU → 50 sn sık sık "Request timed out."
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash"
@@ -648,7 +649,7 @@ def _gemini_native_completion(
     for name in _gemini_models_to_try():
         generation = {
             "temperature": temperature,
-            "maxOutputTokens": 7000,
+            "maxOutputTokens": 4096,
             "thinkingConfig": {"thinkingBudget": 0},
         }
         if json_mode:
@@ -673,6 +674,11 @@ def _gemini_native_completion(
         except Exception as exc:  # noqa: BLE001
             last = exc
             logger.warning("Gemini %s ağ hatası: %s", name, exc)
+            # Aynı timeout'u 4 modelde üst üste yaşatma — kullanıcı dakikalar bekler.
+            if _is_timeout(exc):
+                raise RuntimeError(
+                    "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
+                ) from exc
             continue
         if response.status_code == 400 and "thinking" in (response.text or "").lower():
             generation.pop("thinkingConfig", None)
@@ -686,6 +692,10 @@ def _gemini_native_completion(
                 )
             except Exception as exc:  # noqa: BLE001
                 last = exc
+                if _is_timeout(exc):
+                    raise RuntimeError(
+                        "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
+                    ) from exc
                 continue
         if response.status_code == 404:
             logger.warning("Gemini model yok, sıradaki deneniyor: %s", name)
@@ -1215,7 +1225,12 @@ def _run_parallel(jobs: list) -> list[dict]:
     if fatal_error:
         raise fatal_error[0]
     if results and failures and all(not item for item in results):
-        raise RuntimeError(failures[0])
+        first = failures[0]
+        if "timed out" in first.lower() or "timeout" in first.lower():
+            raise RuntimeError(
+                "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
+            )
+        raise RuntimeError(first)
     return results
 
 

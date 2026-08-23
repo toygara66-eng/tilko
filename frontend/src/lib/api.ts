@@ -10,34 +10,49 @@ export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatas�
       ? err.message
       : typeof err === "string"
         ? err
-        : "";
+        : String(err ?? "");
   const name =
     typeof DOMException !== "undefined" && err instanceof DOMException
       ? err.name
       : err instanceof Error
         ? err.name
         : "";
+  const blob = `${name} ${message}`.toLowerCase();
   if (
     name === "AbortError" ||
     name === "TimeoutError" ||
-    /aborted|timeout|timed out|zaman aşımı/i.test(message)
+    /abort|timeout|timed\s*out|zaman\s*aşım|request timed/i.test(blob)
   ) {
-    return "Sunucu geç yanıt verdi (Render uyanıyor olabilir). 20 sn bekle, Analiz et’e tek sefer bas; üst üste basma.";
+    return "Sunucu geç yanıt verdi (Render uyanıyor veya model yavaş). 20 sn bekle, bir kez daha dene; üst üste basma.";
   }
-  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+  if (/failed to fetch|networkerror|load failed/i.test(blob)) {
     return "API'ye ulaşılamadı. İnterneti kontrol et veya 20 sn sonra dene.";
+  }
+  // Sunucudan gelen ham İngilizce timeout'ları da çevir.
+  if (/request timed out\.?/i.test(message.trim())) {
+    return "Sunucu geç yanıt verdi. 20 sn bekle, bir kez daha dene.";
   }
   return message.trim() || fallback;
 }
 
-/** Render free uyku → ilk istek uzun sürer; analizden önce nazikçe uyandır. */
+/** Render'ı uyandır; analizden önce en fazla ~8 sn bekle, takılma. */
 export async function wakeApi(): Promise<void> {
+  if (typeof window !== "undefined") {
+    try {
+      const last = Number(window.sessionStorage.getItem("tilko_api_wake_at") || 0);
+      if (Date.now() - last < 120_000) return;
+    } catch {
+      /* ignore */
+    }
+  }
   try {
-    await fetch(`${API_BASE}/health`, {
-      method: "GET",
-      cache: "no-store",
-      signal: AbortSignal.timeout(45_000),
-    });
+    await Promise.race([
+      fetch(`${API_BASE}/health`, { method: "GET", cache: "no-store" }),
+      new Promise((resolve) => setTimeout(resolve, 8_000)),
+    ]);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("tilko_api_wake_at", String(Date.now()));
+    }
   } catch {
     /* analiz yine denenecek */
   }
@@ -108,7 +123,12 @@ async function readJson<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = formatApiDetail((data as { detail?: unknown }).detail);
-    throw new Error(detail || `İstek başarısız (${response.status})`);
+    throw new Error(
+      humanizeNetworkError(
+        detail || `İstek başarısız (${response.status})`,
+        `İstek başarısız (${response.status})`,
+      ),
+    );
   }
   return data as T;
 }
@@ -331,17 +351,16 @@ export function analyzeVideo(payload: {
   is_yks_fen_question?: boolean;
   transcript_lines?: { start: number; text: string }[];
 }) {
-  // Analiz HTTP'de LLM beklemez; uzun timeout yalnızca Render uyanması için.
+  // AbortSignal yok: tarayıcı "Request timed out" basmasın; API zaten hemen job döner.
   return request<AnalyzeResponse>("/analyze", {
     method: "POST",
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(90_000),
   });
 }
 
 export function getAnalyzeJob(jobId: string) {
   return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`, {
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(60_000),
   });
 }
 
@@ -687,7 +706,7 @@ export function submitDiagnostic(
   return request<DiagnosticReport>("/diagnostic/submit", {
     method: "POST",
     body: JSON.stringify({ user_id: userId, answers }),
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(180_000),
   });
 }
 

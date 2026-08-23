@@ -93,7 +93,7 @@ export async function ensureAuth(
       method: "POST",
       headers,
       body,
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(90_000),
     });
     if (login.ok) {
       const data = (await login.json()) as { access_token: string };
@@ -104,7 +104,7 @@ export async function ensureAuth(
       method: "POST",
       headers,
       body,
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(90_000),
     });
     if (!register.ok) {
       const err = (await register.json().catch(() => ({}))) as { detail?: unknown };

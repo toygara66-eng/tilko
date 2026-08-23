@@ -172,8 +172,10 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           fails = 0;
           if ((next.job_status || "") === "error") {
             setError(
-              next.job_error ||
-                "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun.",
+              humanizeNetworkError(
+                next.job_error ||
+                  "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun.",
+              ),
             );
             void refresh();
             return;

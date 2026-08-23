@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   getDiagnosticExam,
   submitDiagnostic,
+  humanizeNetworkError,
   type DiagnosticQuestion,
   type DiagnosticReport,
 } from "@/lib/api";
@@ -27,7 +28,7 @@ export default function TeshisPage() {
     getDiagnosticExam(getUserId(), "baseline")
       .then((data) => setQuestions(data.questions))
       .catch((err) =>
-        setError(err instanceof Error ? err.message : "Sınav yüklenemedi"),
+        setError(humanizeNetworkError(err, "Sınav yüklenemedi")),
       );
   }, []);
 
@@ -53,7 +54,7 @@ export default function TeshisPage() {
       });
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analiz gönderilemedi");
+      setError(humanizeNetworkError(err, "Analiz gönderilemedi"));
     } finally {
       setBusy(false);
     }

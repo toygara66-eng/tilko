@@ -1775,8 +1775,14 @@ def _pack_questions(raw: object, video_id: str, start: int = 1) -> list[Question
 
 def _public_analyze_error(exc: BaseException) -> str:
     text = str(exc).strip() or "Analiz başarısız."
-    if "api_key" in text.lower() or "bearer" in text.lower():
+    low = text.lower()
+    if "api_key" in low or "bearer" in low:
         return "Altyazı veya analiz adımı başarısız. Biraz bekleyip tekrar dene."
+    if "timeout" in low or "timed out" in low or "time-out" in low:
+        return (
+            "Model veya altyazı zaman aşımına uğradı. "
+            "20 saniye bekleyip Analiz et’e bir kez daha bas."
+        )
     return text[:280]
 
 
