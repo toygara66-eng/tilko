@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "gemma2:9b"
     ollama_num_ctx: int = 8192
-    llm_provider: str = "groq"
-    llm_fallback: str = "cerebras"
+    llm_provider: str = "gemini"
+    llm_fallback: str = "groq"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     capture_training_data: bool = False

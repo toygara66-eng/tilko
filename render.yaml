@@ -13,9 +13,9 @@ services:
       - key: APP_ENV
         value: production
       - key: LLM_PROVIDER
-        value: groq
+        value: gemini
       - key: LLM_FALLBACK
-        value: cerebras
+        value: groq
       - key: TILKO_GEMINI_VIDEO
         value: "false"
       - key: NEBIUS_MODEL

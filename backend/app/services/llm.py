@@ -44,7 +44,7 @@ ANALYZE_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
-# Tek model dene — peş peşe 404 denemeleri de faturalanabiliyor.
+# flash-lite ≈ en ucuz; 2.0/2.5-flash yedek (daha pahalı).
 GEMINI_MODEL_FALLBACKS = (
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
@@ -997,20 +997,14 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _provider_chain() -> list[str]:
-    """Analiz sırası: ucuz/ücretsiz önce, Gemini pahalı olduğu için sonda.
-
-    Gemini video+metin günde onlarca TL yakabiliyor; Groq/Cerebras önce.
-    """
-    preferred = (settings.llm_provider or "groq").strip().lower()
-    # Gemini'yi bilerek sona koy — fatura kontrolü.
-    cheap = ["groq", "cerebras", "nebius"]
+    """Analiz: Gemini önce (kalite), sonra ucuz yedekler."""
+    preferred = (settings.llm_provider or "gemini").strip().lower()
+    base = ["gemini", "groq", "cerebras", "nebius"]
     if preferred == "openrouter":
-        return ["openrouter", *cheap, "gemini"]
-    if preferred == "gemini":
-        return [*cheap, "gemini"]
-    if preferred in cheap:
-        return [preferred] + [name for name in cheap if name != preferred] + ["gemini"]
-    return [*cheap, "gemini"]
+        return ["openrouter", "gemini", "groq", "cerebras", "nebius"]
+    if preferred in base:
+        return [preferred] + [name for name in base if name != preferred]
+    return list(base)
 
 
 def reset_analyze_provider_chain() -> None:
