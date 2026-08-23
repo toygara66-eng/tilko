@@ -457,16 +457,14 @@ def _fold_tr(text: str) -> str:
 
 _PROMO_NOTE_RE = re.compile(
     r"("
-    r"pdf|abone|beğen|telegram|whatsapp|instagram|discord|"
-    r"ücretsiz\s*pdf|pdf'?i?\s*indir|kolay\s*erişim|destek\s*ol|"
-    r"kitap\s*uyum|kaynak\s*seç|doğru\s*kitap|hız\s*kat|"
-    r"kanalıma|satın\s*al|sipariş|kampanya|sponsor|"
-    r"korsan|indirim|yayınevi|yayinevi|sosyal\s*medya|"
-    r"başarıya\s*koş|sınavı\s*fethet|birebir\s*uyumlu|"
-    r"eleştirel\s*düşünme|farklı\s*kaynaklardan|"
-    r"doğru\s*kaynak|zaman\s*yönetimi|"
-    r"genel\s*tekrar|lisans\s*hedefi|kalem\s*tutan|"
-    r"hakkım\s*(sonuna|helal)|ücretsiz\s*olarak\s*indir"
+    r"ücretsiz\s*pdf|pdf'?i?\s*indir|kolay\s*erişim|"
+    r"telegram|whatsapp|instagram|discord|"
+    r"abone\s*ol|beğen\s*meyi|kanalıma\s*abone|"
+    r"satın\s*al|sipariş\s*ver|kampanya|sponsor|"
+    r"korsan\s*kitap|korsan\s*pdf|indirim\s*kod|"
+    r"yayınevi|yayinevi|sosyal\s*medya\s*hesab|"
+    r"çekiliş|hediye\s*kod|promosyon|"
+    r"hakkım\s*(sonuna|helal)|destek\s*ol(arak)?\s*abone"
     r")",
     re.IGNORECASE,
 )
@@ -485,13 +483,36 @@ def _is_promo_note(note: dict) -> bool:
     return bool(_PROMO_NOTE_RE.search(blob))
 
 
+def _normalize_for_match(text: str) -> str:
+    folded = _fold_tr(text)
+    cleaned = re.sub(r"[^\w\s]", " ", folded, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _span_in_transcript(span: str, folded_norm: str) -> bool:
+    """Birebir veya noktalama farkıyla altyazıda geçiyor mu."""
+    needle = _normalize_for_match(span)
+    if len(needle) < 8:
+        return False
+    if needle in folded_norm:
+        return True
+    words = needle.split()
+    if len(words) >= 5:
+        for index in range(0, len(words) - 4):
+            if " ".join(words[index : index + 5]) in folded_norm:
+                return True
+    if len(words) >= 3 and " ".join(words[:4]) in folded_norm:
+        return True
+    return False
+
+
 def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
-    """Altyazıda birebir quote olmayan veya tanıtım notlarını atar."""
+    """Tanıtım notlarını at; altyazıyla bağını gevşek doğrula (sıkı quote modeli öldürmesin)."""
     source = _content_tokens(transcript)
-    folded = _fold_tr(transcript)
+    folded_norm = _normalize_for_match(transcript)
     if not notes:
         return []
-    if not source:
+    if not source and not folded_norm:
         return []
     kept: list[dict] = []
     for note in notes:
@@ -503,22 +524,34 @@ def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
             or note.get("alıntı")
             or ""
         ).strip()
-        # Quote zorunlu: altyazıda yoksa uydurma/meta not düşer.
-        if len(quote) < 12 or _fold_tr(quote) not in folded:
+        title = str(note.get("title") or "").strip()
+        detail = str(note.get("detail") or "").strip()
+        if not title and not detail:
             continue
-        blob = " ".join(
-            [
-                str(note.get("title") or ""),
-                str(note.get("detail") or ""),
-                " ".join(str(p) for p in (note.get("key_points") or [])),
-            ]
-        )
+        blob = f"{title} {detail} {' '.join(str(p) for p in (note.get('key_points') or []))}"
         tokens = _content_tokens(blob)
-        overlap = tokens & source
-        ratio = len(overlap) / max(len(tokens), 1)
-        if len(overlap) >= 3 and ratio >= 0.18:
+        overlap = tokens & source if source else set()
+        quote_ok = bool(quote) and _span_in_transcript(quote, folded_norm)
+        detail_ok = len(detail) >= 36 and _span_in_transcript(detail[:100], folded_norm)
+        soft_ok = len(overlap) >= 2 and len(detail) >= 24
+        if quote_ok or detail_ok or soft_ok:
             kept.append(note)
-    return kept
+    if kept:
+        return kept
+    # Model quote'u bozsa bile ders notunu tamamen düşürme.
+    soft = [
+        note
+        for note in notes
+        if not _is_promo_note(note)
+        and len(str(note.get("detail") or note.get("title") or "").strip()) >= 24
+    ]
+    if soft:
+        logger.warning(
+            "Sıkı grounding 0 not bıraktı; %s not yumuşak kabul edildi.",
+            len(soft),
+        )
+        return soft[:8]
+    return []
 
 
 def _ground_questions(questions: list[dict], transcript: str) -> list[dict]:
@@ -535,10 +568,11 @@ def _ground_questions(questions: list[dict], transcript: str) -> list[dict]:
                 " ".join(str(v) for v in options.values()),
             ]
         )
-        overlap = _content_tokens(blob) & source
-        if len(overlap) >= 3:
+        tokens = _content_tokens(blob)
+        overlap = tokens & source
+        if not tokens or len(overlap) >= 2 or len(overlap) / max(len(tokens), 1) >= 0.12:
             kept.append(item)
-    return kept or questions
+    return kept if kept else questions
 
 
 def _extract_json(raw: str) -> dict:
@@ -1695,9 +1729,20 @@ def _analyze_combined(
         _collect([result], questions, seen, count)
         questions = _ground_questions(questions, work)
     if not notes:
-        raise RuntimeError(
-            "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
-        )
+        # Grounding yine boşsa ham notlarla dön (ikinci LLM turu masraf/timeout).
+        raw_notes = [
+            note
+            for note in _coerce_notes(result)
+            if not _is_promo_note(note)
+            and (note.get("detail") or note.get("title"))
+        ]
+        if raw_notes:
+            logger.warning("İkinci grounding da boş; ham %s not kullanılıyor.", len(raw_notes))
+            notes = raw_notes[:8]
+        else:
+            raise RuntimeError(
+                "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
+            )
     if len(questions) < max(2, count // 2):
         try:
             more = generate_questions(

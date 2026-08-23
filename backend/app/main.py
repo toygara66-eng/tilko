@@ -1866,12 +1866,21 @@ def _analyze_with_lines(
     questions = _pack_questions(llm_data.get("questions"), video_id)
     if focus_start > 0:
         floor = max(0, int(focus_start) - 120)
-        notes = [n for n in notes if int(n.timestamp or 0) >= floor]
-        questions = [q for q in questions if int(q.timestamp or 0) >= floor]
+        filtered_notes = [n for n in notes if int(n.timestamp or 0) >= floor]
+        filtered_qs = [q for q in questions if int(q.timestamp or 0) >= floor]
+        # Model dilim içi 0..300 basarsa hepsini silme.
+        if filtered_notes:
+            notes = filtered_notes
+        if filtered_qs:
+            questions = filtered_qs
     elif transcript_duration_seconds(lines) >= 1800:
-        # Uzun videoda giriş sohbetini (PDF/korsan/selam) ders notu sayma.
-        notes = [n for n in notes if int(n.timestamp or 0) >= 600]
-        questions = [q for q in questions if int(q.timestamp or 0) >= 600]
+        # Uzun videoda dilim zaten pick_content_slice ile seçildi; timestamp 0 olabilir.
+        filtered_notes = [n for n in notes if int(n.timestamp or 0) >= 600]
+        filtered_qs = [q for q in questions if int(q.timestamp or 0) >= 600]
+        if filtered_notes:
+            notes = filtered_notes
+        if filtered_qs:
+            questions = filtered_qs
     if notes or questions:
         reservation = credit_service.confirm(db, user_id, video_id, reservation)
     else:
