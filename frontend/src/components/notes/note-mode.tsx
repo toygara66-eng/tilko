@@ -61,25 +61,28 @@ export function NoteModeToggle({ className }: { className?: string }) {
       aria-label={isHandwrittenMode ? "Defter modu açık" : "Odak modu açık"}
       onClick={() => setIsHandwrittenMode(!isHandwrittenMode)}
       className={cn(
-        "inline-flex items-center gap-3 rounded-full border px-3 py-1.5 text-sm shadow-lg backdrop-blur-md transition",
+        "inline-flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs shadow-lg backdrop-blur-md transition sm:gap-3 sm:px-3 sm:text-sm",
         "border-zinc-200 bg-white text-zinc-800 hover:border-zinc-400",
         "dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:border-zinc-600",
         className,
       )}
     >
       <span className="whitespace-nowrap font-medium">
-        {isHandwrittenMode ? "📝 Defter Modu" : "📖 Odak Modu"}
+        {isHandwrittenMode ? "📝 Defter" : "📖 Odak"}
+        <span className="hidden sm:inline"> Modu</span>
       </span>
       <span
         className={cn(
-          "relative h-6 w-11 rounded-full transition-colors",
+          "relative h-5 w-9 rounded-full transition-colors sm:h-6 sm:w-11",
           isHandwrittenMode ? "bg-amber-400" : "bg-cyan-400",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-zinc-950 shadow transition-transform",
-            isHandwrittenMode ? "left-0.5" : "left-0.5 translate-x-5",
+            "absolute top-0.5 h-4 w-4 rounded-full bg-zinc-950 shadow transition-transform sm:h-5 sm:w-5",
+            isHandwrittenMode
+              ? "left-0.5"
+              : "left-0.5 translate-x-4 sm:translate-x-5",
           )}
         />
       </span>

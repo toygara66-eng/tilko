@@ -24,16 +24,16 @@ export function HocaNote({ text }: { text: string }) {
   return (
     <div
       className={cn(
-        "mt-5 max-w-[92%] -rotate-2 px-3 py-2 leading-snug",
+        "mt-4 w-full max-w-full px-3 py-2 leading-snug sm:mt-5 sm:max-w-[92%]",
         isHandwrittenMode
-          ? "ml-auto rounded-sm border border-red-700/25 bg-red-50/70 note-scribble text-[1.28rem] text-red-600"
-          : "rounded-xl border border-red-200 bg-red-50/80 note-scribble text-lg text-red-700 dark:border-red-500/35 dark:bg-red-950/50 dark:text-red-300",
+          ? "rounded-sm border border-red-700/25 bg-red-50/70 note-scribble text-[1.05rem] text-red-600 sm:-rotate-1 sm:text-[1.2rem] sm:ml-auto"
+          : "rounded-xl border border-red-200 bg-red-50/80 note-scribble text-base text-red-700 dark:border-red-500/35 dark:bg-red-950/50 dark:text-red-300 sm:text-lg",
       )}
     >
-      <p className="mb-1 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-red-500">
+      <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-red-500 sm:text-[0.7rem]">
         Hoca notu
       </p>
-      <p>{text}</p>
+      <p className="break-words">{text}</p>
     </div>
   );
 }
@@ -49,7 +49,7 @@ export function Highlighter({
     return <strong className="font-bold text-blue-700 dark:text-blue-400">{children}</strong>;
   }
   return (
-    <mark className="highlighter-mark rounded-sm bg-yellow-300/60 px-1 text-inherit shadow-[inset_0_-0.35em_0_rgb(250_204_21_/_0.45)] [-webkit-box-decoration-break:clone] [box-decoration-break:clone]">
+    <mark className="highlighter-mark rounded-sm bg-yellow-300/60 px-0.5 text-inherit shadow-[inset_0_-0.35em_0_rgb(250_204_21_/_0.45)] [-webkit-box-decoration-break:clone] [box-decoration-break:clone] sm:px-1">
       {children}
     </mark>
   );
@@ -106,13 +106,14 @@ export function HumanNoteCard({
   return (
     <article
       style={{
-        transform: isHandwrittenMode ? `rotate(${tilt}deg)` : undefined,
+        // Telefonlarda rotate komşu kartlarla üst üste biniyor.
+        transform: isHandwrittenMode ? `rotate(${tilt * 0.35}deg)` : undefined,
       }}
       className={cn(
-        "relative mt-3 overflow-visible px-6 pt-7 transition-colors",
+        "relative mt-3 overflow-hidden px-4 pt-6 transition-colors sm:overflow-visible sm:px-6 sm:pt-7",
         isHandwrittenMode
           ? cn(
-              "note-hand rounded-sm border border-amber-900/15 pb-14 text-slate-900 shadow-[4px_8px_24px_rgba(0,0,0,0.28)]",
+              "note-hand rounded-sm border border-amber-900/15 pb-6 text-slate-900 shadow-[4px_8px_24px_rgba(0,0,0,0.28)] sm:pb-8",
               paper,
             )
           : "rounded-2xl border border-zinc-200 bg-white pb-6 font-sans text-zinc-900 shadow-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100",
@@ -122,28 +123,28 @@ export function HumanNoteCard({
         <>
           <div
             aria-hidden
-            className="absolute left-1/2 top-0 h-7 w-28 -translate-x-1/2 -translate-y-1/2 rotate-1 bg-amber-200/80 shadow-sm"
+            className="absolute left-1/2 top-0 hidden h-7 w-28 -translate-x-1/2 -translate-y-1/2 rotate-1 bg-amber-200/80 shadow-sm sm:block"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-10 w-px bg-red-400/40"
+            className="pointer-events-none absolute inset-y-0 left-5 w-px bg-red-400/35 sm:left-10 sm:bg-red-400/40"
           />
         </>
       ) : null}
 
       <header
         className={cn(
-          "mb-4 flex items-baseline justify-between gap-3",
-          isHandwrittenMode ? "pl-4" : "pl-0",
+          "mb-3 flex flex-col gap-1 sm:mb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3",
+          isHandwrittenMode ? "pl-3 sm:pl-4" : "pl-0",
         )}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           {subject ? (
             <p
               className={cn(
                 "leading-none",
                 isHandwrittenMode
-                  ? "note-scribble text-lg text-sky-800/80"
+                  ? "note-scribble text-base text-sky-800/80 sm:text-lg"
                   : "font-sans text-xs font-medium uppercase tracking-widest text-zinc-500",
               )}
             >
@@ -152,10 +153,10 @@ export function HumanNoteCard({
           ) : null}
           <h3
             className={cn(
-              "leading-tight tracking-tight",
+              "break-words tracking-tight",
               isHandwrittenMode
-                ? "note-hand text-3xl font-bold text-slate-900"
-                : "font-sans text-xl font-semibold text-zinc-900 dark:text-zinc-50",
+                ? "note-hand text-[1.45rem] font-bold leading-snug text-slate-900 sm:text-3xl sm:leading-tight"
+                : "font-sans text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-xl",
             )}
           >
             {ink(title, highlights, isHandwrittenMode)}
@@ -166,7 +167,7 @@ export function HumanNoteCard({
             className={cn(
               "shrink-0",
               isHandwrittenMode
-                ? "note-scribble text-base text-slate-500"
+                ? "note-scribble text-sm text-slate-500 sm:text-base"
                 : "font-sans text-xs text-zinc-500",
             )}
           >
@@ -177,14 +178,14 @@ export function HumanNoteCard({
 
       <ul
         className={cn(
-          "space-y-1.5",
+          "space-y-2 sm:space-y-1.5",
           isHandwrittenMode
-            ? "pl-4 note-hand text-[1.35rem] leading-snug text-slate-800"
+            ? "pl-3 note-hand text-[1.05rem] leading-relaxed text-slate-800 sm:pl-4 sm:text-[1.3rem] sm:leading-snug"
             : "pl-0 font-sans text-sm leading-relaxed text-zinc-700 dark:text-zinc-300",
         )}
       >
         {lines.map((line, index) => (
-          <li key={`${line}-${index}`}>
+          <li key={`${line}-${index}`} className="break-words">
             {ink(line, highlights, isHandwrittenMode)}
           </li>
         ))}
@@ -193,9 +194,9 @@ export function HumanNoteCard({
       {mnemonic ? (
         <p
           className={cn(
-            "mt-4",
+            "mt-3 break-words sm:mt-4",
             isHandwrittenMode
-              ? "pl-4 note-scribble text-2xl text-sky-900"
+              ? "pl-3 note-scribble text-xl leading-snug text-sky-900 sm:pl-4 sm:text-2xl"
               : "pl-0 font-sans text-sm font-medium text-blue-700 dark:text-blue-400",
           )}
         >
@@ -204,15 +205,19 @@ export function HumanNoteCard({
       ) : null}
 
       {teacherNote ? (
-        <div className={isHandwrittenMode ? "pl-4" : ""}>
+        <div className={isHandwrittenMode ? "pl-3 sm:pl-4" : ""}>
           <HocaNote text={teacherNote} />
         </div>
       ) : null}
 
       {caution ? (
         isHandwrittenMode ? (
-          <div className="absolute bottom-3 right-4 max-w-[78%] -rotate-2 text-right note-scribble text-[1.35rem] leading-tight text-red-600">
-            ⚠️ DİKKAT: {ink(caution, highlights, true)}
+          <div
+            role="alert"
+            className="mt-4 break-words rounded-sm border border-red-600/25 bg-red-50/80 px-3 py-2 note-scribble text-[1.05rem] leading-snug text-red-700 sm:mt-5 sm:text-[1.25rem]"
+          >
+            <span className="font-semibold">⚠️ DİKKAT: </span>
+            {ink(caution, highlights, true)}
           </div>
         ) : (
           <div
@@ -230,9 +235,9 @@ export function HumanNoteCard({
       {footer ? (
         <div
           className={cn(
-            "mt-4",
+            "mt-4 min-w-0",
             isHandwrittenMode
-              ? "pl-4 note-scribble text-lg text-sky-800"
+              ? "pl-3 note-scribble text-base text-sky-800 sm:pl-4 sm:text-lg"
               : "pl-0 font-sans text-sm text-blue-700 dark:text-blue-400",
           )}
         >

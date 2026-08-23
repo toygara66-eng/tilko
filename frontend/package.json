@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "android:prep": "next build && npx cap sync android"
+    "android:prep": "node scripts/android-prep.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

@@ -28,6 +28,8 @@ android/app/release/
 android/keystore.properties
 android/*.jks
 android/*.keystore
+android/TILKO_KEYSTORE_PASSWORD.txt
+android/app/build/
 android/app/src/main/assets/public/
 frontend/out/
 node_modules/

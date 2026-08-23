@@ -85,17 +85,17 @@ export function MyNotes() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-scribble text-4xl text-amber-800 dark:text-amber-100 md:text-5xl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-scribble text-3xl text-amber-800 dark:text-amber-100 sm:text-4xl md:text-5xl">
             Notlarım
           </h1>
-          <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">
             Analiz ettiğin videolardaki ders notları ve sorular burada birikir.
             Matematik, Türkçe, Tarih… derse bas, o güne kadar çıkanların hepsi gelsin.
           </p>
         </div>
-        <NoteModeToggle />
+        <NoteModeToggle className="self-start" />
       </div>
 
       <div className="flex flex-wrap gap-2">

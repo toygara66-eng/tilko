@@ -26,12 +26,12 @@ export default function TrapNotebookPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-scribble text-4xl text-amber-800 dark:text-amber-100 md:text-5xl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-scribble text-3xl text-amber-800 dark:text-amber-100 sm:text-4xl md:text-5xl">
             Tuzak Defteri
           </h1>
-          <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">
             Çeldiriciye düşünce kenara kırmızı kalemle yazılmış analiz. Karta bas,
             reçete açılsın.
             {profile.weakTopics.length
@@ -39,7 +39,7 @@ export default function TrapNotebookPage() {
               : ""}
           </p>
         </div>
-        <NoteModeToggle />
+        <NoteModeToggle className="self-start" />
       </div>
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
@@ -66,7 +66,7 @@ export default function TrapNotebookPage() {
             const open = openId === trap.id;
             const card = fromTrapItem(trap, index % 2 === 0 ? -1 : 1);
             return (
-              <div
+                <div
                 key={trap.id}
                 role="button"
                 tabIndex={0}
@@ -77,8 +77,7 @@ export default function TrapNotebookPage() {
                     setOpenId(open ? null : trap.id);
                   }
                 }}
-                className="block w-full text-left transition-transform duration-300 ease-out"
-                style={{ transform: open ? "scale(1.015)" : undefined }}
+                className="block w-full min-w-0 text-left transition-transform duration-300 ease-out sm:hover:scale-[1.01]"
               >
                 <HumanNoteCard
                   {...card}

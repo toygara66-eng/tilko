@@ -59,10 +59,21 @@ body {
 
 .note-hand {
   font-family: var(--font-kalam), var(--font-caveat), cursive !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .note-scribble {
   font-family: var(--font-caveat), cursive !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  .note-hand,
+  .note-scribble {
+    letter-spacing: 0.01em;
+  }
 }
 
 .glow-orange {
