@@ -195,12 +195,25 @@ def health() -> dict:
     from app.services.llm import analyze_llm_ready
 
     llm = analyze_llm_ready()
+    cache_videos = 0
+    try:
+        from app.database.models import AnalyzeCache
+        from app.database.session import SessionLocal
+
+        db = SessionLocal()
+        try:
+            cache_videos = int(db.query(AnalyzeCache).count() or 0)
+        finally:
+            db.close()
+    except Exception:
+        cache_videos = 0
     body = {
         "status": "ok" if (not settings.is_production or llm["ready"]) else "degraded",
         "llm_ready": bool(llm["ready"]),
         "nebius": bool(llm.get("nebius")),
         "groq": bool(llm["groq"]),
         "cerebras": bool(llm["cerebras"]),
+        "analyze_cache_videos": cache_videos,
     }
     if not settings.is_production:
         body["provider"] = settings.llm_provider
@@ -1888,6 +1901,29 @@ def _analyze_with_lines(
         db=db,
     )
     if remaining:
+        if notes:
+            dump = AnalyzeResponse(
+                video_id=video_id,
+                video_url=canonical_url,
+                subject=subject,
+                notes=notes,
+                questions=questions,
+                teacher_persona=persona,
+                job_id=job_id,
+                job_status="running",
+                chunks_done=done,
+                chunks_total=1 + len(remaining),
+                **overlay,
+            ).model_dump()
+            dump["analyze_span"] = "partial"
+            dump["llm_model"] = settings.active_model
+            dump["notes_depth"] = 6
+            dump["focus_bucket"] = int(focus_bucket or 0)
+            dump["focus_start"] = int(focus_start or 0)
+            dump["exam_target"] = exam_target or ""
+            for key in extra_keys:
+                dump.pop(key, None)
+            cache.save(cache_key, dump)
         threading.Thread(
             target=_continue_analyze_job,
             args=(
@@ -1905,7 +1941,7 @@ def _analyze_with_lines(
             daemon=True,
             name=f"analyze-{job_id}",
         ).start()
-    elif notes and questions:
+    elif notes:
         dump = AnalyzeResponse(
             video_id=video_id,
             video_url=canonical_url,
@@ -2094,14 +2130,14 @@ def _continue_analyze_job(
         except Exception:
             logger.exception("Takipçi confirm başarısız %s", follower_id)
     final = jobs.snapshot(job_id)
-    if not final or not final.get("notes") or not final.get("questions"):
+    if not final or not final.get("notes"):
         return
     dump = {
         "video_id": final["video_id"],
         "video_url": final["video_url"],
         "subject": final.get("subject") or None,
         "notes": final["notes"],
-        "questions": final["questions"],
+        "questions": final.get("questions") or [],
         "teacher_persona": final["teacher_persona"],
         "cached": False,
         "analyze_span": "full",

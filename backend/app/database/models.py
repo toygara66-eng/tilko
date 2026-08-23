@@ -574,3 +574,29 @@ class SavedNotebookItem(Base):
     timestamp: Mapped[int] = mapped_column(Integer, default=0)
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class AnalyzeCache(Base):
+    """Aynı YouTube videosu için paylaşılan analiz sonucu — LLM tekrar çağrılmaz."""
+
+    __tablename__ = "analyze_cache"
+    __table_args__ = (
+        UniqueConstraint("lookup_key", name="uq_analyze_cache_lookup"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lookup_key: Mapped[str] = mapped_column(String(320), default="", index=True)
+    video_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    subject: Mapped[str] = mapped_column(String(64), default="", index=True)
+    exam_target: Mapped[str] = mapped_column(String(32), default="")
+    focus_bucket: Mapped[int] = mapped_column(Integer, default=0)
+    llm_model: Mapped[str] = mapped_column(String(128), default="")
+    notes_depth: Mapped[int] = mapped_column(Integer, default=0)
+    note_count: Mapped[int] = mapped_column(Integer, default=0)
+    question_count: Mapped[int] = mapped_column(Integer, default=0)
+    hit_count: Mapped[int] = mapped_column(Integer, default=0)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
