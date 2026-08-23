@@ -142,8 +142,8 @@ def build_combined_analyze_prompt(
     from app.services.exams import label_for, prompt_block
 
     konu = subject or label_for(exam_target)
-    count = max(2, min(int(question_count or 4), 6))
-    notes_n = max(6, min(int(note_count or 8), 10))
+    notes_n = max(3, min(int(note_count or 3), 4))
+    count = max(2, min(int(question_count or 3), 3))
     extra = (rag_block or "").strip()
     rag = f"\n{extra}\n" if extra else ""
     window = (
@@ -171,7 +171,7 @@ Zaman damgalı altyazı:
 {transcript_block}
 ---
 
-En az {notes_n} not yaz (dilimde kaç sınav kavramı varsa o kadar, üst sınır 10).
+En az {notes_n} not yaz (üst sınır 4). Kısa tut; jeton harcama.
 Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
 
 Çıktı JSON şeması:

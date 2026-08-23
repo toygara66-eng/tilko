@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash-lite"
     hf_api_key: str = ""
     hf_model: str = "openai/gpt-oss-120b"
     hf_base_url: str = "https://router.huggingface.co/v1"
@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "gemma2:9b"
     ollama_num_ctx: int = 8192
-    llm_provider: str = "gemini"
-    llm_fallback: str = ""
+    llm_provider: str = "groq"
+    llm_fallback: str = "cerebras"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     capture_training_data: bool = False
@@ -104,10 +104,10 @@ class Settings(BaseSettings):
         if self.is_local:
             return 6000
         if self.llm_provider == "gemini":
-            return 9000
+            return 4500
         if self.is_tight_free_tier:
-            return 12000
-        return 32000
+            return 4500
+        return 12000
 
     @property
     def questions_per_call(self) -> int:

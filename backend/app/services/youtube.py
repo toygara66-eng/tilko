@@ -1114,15 +1114,22 @@ def _openrouter_text_from_youtube(
 def _fetch_via_llm_youtube(
     video_id: str, subject: str | None = None, *, strict: bool = False
 ) -> list[dict]:
-    """Son çare: Gemini YouTube URL okur. OpenRouter video yolu kapalı (ücretli 402)."""
+    """Son çare LLM. Gemini YouTube video varsayılan KAPALI (çok pahalı)."""
     from app.config import settings
 
     prompt = _transcribe_prompt(subject, strict=strict)
     errors: list[str] = []
-    gemini_key = (settings.gemini_api_key or "").strip()
 
-    if gemini_key:
-        for model in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"):
+    # Gemini video tokenleri günde onlarca TL yakar — sadece açıkça açılınca.
+    use_gemini_video = (os.environ.get("TILKO_GEMINI_VIDEO") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    gemini_key = (settings.gemini_api_key or "").strip()
+    if use_gemini_video and gemini_key:
+        for model in ("gemini-2.5-flash-lite",):
             try:
                 text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
                 lines = _lines_from_model_transcript(text)
@@ -1131,13 +1138,10 @@ def _fetch_via_llm_youtube(
                 errors.append(f"{model}: satır yok")
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
-                low = str(exc).lower()
-                if "429" in low or "quota" in low or "resource_exhausted" in low:
-                    continue
-                if "401" in low or "403" in low or "api_key" in low:
-                    break
+                break
+    elif gemini_key and not use_gemini_video:
+        errors.append("gemini-video-kapalı")
 
-    # OpenRouter video: çoğu anahtarda 402 / kredi ister — varsayılan kapalı.
     use_or = (os.environ.get("TILKO_OPENROUTER_VIDEO") or "").strip().lower() in {
         "1",
         "true",
@@ -1149,7 +1153,6 @@ def _fetch_via_llm_youtube(
         models = [
             "google/gemma-4-31b-it:free",
             "google/gemma-4-26b-a4b-it:free",
-            "nvidia/nemotron-nano-12b-v2-vl:free",
         ]
         for model in models:
             try:
@@ -1165,17 +1168,9 @@ def _fetch_via_llm_youtube(
                 if "402" in str(exc) or "balance" in str(exc).lower():
                     break
 
-    joined = " | ".join(errors)
-    if "429" in joined or "quota" in joined.lower():
-        raise ValueError(
-            "Gemini kotası doldu. YouTube altyazısını açıp tekrar dene veya yarın dene."
-        )
-    if "402" in joined or "balance" in joined.lower():
-        raise ValueError(
-            "Video okuma servisi ücret istiyor. YouTube’da altyazıyı açıp Analiz et."
-        )
     raise ValueError(
-        "LLM ile altyazı alınamadı. Videoda altyazı açık olsun veya metni yapıştır."
+        "Videoda altyazı bulunamadı. YouTube’da CC/altyazıyı açıp tekrar Analiz et "
+        "veya altyazı metnini yapıştır. (Video-LLM kapalı — maliyet koruması)"
     )
 
 

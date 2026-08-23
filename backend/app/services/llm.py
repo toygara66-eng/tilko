@@ -43,13 +43,11 @@ LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-GEMINI_CHAT_MODEL = "gemini-2.0-flash"
-# 2.5-flash birçok ücretsiz anahtarda 404; önce çalışan id'ler.
+GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
+# Tek model dene — peş peşe 404 denemeleri de faturalanabiliyor.
 GEMINI_MODEL_FALLBACKS = (
-    "gemini-2.0-flash",
     "gemini-2.5-flash-lite",
-    "gemini-1.5-flash",
-    "gemini-flash-latest",
+    "gemini-2.0-flash",
 )
 GEMINI_UNAVAILABLE_MODELS = frozenset(
     {
@@ -664,6 +662,7 @@ def _gemini_model_id() -> str:
 
 
 def _gemini_models_to_try() -> list[str]:
+    """Maliyet: yalnızca birincil (+ gerekirse 1 yedek), uzun liste yok."""
     primary = _gemini_model_id()
     ordered: list[str] = []
     for name in (primary, *GEMINI_MODEL_FALLBACKS):
@@ -671,6 +670,8 @@ def _gemini_models_to_try() -> list[str]:
             continue
         if name not in ordered:
             ordered.append(name)
+        if len(ordered) >= 2:
+            break
     return ordered or [GEMINI_CHAT_MODEL]
 
 
@@ -707,7 +708,7 @@ def _gemini_native_completion(
     for name in _gemini_models_to_try():
         generation = {
             "temperature": temperature,
-            "maxOutputTokens": 2800,
+            "maxOutputTokens": 1400,
             "thinkingConfig": {"thinkingBudget": 0},
         }
         if json_mode:
@@ -996,18 +997,20 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _provider_chain() -> list[str]:
-    """Analiz sırası: seçilen sağlayıcı önce, sonra hızlı yedekler.
+    """Analiz sırası: ucuz/ücretsiz önce, Gemini pahalı olduğu için sonda.
 
-    Eski zincir gemini'yi tamamen atlayıp sadece nebius/cerebras kullanıyordu;
-    Nebius yavaş/timeout → kullanıcıda 'Request timed out.'
+    Gemini video+metin günde onlarca TL yakabiliyor; Groq/Cerebras önce.
     """
-    preferred = (settings.llm_provider or "gemini").strip().lower()
-    base = ["gemini", "groq", "cerebras", "nebius"]
+    preferred = (settings.llm_provider or "groq").strip().lower()
+    # Gemini'yi bilerek sona koy — fatura kontrolü.
+    cheap = ["groq", "cerebras", "nebius"]
     if preferred == "openrouter":
-        return ["openrouter", "groq", "cerebras", "nebius", "gemini"]
-    if preferred in base:
-        return [preferred] + [name for name in base if name != preferred]
-    return list(base)
+        return ["openrouter", *cheap, "gemini"]
+    if preferred == "gemini":
+        return [*cheap, "gemini"]
+    if preferred in cheap:
+        return [preferred] + [name for name in cheap if name != preferred] + ["gemini"]
+    return [*cheap, "gemini"]
 
 
 def reset_analyze_provider_chain() -> None:
@@ -1113,7 +1116,7 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        kwargs["max_tokens"] = 3500
+        kwargs["max_tokens"] = 1600
     model_id = str(model or "")
     if (
         json_mode
@@ -1669,15 +1672,15 @@ def _analyze_combined(
 ) -> dict:
     from app.services.exams import prompt_block
 
-    count = max(2, min(int(question_count or 4), 5))
-    notes_wanted = max(3, min(int(note_count or 6), 6))
-    # Uzun dilim = yavaş model / timeout; tek dilimi kısalt.
-    hard_cap = max(4000, min(int(settings.analyze_prompt_chars), 10000))
+    count = max(2, min(int(question_count or 3), 3))
+    notes_wanted = max(3, min(int(note_count or 3), 4))
+    # Kısa dilim = düşük Gemini/Groq faturası.
+    hard_cap = max(2800, min(int(settings.analyze_prompt_chars), 4500))
     work = (chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Kısa özet yasak; her not 4-6 cümle. "
+        "not, şık veya açıklamaya yazma. Her not 3-5 cümle. "
         "Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
@@ -1708,28 +1711,7 @@ def _analyze_combined(
     _collect([result], questions, seen, count)
     questions = _ground_questions(questions, work)
     if not notes:
-        logger.warning("Birleşik analiz boş not döndü; kısa not denemesi.")
-        result = _as_dict(
-            _chat(
-                NOTES_SYSTEM_PROMPT
-                + "\nKısa Türkçe sınav notu yaz. Sadece JSON. notes boş olamaz. "
-                "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça. "
-                "Tanıtım, korsan kitap, indirim, abone, kaynak reklamı YASAK.",
-                (
-                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{work[:3500]}\n\n"
-                    "En az 3 not yaz. Şema: "
-                    '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
-                    '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
-                ),
-                temperature=0.1,
-                task="analyze",
-            )
-        )
-        notes = _ground_notes(_coerce_notes(result), work)
-        _collect([result], questions, seen, count)
-        questions = _ground_questions(questions, work)
-    if not notes:
-        # Grounding yine boşsa ham notlarla dön (ikinci LLM turu masraf/timeout).
+        # İkinci LLM turu YOK — maliyet. Ham notları kullan.
         raw_notes = [
             note
             for note in _coerce_notes(result)
@@ -1737,26 +1719,13 @@ def _analyze_combined(
             and (note.get("detail") or note.get("title"))
         ]
         if raw_notes:
-            logger.warning("İkinci grounding da boş; ham %s not kullanılıyor.", len(raw_notes))
-            notes = raw_notes[:8]
+            logger.warning("Grounding boş; ham %s not (ek LLM yok).", len(raw_notes))
+            notes = raw_notes[:4]
         else:
             raise RuntimeError(
                 "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
             )
-    if len(questions) < max(2, count // 2):
-        try:
-            more = generate_questions(
-                notes,
-                subject,
-                count,
-                persona=None,
-                exam_target=exam_target,
-                subject_type=subject_type,
-                is_yks_fen_question=is_yks_fen_question,
-            )
-            _collect([{"questions": more}], questions, seen, count)
-        except Exception:
-            logger.exception("Dilim soru tamamlaması başarısız")
+    # Ek generate_questions çağrısı yok — birleşik JSON yeterli.
     persona = merge_personas([result.get("teacher_persona")])
     return {
         "notes": notes,

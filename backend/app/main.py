@@ -1825,19 +1825,19 @@ def _analyze_with_lines(
     llm_data = None
     chosen_idx = 0
     last_err: BaseException | None = None
-    # En fazla 2 dilim dene; her dilimde timeout zaten yedek modele geçer.
-    for idx, piece in enumerate(candidates[:2]):
+    # En fazla 1 dilim — ikinci dilim = ikinci fatura.
+    for idx, piece in enumerate(candidates[:1]):
         try:
             llm_data = analyze_slice(
                 piece["block"],
                 subject,
-                min(5, question_count),
+                min(3, question_count),
                 exam_target,
                 subject_meta["subject_type"],
                 subject_meta["is_yks_fen_question"],
                 "",
                 window_label=piece["label"],
-                note_count=5,
+                note_count=3,
             )
             chosen_idx = idx
             first = piece
@@ -1886,30 +1886,22 @@ def _analyze_with_lines(
     else:
         reservation = credit_service.refund(db, user_id, reservation)
     overlay = credit_service.overlay(reservation)
-    from app.services.youtube import slice_promo_ratio
 
-    remaining = (
-        [
-            piece
-            for piece in remaining_slices
-            if slice_promo_ratio(piece.get("block") or "") < 0.22
-        ]
-        if (notes or questions)
-        else []
-    )
+    # Tek dilim yeter; arka plan dilimleri Gemini/Groq faturasını katlar.
+    remaining: list[dict] = []
     if not job_id:
         job_id = jobs.create_job(
             user_id=user_id,
             video_id=video_id,
             video_url=canonical_url,
             subject=subject,
-            chunks_total=1 + len(remaining),
+            chunks_total=1,
             overlay=overlay,
             focus_bucket=focus_bucket,
         )
     persona = ai_engine.parse_persona(llm_data.get("teacher_persona")).model_dump()
     done = 1
-    status = "done" if not remaining else "running"
+    status = "done"
     jobs.set_progress(
         job_id,
         notes=[item.model_dump() for item in notes],
@@ -1917,7 +1909,7 @@ def _analyze_with_lines(
         persona=persona,
         chunks_done=done,
         status=status,
-        chunks_total=1 + len(remaining),
+        chunks_total=1,
         overlay=overlay,
     )
     _persist_notebook(
