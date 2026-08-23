@@ -43,11 +43,11 @@ LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-GEMINI_CHAT_MODEL = "gemini-2.5-flash"
+GEMINI_CHAT_MODEL = "gemini-2.0-flash"
 GEMINI_MODEL_FALLBACKS = (
-    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
 )
 OPENROUTER_FREE_MODELS = (
     "nvidia/nemotron-3-nano-30b-a3b:free",
@@ -649,7 +649,7 @@ def _gemini_native_completion(
     for name in _gemini_models_to_try():
         generation = {
             "temperature": temperature,
-            "maxOutputTokens": 4096,
+            "maxOutputTokens": 2800,
             "thinkingConfig": {"thinkingBudget": 0},
         }
         if json_mode:
@@ -819,17 +819,6 @@ def _openrouter_analyze_client() -> tuple[OpenAI, str] | None:
     )
 
 
-def _provider_chain() -> list[str]:
-    """Nebius kalite; yedek Cerebras. Groq 8B analizde uydurma üretir, zincirde yok."""
-    preferred = (settings.llm_provider or "nebius").strip().lower()
-    chain = ["nebius", "cerebras"]
-    if preferred == "groq":
-        return ["groq", "nebius", "cerebras"]
-    if preferred in chain:
-        return [preferred] + [name for name in chain if name != preferred]
-    return list(chain)
-
-
 def _named_client(name: str) -> tuple[OpenAI, str] | None:
     if name == "nebius":
         return _nebius_client()
@@ -945,15 +934,61 @@ def _rotate_openrouter(exc: Exception) -> bool:
     )
 
 
+def _provider_chain() -> list[str]:
+    """Analiz sırası: seçilen sağlayıcı önce, sonra hızlı yedekler.
+
+    Eski zincir gemini'yi tamamen atlayıp sadece nebius/cerebras kullanıyordu;
+    Nebius yavaş/timeout → kullanıcıda 'Request timed out.'
+    """
+    preferred = (settings.llm_provider or "gemini").strip().lower()
+    base = ["gemini", "groq", "cerebras", "nebius"]
+    if preferred == "openrouter":
+        return ["openrouter", "groq", "cerebras", "nebius", "gemini"]
+    if preferred in base:
+        return [preferred] + [name for name in base if name != preferred]
+    return list(base)
+
+
+def reset_analyze_provider_chain() -> None:
+    """Her video işi temiz sırayla başlasın (önceki timeout zinciri kalmasın)."""
+    global _chain_index, _active_name
+    with _provider_lock:
+        _chain_index = 0
+        _active_name = ""
+
+
+def _activate_next_analyze_provider(*, reason: str = "yedek") -> bool:
+    """Timeout / geçici hatada sıradaki analiz sağlayıcısına geç."""
+    global _chain_index, _active_name
+    with _provider_lock:
+        chain = _provider_chain()
+        _chain_index += 1
+        while _chain_index < len(chain):
+            name = chain[_chain_index]
+            pair = _named_client(name)
+            if pair:
+                _active_name = name
+                logger.warning(
+                    "Analiz sağlayıcı kaydırıldı (%s): %s / %s",
+                    reason,
+                    name,
+                    pair[1],
+                )
+                return True
+            _chain_index += 1
+        return False
+
+
 def _activate_credit_fallback() -> bool:
-    """Kota bitince sıradaki ücretsiz sağlayıcıya geç (Groq → Cerebras)."""
+    """Kota bitince sıradaki sağlayıcıya geç (Gemini kota → Groq/Cerebras/Nebius)."""
     global _skip_openrouter, _openrouter_free_only, _skip_gemini, _chain_index, _active_name
     with _provider_lock:
         _openrouter_free_only = True
         _skip_openrouter = True
         _skip_gemini = True
         chain = _provider_chain()
-        _chain_index += 1
+        # Mevcut (bitmiş) sağlayıcıyı atla.
+        _chain_index = max(_chain_index + 1, 0)
         while _chain_index < len(chain):
             name = chain[_chain_index]
             if name in {"openrouter", "gemini"}:
@@ -969,7 +1004,7 @@ def _activate_credit_fallback() -> bool:
 
 
 def _fast_analyze_client() -> tuple[OpenAI, str] | None:
-    """Analiz: yalnızca Groq / Cerebras. Fatura veren sağlayıcı yok."""
+    """Analiz: Gemini → Groq → Cerebras → Nebius (yapılandırılmış sırayla)."""
     global _active_name
     require_analyze_llm()
     chain = _provider_chain()
@@ -980,8 +1015,8 @@ def _fast_analyze_client() -> tuple[OpenAI, str] | None:
             _active_name = name
             return pair
     raise ConfigurationError(
-        "NEBIUS_API_KEY / CEREBRAS_API_KEY / GROQ_API_KEY tanımlı değil. "
-        "Render Environment'a NEBIUS_API_KEY ekle (tokenfactory.nebius.com)."
+        "GEMINI_API_KEY / GROQ_API_KEY / CEREBRAS_API_KEY / NEBIUS_API_KEY "
+        "tanımlı değil. Render Environment'a en az birini yaz."
     )
 
 
@@ -1017,7 +1052,7 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        kwargs["max_tokens"] = 12000
+        kwargs["max_tokens"] = 3500
     model_id = str(model or "")
     if (
         json_mode
@@ -1090,10 +1125,9 @@ def _chat_openai_compatible(
     try:
         response = _openai_create(messages, temperature, json_mode=use_json)
     except Exception as exc:
+        # Timeout'u burada yutma: _chat yedek sağlayıcıya geçebilsin.
         if _is_timeout(exc):
-            raise RuntimeError(
-                "Model yanıtı gecikti. Analizi tekrar dene; uzun videoda ilk kısım işlenir."
-            ) from exc
+            raise
         err = str(exc)
         fallback = "response_format" in err or "json_validate_failed" in err.lower()
         if not fallback:
@@ -1137,7 +1171,7 @@ def _chat(
     attempt = 0
     task_token = usage_task.set(task or "genel")
     try:
-        while attempt < CHAT_RETRIES:
+        while attempt < CHAT_RETRIES + 4:
             try:
                 _throttle_groq()
                 if settings.is_local:
@@ -1165,9 +1199,18 @@ def _chat(
                         "LLM isteği ASCII olmayan bir HTTP başlığı yüzünden düştü."
                     ) from exc
                 if _is_timeout(exc):
-                    raise
+                    if task in ANALYZE_TASKS and _activate_next_analyze_provider(
+                        reason="timeout"
+                    ):
+                        continue
+                    raise RuntimeError(
+                        "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
+                    ) from exc
                 if "model_not_found" in str(exc).lower() or "error code: 404" in str(exc).lower():
-                    if _activate_credit_fallback():
+                    if _activate_credit_fallback() or (
+                        task in ANALYZE_TASKS
+                        and _activate_next_analyze_provider(reason="model_not_found")
+                    ):
                         continue
                     raise ConfigurationError(
                         f"Model bulunamadı ({_active_name or settings.llm_provider}: "
@@ -1181,6 +1224,10 @@ def _chat(
                 wait = _retry_after(str(exc))
                 if wait is not None:
                     if wait >= RATE_LIMIT_MAX_WAIT:
+                        if task in ANALYZE_TASKS and _activate_next_analyze_provider(
+                            reason="rate_limit"
+                        ):
+                            continue
                         raise QuotaExhaustedError(
                             "Model şu an meşgul. Bir dakika sonra tekrar dene."
                         ) from exc
@@ -1192,6 +1239,12 @@ def _chat(
                 if attempt < CHAT_RETRIES:
                     logger.warning("LLM çağrısı başarısız (deneme %s): %s", attempt, exc)
                     time.sleep(RETRY_BACKOFF_SECONDS[attempt - 1])
+                    continue
+                if task in ANALYZE_TASKS and _activate_next_analyze_provider(
+                    reason="error"
+                ):
+                    continue
+                break
         raise last_error if last_error else RuntimeError("LLM çağrısı başarısız")
     finally:
         usage_task.reset(task_token)
@@ -1555,11 +1608,15 @@ def _analyze_combined(
 ) -> dict:
     from app.services.exams import prompt_block
 
-    count = max(2, min(int(question_count or 4), 6))
+    count = max(2, min(int(question_count or 4), 5))
+    notes_wanted = max(3, min(int(note_count or 6), 6))
+    # Uzun dilim = yavaş model / timeout; tek dilimi kısalt.
+    hard_cap = max(4000, min(int(settings.analyze_prompt_chars), 10000))
+    work = (chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Kısa özet yasak; her not 5-8 cümle. "
+        "not, şık veya açıklamaya yazma. Kısa özet yasak; her not 4-6 cümle. "
         "Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
@@ -1567,28 +1624,28 @@ def _analyze_combined(
             is_yks_fen_question=is_yks_fen_question,
         )
     )
-    logger.info("Dilim analiz: %s not/%s soru %s", note_count, count, window_label or "")
+    logger.info("Dilim analiz: %s not/%s soru %s", notes_wanted, count, window_label or "")
     result = _as_dict(
         _chat(
             system,
             build_combined_analyze_prompt(
-                chunk,
+                work,
                 subject,
                 count,
                 exam_target,
                 rag_block,
                 window_label,
-                note_count,
+                notes_wanted,
             ),
             temperature=0.1,
             task="analyze",
         )
     )
-    notes = _ground_notes(_coerce_notes(result), chunk)
+    notes = _ground_notes(_coerce_notes(result), work)
     questions: list[dict] = []
     seen: set[str] = set()
     _collect([result], questions, seen, count)
-    questions = _ground_questions(questions, chunk)
+    questions = _ground_questions(questions, work)
     if not notes:
         logger.warning("Birleşik analiz boş not döndü; kısa not denemesi.")
         result = _as_dict(
@@ -1598,7 +1655,7 @@ def _analyze_combined(
                 "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça. "
                 "Tanıtım, korsan kitap, indirim, abone, kaynak reklamı YASAK.",
                 (
-                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{chunk[:4000]}\n\n"
+                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{work[:3500]}\n\n"
                     "En az 3 not yaz. Şema: "
                     '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
@@ -1607,9 +1664,9 @@ def _analyze_combined(
                 task="analyze",
             )
         )
-        notes = _ground_notes(_coerce_notes(result), chunk)
+        notes = _ground_notes(_coerce_notes(result), work)
         _collect([result], questions, seen, count)
-        questions = _ground_questions(questions, chunk)
+        questions = _ground_questions(questions, work)
     if not notes:
         raise RuntimeError(
             "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."

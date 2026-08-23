@@ -359,9 +359,8 @@ export function analyzeVideo(payload: {
 }
 
 export function getAnalyzeJob(jobId: string) {
-  return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`, {
-    signal: AbortSignal.timeout(60_000),
-  });
+  // Abort yok: Render uyurken poll düşmesin; job arka planda sürer.
+  return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`);
 }
 
 export type SavedNoteItem = NoteItem & {

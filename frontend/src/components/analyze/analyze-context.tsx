@@ -163,9 +163,18 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const pollUntilDone = useCallback(
     async (jobId: string, token: number, videoUrl: string, topic: string) => {
       let fails = 0;
+      const started = Date.now();
       while (token === job.current) {
-        await sleep(Math.min(2500 + fails * 1000, 8000));
+        await sleep(Math.min(2000 + fails * 800, 6000));
         if (token !== job.current) return;
+        // 12 dk: Gemini + yedek sağlayıcı zinciri için yeterli.
+        if (Date.now() - started > 12 * 60_000) {
+          setError(
+            "Analiz uzun sürdü. Sayfayı yenilemeden 20 sn bekle, bir kez daha dene.",
+          );
+          void refresh();
+          return;
+        }
         try {
           const next = await getAnalyzeJob(jobId);
           if (token !== job.current) return;
@@ -187,7 +196,8 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           }
         } catch (err) {
           fails += 1;
-          if (fails >= 8) {
+          // Geçici ağ/Render uykusu: hemen hata basma.
+          if (fails >= 30) {
             setError(
               humanizeNetworkError(
                 err,
@@ -197,7 +207,6 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
             void refresh();
             return;
           }
-          // Ağ hatasında running kal; sahte "done" yazma.
         }
       }
     },

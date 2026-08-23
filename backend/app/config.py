@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-2.0-flash"
     hf_api_key: str = ""
     hf_model: str = "openai/gpt-oss-120b"
     hf_base_url: str = "https://router.huggingface.co/v1"
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     @property
     def is_tight_free_tier(self) -> bool:
         """Ücretsiz / dar kota katmanlarında istek boyutu ve paralellik kısılır."""
-        if self.llm_provider in {"groq", "cerebras", "nebius"}:
+        if self.llm_provider in {"groq", "cerebras", "nebius", "gemini"}:
             return True
         if self.llm_provider == "openrouter":
             return self.openrouter_model.endswith(":free")
@@ -103,6 +103,10 @@ class Settings(BaseSettings):
         """Hızlı analiz modeli uzun bağlamı kaldırır; tüm videoyu sığdırmaya çalışır."""
         if self.is_local:
             return 6000
+        if self.llm_provider == "gemini":
+            return 9000
+        if self.is_tight_free_tier:
+            return 12000
         return 32000
 
     @property

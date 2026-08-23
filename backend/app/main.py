@@ -1812,6 +1812,9 @@ def _analyze_with_lines(
     mismatch = transcript_off_subject(lines, subject)
     if mismatch:
         raise ValueError(mismatch)
+    from app.services.llm import reset_analyze_provider_chain
+
+    reset_analyze_provider_chain()
     slices = slice_transcript(lines, SLICE_SECONDS)
     if not slices:
         raise ValueError("Bu video için altyazı bulunamadı.")
@@ -1820,18 +1823,19 @@ def _analyze_with_lines(
     llm_data = None
     chosen_idx = 0
     last_err: BaseException | None = None
-    for idx, piece in enumerate(candidates[:6]):
+    # En fazla 2 dilim dene; her dilimde timeout zaten yedek modele geçer.
+    for idx, piece in enumerate(candidates[:2]):
         try:
             llm_data = analyze_slice(
                 piece["block"],
                 subject,
-                min(6, question_count),
+                min(5, question_count),
                 exam_target,
                 subject_meta["subject_type"],
                 subject_meta["is_yks_fen_question"],
                 "",
                 window_label=piece["label"],
-                note_count=8,
+                note_count=5,
             )
             chosen_idx = idx
             first = piece
