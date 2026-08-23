@@ -15,6 +15,7 @@ export function DiagnosticGate() {
     if (!ready) return;
     if (profile.role === "teacher" || profile.role === "admin") return;
     if (!profile.isOnboarded) return;
+    // Teşhis bir kez bittiyse (yerel/IP) tekrar /teshis açma.
     if (profile.isTested) return;
     if (OPEN.has(path)) return;
     router.replace("/teshis");

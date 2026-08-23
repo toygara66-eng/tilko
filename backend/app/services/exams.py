@@ -291,9 +291,12 @@ def exam_of(db: Session, user_id: str | None) -> str:
     return normalize(stored)
 
 
-def set_exam_target(db: Session, user_id: str, exam_target: str) -> dict:
+def set_exam_target(
+    db: Session, user_id: str, exam_target: str, ip_hash: str = ""
+) -> dict:
     from app.services.penalty import get_or_create_user
     from app.services.ranks import address_for
+    from app.services import diagnostic as diagnostic_service
 
     uid = (user_id or "").strip()
     if not uid:
@@ -307,6 +310,7 @@ def set_exam_target(db: Session, user_id: str, exam_target: str) -> dict:
     reset = {"reset": False, "is_tested": bool(user.is_tested)}
     if changed or not previous:
         reset = reset_exam_scope(db, uid, code, previous, commit=False)
+    diagnostic_service.mark_onboarding_ip(db, ip_hash, uid, code)
     db.commit()
     title = address_for(db, uid)
     clock = countdown(code, db=db)

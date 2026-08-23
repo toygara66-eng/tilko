@@ -150,6 +150,17 @@ class DiagnosticIpMark(Base):
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class OnboardingIpMark(Base):
+    """Aynı IP'de sınav hedefi bir kez seçildi; misafir oturum /hedef'i tekrar açmaz."""
+
+    __tablename__ = "onboarding_ip_marks"
+
+    ip_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_user_id: Mapped[str] = mapped_column(String(128), index=True)
+    exam_target: Mapped[str] = mapped_column(String(32), default="")
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class ProgressCheckup(Base):
     """Haftalık/aylık gelişim check-up kaydı."""
 

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.database.models import (
     DiagnosticIpMark,
     DiagnosticTest,
+    OnboardingIpMark,
     ProgressCheckup,
     User,
     UserBaseline,
@@ -50,6 +51,52 @@ def mark_diagnostic_ip(db: Session, ip_hash: str, user_id: str) -> None:
             completed_at=datetime.now(timezone.utc),
         )
     )
+
+
+def mark_onboarding_ip(
+    db: Session, ip_hash: str, user_id: str, exam_target: str = ""
+) -> None:
+    digest = (ip_hash or "").strip()
+    if not digest or not user_id:
+        return
+    row = db.get(OnboardingIpMark, digest)
+    if row:
+        row.source_user_id = user_id
+        row.exam_target = (exam_target or row.exam_target or "").strip()
+        row.completed_at = datetime.now(timezone.utc)
+        return
+    db.add(
+        OnboardingIpMark(
+            ip_hash=digest,
+            source_user_id=user_id,
+            exam_target=(exam_target or "").strip(),
+            completed_at=datetime.now(timezone.utc),
+        )
+    )
+
+
+def maybe_skip_onboarding_for_ip(db: Session, user: User, ip_hash: str) -> bool:
+    """Aynı IP sınav hedefi seçtiyse misafir oturuma /hedef sorma."""
+    if user.is_onboarded and (user.exam_target or "").strip():
+        return True
+    if is_registered_account(user):
+        return False
+    digest = (ip_hash or "").strip()
+    if not digest:
+        return False
+    mark = db.get(OnboardingIpMark, digest)
+    if mark is None or not mark.source_user_id:
+        return False
+    target = (mark.exam_target or "").strip()
+    if not target:
+        donor = db.get(User, mark.source_user_id)
+        target = (getattr(donor, "exam_target", "") or "").strip() if donor else ""
+    if not target:
+        return False
+    user.is_onboarded = True
+    if not (user.exam_target or "").strip():
+        user.exam_target = target
+    return True
 
 
 def _adopt_baseline_from_source(db: Session, user: User, source_user_id: str) -> bool:
@@ -968,6 +1015,8 @@ def baseline_payload(row: UserBaseline | None) -> dict | None:
 
 def status(db: Session, user_id: str, ip_hash: str = "") -> dict:
     user = get_or_create_user(db, user_id)
+    if ip_hash:
+        maybe_skip_onboarding_for_ip(db, user, ip_hash)
     if not user.is_tested and ip_hash:
         maybe_skip_diagnostic_for_ip(db, user, ip_hash)
     base = get_baseline(db, user_id)

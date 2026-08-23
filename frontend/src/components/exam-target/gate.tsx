@@ -14,6 +14,7 @@ export function ExamTargetGate() {
   useEffect(() => {
     if (!ready) return;
     if (profile.role === "teacher" || profile.role === "admin") return;
+    // Yerel veya sunucu: bir kez seçildiyse bir daha /hedef zorlama.
     if (profile.isOnboarded) return;
     if (OPEN.has(path)) return;
     router.replace("/hedef");

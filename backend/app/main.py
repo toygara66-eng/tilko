@@ -1245,12 +1245,20 @@ def progress(
 
 @app.post("/user/set-exam-target", response_model=SetExamTargetResponse)
 def set_exam_target(
-    payload: SetExamTargetRequest, db: Session = Depends(get_db)
+    request: Request,
+    payload: SetExamTargetRequest,
+    db: Session = Depends(get_db),
 ) -> SetExamTargetResponse:
     from app.services import exams as exam_service
+    from app.services import anti_cheat
 
     try:
-        data = exam_service.set_exam_target(db, payload.user_id, payload.exam_target)
+        data = exam_service.set_exam_target(
+            db,
+            payload.user_id,
+            payload.exam_target,
+            ip_hash=anti_cheat.hash_ip(anti_cheat.client_ip(request)),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return SetExamTargetResponse.model_validate(data)

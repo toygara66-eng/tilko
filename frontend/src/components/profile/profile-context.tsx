@@ -172,7 +172,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         dailyAdCredits: data.daily_ad_credits ?? 1,
         dailyAdLimit: data.daily_ad_limit ?? 1,
         trialDaysLeft: data.trial_days_left ?? 0,
-        isTested: Boolean(data.is_tested),
+        isTested: Boolean(data.is_tested) || Boolean(readFlags().isTested),
         checkupDue: Boolean(data.checkup_due),
         weakTopics: data.weak_topics || [],
         baselineScore: data.baseline_score ?? 0,
@@ -180,7 +180,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         recommendedVideos: data.recommended_videos || [],
         examTarget: data.exam_target || "",
         examLabel: data.exam_label || "",
-        isOnboarded: Boolean(data.is_onboarded),
+        isOnboarded: Boolean(data.is_onboarded) || Boolean(readFlags().isOnboarded),
         targetScore: data.target_score ?? 85,
         targetIsSet: Boolean(data.target_is_set),
         currentScore: data.current_score ?? 0,
@@ -212,7 +212,21 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const apply = useCallback((patch: Partial<Profile>) => {
-    setProfile((prev) => ({ ...prev, ...patch }));
+    setProfile((prev) => {
+      const next = { ...prev, ...patch };
+      if (
+        patch.isOnboarded !== undefined ||
+        patch.isTested !== undefined ||
+        patch.role !== undefined
+      ) {
+        writeFlags({
+          isOnboarded: next.isOnboarded,
+          isTested: next.isTested,
+          role: next.role,
+        });
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
