@@ -1135,7 +1135,7 @@ def _fetch_via_llm_youtube(
                     break
 
     if gemini_key:
-        for model in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"):
+        for model in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"):
             try:
                 text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
                 lines = _lines_from_model_transcript(text)

@@ -44,10 +44,20 @@ ANALYZE_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.0-flash"
+# 2.5-flash birçok ücretsiz anahtarda 404; önce çalışan id'ler.
 GEMINI_MODEL_FALLBACKS = (
     "gemini-2.0-flash",
     "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-flash-latest",
+)
+GEMINI_UNAVAILABLE_MODELS = frozenset(
+    {
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-latest",
+    }
 )
 OPENROUTER_FREE_MODELS = (
     "nvidia/nemotron-3-nano-30b-a3b:free",
@@ -607,13 +617,27 @@ def _reasoning_extra() -> dict:
 
 
 def _gemini_model_id() -> str:
-    return (settings.gemini_model or "").strip() or GEMINI_CHAT_MODEL
+    raw = (settings.gemini_model or "").strip() or GEMINI_CHAT_MODEL
+    # Render'da kalan GEMINI_MODEL=gemini-2.5-flash → 404; sessizce güvenli modele al.
+    if raw in GEMINI_UNAVAILABLE_MODELS:
+        logger.warning(
+            "GEMINI_MODEL=%s bu anahtarlarda sık 404; %s kullanılıyor.",
+            raw,
+            GEMINI_CHAT_MODEL,
+        )
+        return GEMINI_CHAT_MODEL
+    return raw
 
 
 def _gemini_models_to_try() -> list[str]:
     primary = _gemini_model_id()
-    ordered = [primary, *[m for m in GEMINI_MODEL_FALLBACKS if m != primary]]
-    return ordered
+    ordered: list[str] = []
+    for name in (primary, *GEMINI_MODEL_FALLBACKS):
+        if not name or name in GEMINI_UNAVAILABLE_MODELS:
+            continue
+        if name not in ordered:
+            ordered.append(name)
+    return ordered or [GEMINI_CHAT_MODEL]
 
 
 def _is_gemini_client(client: OpenAI) -> bool:
@@ -698,10 +722,9 @@ def _gemini_native_completion(
                     ) from exc
                 continue
         if response.status_code == 404:
-            logger.warning("Gemini model yok, sıradaki deneniyor: %s", name)
-            last = ConfigurationError(
-                f"GEMINI_MODEL={name} bu anahtarda yok; yedek model deneniyor."
-            )
+            # ConfigurationError YASAK: FatalLLMError yedek Groq/Cerebras'ı keser.
+            logger.warning("Gemini model yok, sıradaki: %s", name)
+            last = RuntimeError(f"Gemini model yok: {name}")
             continue
         if response.status_code == 429:
             raise RuntimeError(
@@ -853,7 +876,11 @@ def analyze_llm_ready() -> dict[str, bool | str]:
     provider = (settings.llm_provider or "").strip().lower()
     model = str(settings.active_model or "")
     if provider == "gemini" and gemini:
-        model = (settings.gemini_model or "").strip() or model
+        raw = (settings.gemini_model or "").strip()
+        if raw in GEMINI_UNAVAILABLE_MODELS:
+            model = GEMINI_CHAT_MODEL
+        else:
+            model = raw or GEMINI_CHAT_MODEL
     elif provider == "nebius" and nebius:
         model = (settings.nebius_model or "").strip() or model
     elif provider == "cerebras" and cerebras:
