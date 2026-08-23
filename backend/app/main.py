@@ -210,14 +210,14 @@ def health() -> dict:
     body = {
         "status": "ok" if (not settings.is_production or llm["ready"]) else "degraded",
         "llm_ready": bool(llm["ready"]),
+        "provider": str(llm.get("provider") or settings.llm_provider),
+        "model": str(llm.get("model") or settings.active_model),
+        "gemini": bool(llm.get("gemini")),
         "nebius": bool(llm.get("nebius")),
         "groq": bool(llm["groq"]),
         "cerebras": bool(llm["cerebras"]),
         "analyze_cache_videos": cache_videos,
     }
-    if not settings.is_production:
-        body["provider"] = settings.llm_provider
-        body["model"] = str(llm.get("model") or settings.active_model)
     return body
 
 
@@ -513,7 +513,7 @@ def analyze_video(
 
     leader = claim_work(video_id, payload.subject, focus_bkt)
     if not leader:
-        wait_work(video_id, payload.subject, focus_bucket=focus_bkt)
+        wait_work(video_id, payload.subject, timeout=12.0, focus_bucket=focus_bkt)
         cached = cache.load(cache_key) or cache.find_cached(
             video_id, payload.subject, exam_target, focus_bucket=focus_bkt
         )
@@ -563,17 +563,17 @@ def analyze_video(
     hold_lock = False
     try:
         jobs.ensure_capacity()
+        job_id = jobs.create_job(
+            user_id=user_id,
+            video_id=video_id,
+            video_url=canonical_url,
+            subject=payload.subject,
+            chunks_total=1,
+            overlay=overlay,
+            focus_bucket=focus_bkt,
+        )
+        hold_lock = True
         if lines is None:
-            job_id = jobs.create_job(
-                user_id=user_id,
-                video_id=video_id,
-                video_url=canonical_url,
-                subject=payload.subject,
-                chunks_total=1,
-                overlay=overlay,
-                focus_bucket=focus_bkt,
-            )
-            hold_lock = True
             threading.Thread(
                 target=_fetch_then_analyze_job,
                 args=(
@@ -594,34 +594,39 @@ def analyze_video(
                 daemon=True,
                 name=f"analyze-{job_id}",
             ).start()
-            return AnalyzeResponse(
-                video_id=video_id,
-                video_url=canonical_url,
-                subject=payload.subject,
-                notes=[],
-                questions=[],
-                job_id=job_id,
-                job_status="running",
-                chunks_done=0,
-                chunks_total=1,
-                **overlay,
-            )
-
-        return _analyze_with_lines(
-            lines=lines,
-            user_id=user_id,
+        else:
+            threading.Thread(
+                target=_analyze_lines_job,
+                args=(
+                    job_id,
+                    lines,
+                    user_id,
+                    video_id,
+                    canonical_url,
+                    payload.subject,
+                    payload.question_count,
+                    exam_target,
+                    subject_meta,
+                    cache_key,
+                    extra_keys,
+                    reservation,
+                    focus_start,
+                    focus_bkt,
+                ),
+                daemon=True,
+                name=f"analyze-{job_id}",
+            ).start()
+        return AnalyzeResponse(
             video_id=video_id,
-            canonical_url=canonical_url,
+            video_url=canonical_url,
             subject=payload.subject,
-            question_count=payload.question_count,
-            exam_target=exam_target,
-            subject_meta=subject_meta,
-            cache_key=cache_key,
-            extra_keys=extra_keys,
-            reservation=reservation,
-            db=db,
-            focus_start=focus_start,
-            focus_bucket=focus_bkt,
+            notes=[],
+            questions=[],
+            job_id=job_id,
+            job_status="running",
+            chunks_done=0,
+            chunks_total=1,
+            **overlay,
         )
     except ServiceBusyError as exc:
         credit_service.refund(db, user_id, reservation)
@@ -1977,6 +1982,67 @@ def _analyze_with_lines(
         chunks_total=1 + len(remaining),
         **overlay,
     )
+
+
+def _analyze_lines_job(
+    job_id: str,
+    lines: list[dict],
+    user_id: str,
+    video_id: str,
+    canonical_url: str,
+    subject: str | None,
+    question_count: int,
+    exam_target: str | None,
+    subject_meta: dict,
+    cache_key: str,
+    extra_keys: tuple,
+    reservation,
+    focus_start: int = 0,
+    focus_bucket: int = 0,
+) -> None:
+    """Altyazı hazırken LLM'i HTTP dışında çalıştır — tarayıcı timeout olmasın."""
+    from app.database.session import SessionLocal
+    from app.services import analyze_jobs as jobs
+
+    db = SessionLocal()
+    try:
+        _analyze_with_lines(
+            lines=lines,
+            user_id=user_id,
+            video_id=video_id,
+            canonical_url=canonical_url,
+            subject=subject,
+            question_count=question_count,
+            exam_target=exam_target,
+            subject_meta=subject_meta,
+            cache_key=cache_key,
+            extra_keys=extra_keys,
+            reservation=reservation,
+            db=db,
+            job_id=job_id,
+            focus_start=focus_start,
+            focus_bucket=focus_bucket,
+        )
+        for follower_id, kind in jobs.take_unsettled_followers(job_id):
+            try:
+                credit_service.confirm_charged(db, follower_id, video_id, kind)
+            except Exception:
+                logger.exception("Takipçi confirm başarısız %s", follower_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Arka plan analiz %s başarısız: %s", job_id, exc)
+        try:
+            credit_service.refund(db, user_id, reservation)
+        except Exception:
+            logger.exception("Analiz iadesi başarısız %s", job_id)
+        jobs.finish(job_id, "error", error=_public_analyze_error(exc))
+        for follower_id, kind in jobs.take_unsettled_followers(job_id):
+            try:
+                credit_service.refund_charged(db, follower_id, kind)
+            except Exception:
+                logger.exception("Takipçi iadesi başarısız %s", follower_id)
+    finally:
+        release_work(video_id, subject, focus_bucket)
+        db.close()
 
 
 def _fetch_then_analyze_job(

@@ -846,22 +846,39 @@ def _named_client(name: str) -> tuple[OpenAI, str] | None:
 
 
 def analyze_llm_ready() -> dict[str, bool | str]:
-    """Render env: Nebius / Cerebras / Groq."""
+    """Render env: Gemini / Nebius / Cerebras / Groq."""
+    gemini = bool((settings.gemini_api_key or "").strip())
     nebius = bool((settings.nebius_api_key or "").strip())
     groq = bool((settings.groq_api_key or "").strip())
     cerebras = bool((settings.cerebras_api_key or "").strip())
-    model = ""
-    if nebius:
-        model = (settings.nebius_model or "").strip() or "Qwen/Qwen3-32B"
-    elif cerebras:
-        model = (settings.cerebras_model or "").strip() or "gemma-4-31b"
-    elif groq:
+    provider = (settings.llm_provider or "").strip().lower()
+    model = str(settings.active_model or "")
+    if provider == "gemini" and gemini:
+        model = (settings.gemini_model or "").strip() or model
+    elif provider == "nebius" and nebius:
+        model = (settings.nebius_model or "").strip() or model
+    elif provider == "cerebras" and cerebras:
+        model = (settings.cerebras_model or "").strip() or model
+    elif provider == "groq" and groq:
         model = _normalize_groq_model(settings.groq_model)
+    ready = False
+    if provider == "gemini":
+        ready = gemini
+    elif provider == "nebius":
+        ready = nebius
+    elif provider == "cerebras":
+        ready = cerebras
+    elif provider == "groq":
+        ready = groq
+    else:
+        ready = gemini or nebius or groq or cerebras
     return {
+        "gemini": gemini,
         "nebius": nebius,
         "groq": groq,
         "cerebras": cerebras,
-        "ready": nebius or groq or cerebras,
+        "ready": ready,
+        "provider": provider or settings.llm_provider,
         "model": model,
     }
 
@@ -871,8 +888,9 @@ def require_analyze_llm() -> None:
     if status["ready"]:
         return
     raise ConfigurationError(
-        "Analiz için NEBIUS_API_KEY (önerilen) veya CEREBRAS_API_KEY / GROQ_API_KEY gerekli. "
-        "Nebius: tokenfactory.nebius.com — anahtarı Render Environment'a yaz."
+        "Analiz için GEMINI_API_KEY (önerilen) veya NEBIUS_API_KEY / "
+        "CEREBRAS_API_KEY / GROQ_API_KEY gerekli. "
+        "Render Environment'a yazıp LLM_PROVIDER=gemini yap."
     )
 
 

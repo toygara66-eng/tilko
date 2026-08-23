@@ -35,7 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       /aborted|timeout|timed out/i.test(message)
     ) {
             throw new Error(
-              "Analiz hâlâ sürüyor olabilir. 15 saniye bekleyip tek sefer daha dene; üst üste basma.",
+              "İstek zaman aşımına uğradı. Analiz arka planda sürebilir — 20 sn bekleyip Analiz et’e bir kez daha bas; üst üste basma.",
             );
     }
     if (
@@ -313,13 +313,13 @@ export function analyzeVideo(payload: {
   return request<AnalyzeResponse>("/analyze", {
     method: "POST",
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(75_000),
+    signal: AbortSignal.timeout(120_000),
   });
 }
 
 export function getAnalyzeJob(jobId: string) {
   return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`, {
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(25_000),
   });
 }
 
