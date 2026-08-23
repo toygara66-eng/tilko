@@ -39,8 +39,9 @@ CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-# Gemini free/yavaş yanıt + Render CPU → 50 sn sık sık "Request timed out."
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
+# Gemini yavaşsa Groq'a çabuk düş (120 sn bekleyip "gecikti" basma).
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(55.0, connect=12.0)
+GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(50.0, connect=12.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
@@ -638,7 +639,14 @@ def _is_timeout(exc: BaseException) -> bool:
     if "timeout" in name:
         return True
     text = str(exc).lower()
-    return "timed out" in text or "timeout" in text
+    return (
+        "timed out" in text
+        or "timeout" in text
+        or "time-out" in text
+        or "gecikti" in text
+        or "zaman aşım" in text
+        or "zaman asim" in text
+    )
 
 
 def _reasoning_extra() -> dict:
@@ -704,11 +712,19 @@ def _gemini_native_completion(
         elif content:
             user_parts.append(content)
     user = "\n\n".join(user_parts).strip()
+    # Çok uzun prompt Gemini'yi kilitleyip timeout üretir; detayı koruyarak budar.
+    if len(user) > 9000:
+        user = user[:9000] + "\n...(altyazı kısaltıldı; yine detaylı not yaz)"
+    if len(system) > 3500:
+        system = system[:3500] + "\n...(kısaltıldı)"
     last: Exception | None = None
-    for name in _gemini_models_to_try():
+    models = _gemini_models_to_try()
+    for index, name in enumerate(models):
+        # İlk deneme daha cömert; timeout sonrası daha düşük çıktı tavanı.
+        out_tokens = 3200 if index == 0 else 2200
         generation = {
             "temperature": temperature,
-            "maxOutputTokens": 4500,
+            "maxOutputTokens": out_tokens,
             "thinkingConfig": {"thinkingBudget": 0},
         }
         if json_mode:
@@ -728,16 +744,18 @@ def _gemini_native_completion(
                 url,
                 headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                 json=payload,
-                timeout=ANALYZE_HTTP_TIMEOUT,
+                timeout=GEMINI_ANALYZE_TIMEOUT,
             )
         except Exception as exc:  # noqa: BLE001
             last = exc
             logger.warning("Gemini %s ağ hatası: %s", name, exc)
-            # Aynı timeout'u 4 modelde üst üste yaşatma — kullanıcı dakikalar bekler.
             if _is_timeout(exc):
-                raise RuntimeError(
-                    "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
-                ) from exc
+                # Türkçe RuntimeError YASAK — _chat Groq yedeğine geçsin.
+                last = TimeoutError(f"Gemini {name} timed out")
+                # Sonraki modele daha kısa kullanıcı metni dene.
+                if len(user) > 5500:
+                    user = user[:5500] + "\n...(kısaltıldı)"
+                continue
             continue
         if response.status_code == 400 and "thinking" in (response.text or "").lower():
             generation.pop("thinkingConfig", None)
@@ -747,17 +765,15 @@ def _gemini_native_completion(
                     url,
                     headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                     json=payload,
-                    timeout=ANALYZE_HTTP_TIMEOUT,
+                    timeout=GEMINI_ANALYZE_TIMEOUT,
                 )
             except Exception as exc:  # noqa: BLE001
                 last = exc
                 if _is_timeout(exc):
-                    raise RuntimeError(
-                        "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
-                    ) from exc
+                    last = TimeoutError(f"Gemini {name} timed out")
+                    continue
                 continue
         if response.status_code == 404:
-            # ConfigurationError YASAK: FatalLLMError yedek Groq/Cerebras'ı keser.
             logger.warning("Gemini model yok, sıradaki: %s", name)
             last = RuntimeError(f"Gemini model yok: {name}")
             continue
@@ -780,8 +796,11 @@ def _gemini_native_completion(
         if not text:
             last = RuntimeError(f"{name}: boş yanıt")
             continue
+        # MAX_TOKENS ile kesilmiş JSON sık gelir — yine de parse etmeyi dene.
         logger.info("Gemini yanıtı: %s (%s karakter)", name, len(text))
         return _as_chat_response(text, name)
+    if last and _is_timeout(last):
+        raise TimeoutError(str(last) or "Gemini timed out") from last
     raise last or RuntimeError("Gemini yanıt vermedi.")
 
 
@@ -1317,6 +1336,13 @@ def _chat(
                     if task in ANALYZE_TASKS and _activate_next_analyze_provider(
                         reason="timeout"
                     ):
+                        # Groq için promptu küçült (8K TPM).
+                        system_prompt, user_prompt = _shrink_prompts_for_provider(
+                            system_prompt, user_prompt
+                        )
+                        logger.warning(
+                            "Timeout → yedek sağlayıcı: %s", _active_name or "?"
+                        )
                         continue
                     raise RuntimeError(
                         "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
@@ -1731,8 +1757,8 @@ def _analyze_combined(
 
     count = max(3, min(int(question_count or 5), 6))
     notes_wanted = max(6, min(int(note_count or 8), 10))
-    # Tek çağrıda zengin bağlam; kısa özet değil detaylı ders kartı.
-    hard_cap = max(6000, min(int(settings.analyze_prompt_chars), 12000))
+    # Tek çağrıda zengin bağlam; Gemini timeout olmasın diye tavan ~9K.
+    hard_cap = max(5500, min(int(settings.analyze_prompt_chars), 9000))
     work = (chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
