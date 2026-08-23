@@ -1,6 +1,7 @@
 import html
 import json
 import logging
+import os
 import re
 from math import ceil
 from urllib.parse import parse_qs, urlparse
@@ -139,15 +140,18 @@ def _run_with_timeout(fn, timeout: float, *args, **kwargs):
 def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[dict]:
     """Altyazıyı saniye damgasıyla çeker.
 
-    Önce YouTube altyazı izleri (saniyeler), olmazsa model videoyu okur.
+    Önce ücretsiz YouTube izleri; LLM (Gemini) yalnızca son çare.
+    OpenRouter video yolu kullanılmaz (ücretli 402).
     """
     errors: list[str] = []
     scrapers = (
+        (_fetch_via_innertube, 10),
+        (_fetch_via_watch_html, 12),
+        (_fetch_transcript_lines_inner, 10),
+        (_fetch_via_ytdlp, 18),
         (_fetch_via_youtube_transcript_ai, 12),
         (_fetch_via_youtubetotranscript, 12),
         (_fetch_via_youtube_transcript_io, 12),
-        (_fetch_via_innertube, 8),
-        (_fetch_transcript_lines_inner, 8),
         (_fetch_via_invidious, 12),
     )
     for fetcher, limit in scrapers:
@@ -182,20 +186,22 @@ def fetch_transcript_lines(video_id: str, subject: str | None = None) -> list[di
         errors.append(f"llm: {len(lines)} satır")
 
     logger.warning("YouTube altyazısı alınamadı %s: %s", video_id, " | ".join(errors))
-    last = errors[-1] if errors else ""
     low = " ".join(errors).lower()
-    if "429" in low or "quota" in low:
+    if "429" in low or "quota" in low or "resource_exhausted" in low:
         raise ValueError(
-            "Gemini ücretsiz kotası doldu. Birkaç dakika veya yarın tekrar dene. "
-            "Hemen devam için Google AI Studio'da faturalandırmayı aç."
+            "Altyazı modeli kotası doldu. Videoda YouTube altyazısını açıp tekrar dene "
+            "veya birkaç saat sonra bir kez daha dene."
         )
-    detail = last.split("llm: ", 1)[-1].strip()[:220]
-    if "timed out" in last.lower() or "timeout" in last.lower():
+    if "timed out" in low or "timeout" in low:
         raise ValueError("Video yazıya dökülürken süre doldu. Bir kez daha dene.")
-    if detail:
-        raise ValueError(f"YouTube altyazısı alınamadı. {detail}")
+    if "402" in low or "balance" in low or "credit" in low:
+        raise ValueError(
+            "Bu videoda altyazı okunamadı. YouTube’da altyazıyı (CC) açıp tekrar Analiz et; "
+            "veya altyazı metnini yapıştır."
+        )
     raise ValueError(
-        "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun."
+        "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun "
+        "veya altyazı metnini yapıştırıp tekrar dene."
     )
 
 
@@ -1108,13 +1114,38 @@ def _openrouter_text_from_youtube(
 def _fetch_via_llm_youtube(
     video_id: str, subject: str | None = None, *, strict: bool = False
 ) -> list[dict]:
+    """Son çare: Gemini YouTube URL okur. OpenRouter video yolu kapalı (ücretli 402)."""
     from app.config import settings
 
     prompt = _transcribe_prompt(subject, strict=strict)
     errors: list[str] = []
-    openrouter_key = (settings.openrouter_api_key or "").strip()
     gemini_key = (settings.gemini_api_key or "").strip()
-    if openrouter_key:
+
+    if gemini_key:
+        for model in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"):
+            try:
+                text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
+                lines = _lines_from_model_transcript(text)
+                if lines:
+                    return lines
+                errors.append(f"{model}: satır yok")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(str(exc))
+                low = str(exc).lower()
+                if "429" in low or "quota" in low or "resource_exhausted" in low:
+                    continue
+                if "401" in low or "403" in low or "api_key" in low:
+                    break
+
+    # OpenRouter video: çoğu anahtarda 402 / kredi ister — varsayılan kapalı.
+    use_or = (os.environ.get("TILKO_OPENROUTER_VIDEO") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    openrouter_key = (settings.openrouter_api_key or "").strip()
+    if use_or and openrouter_key:
         models = [
             "google/gemma-4-31b-it:free",
             "google/gemma-4-26b-a4b-it:free",
@@ -1134,26 +1165,18 @@ def _fetch_via_llm_youtube(
                 if "402" in str(exc) or "balance" in str(exc).lower():
                     break
 
-    if gemini_key:
-        for model in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"):
-            try:
-                text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
-                lines = _lines_from_model_transcript(text)
-                if lines:
-                    return lines
-                errors.append(f"{model}: satır yok")
-            except Exception as exc:  # noqa: BLE001
-                errors.append(str(exc))
-                if "429" in str(exc) or "quota" in str(exc).lower():
-                    continue
-
     joined = " | ".join(errors)
+    if "429" in joined or "quota" in joined.lower():
+        raise ValueError(
+            "Gemini kotası doldu. YouTube altyazısını açıp tekrar dene veya yarın dene."
+        )
     if "402" in joined or "balance" in joined.lower():
         raise ValueError(
-            "OpenRouter video için kredi istiyor. openrouter.ai/settings/credits "
-            "üzerinden bakiye ekle; Gemini kotası da doluysa yarın tekrar dene."
+            "Video okuma servisi ücret istiyor. YouTube’da altyazıyı açıp Analiz et."
         )
-    raise ValueError(" | ".join(errors) or "LLM ile altyazı alınamadı.")
+    raise ValueError(
+        "LLM ile altyazı alınamadı. Videoda altyazı açık olsun veya metni yapıştır."
+    )
 
 
 def _fetch_via_gemini_youtube(video_id: str) -> list[dict]:

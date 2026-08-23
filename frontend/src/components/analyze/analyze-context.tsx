@@ -327,21 +327,37 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
       try {
         await wakeApi();
         if (token !== job.current) return;
-        let data =
-          pasted.length >= 3 ? await run(pasted) : await run(undefined);
+
+        let captions =
+          pasted.length >= 3
+            ? pasted
+            : ([] as { start: number; text: string }[]);
+        // Altyazıyı önce telefonda/tarayıcıda çek; sunucu OpenRouter'a düşmesin.
+        if (captions.length < 3) {
+          try {
+            captions = await fetchCaptionsForVideo(input.video_url);
+          } catch {
+            captions = [];
+          }
+        }
+        if (token !== job.current) return;
+
+        let data = await run(
+          captions.length >= 3 ? captions : undefined,
+        );
         if (token !== job.current) return;
 
         const emptyFresh =
           !data.cached &&
           !(data.notes?.length || data.questions?.length) &&
           !stillRunning(data) &&
-          pasted.length < 3;
+          captions.length < 3;
 
         if (emptyFresh) {
-          const captions = await fetchCaptionsForVideo(input.video_url);
+          const retry = await fetchCaptionsForVideo(input.video_url);
           if (token !== job.current) return;
-          if (captions.length >= 3) {
-            data = await run(captions);
+          if (retry.length >= 3) {
+            data = await run(retry);
             if (token !== job.current) return;
           }
         }
@@ -360,7 +376,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (token !== job.current) return;
         const msg = err instanceof Error ? err.message : "Analiz başarısız";
-        if (pasted.length < 3 && /altyazı|transkript|subtitle/i.test(msg)) {
+        if (pasted.length < 3 && /altyazı|transkript|subtitle|openrouter|kredi/i.test(msg)) {
           try {
             const captions = await fetchCaptionsForVideo(input.video_url);
             if (token !== job.current) return;
