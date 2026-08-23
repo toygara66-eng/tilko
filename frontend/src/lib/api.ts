@@ -4,6 +4,45 @@ import { getUserId } from "@/lib/user";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || "https://tilko-api.onrender.com";
 
+export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatası"): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : "";
+  const name =
+    typeof DOMException !== "undefined" && err instanceof DOMException
+      ? err.name
+      : err instanceof Error
+        ? err.name
+        : "";
+  if (
+    name === "AbortError" ||
+    name === "TimeoutError" ||
+    /aborted|timeout|timed out|zaman aşımı/i.test(message)
+  ) {
+    return "Sunucu geç yanıt verdi (Render uyanıyor olabilir). 20 sn bekle, Analiz et’e tek sefer bas; üst üste basma.";
+  }
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return "API'ye ulaşılamadı. İnterneti kontrol et veya 20 sn sonra dene.";
+  }
+  return message.trim() || fallback;
+}
+
+/** Render free uyku → ilk istek uzun sürer; analizden önce nazikçe uyandır. */
+export async function wakeApi(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/health`, {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch {
+    /* analiz yine denenecek */
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     const headers: Record<string, string> = {
@@ -27,25 +66,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     return await readJson<T>(response);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    if (
-      (typeof DOMException !== "undefined" &&
-        err instanceof DOMException &&
-        (err.name === "AbortError" || err.name === "TimeoutError")) ||
-      /aborted|timeout|timed out/i.test(message)
-    ) {
-            throw new Error(
-              "İstek zaman aşımına uğradı. Analiz arka planda sürebilir — 20 sn bekleyip Analiz et’e bir kez daha bas; üst üste basma.",
-            );
-    }
-    if (
-      err instanceof TypeError ||
-      /failed to fetch|networkerror|load failed/i.test(message)
-    ) {
-      throw new Error("API'ye ulaşılamadı. Backend çalışıyor mu?");
-    }
-    if (err instanceof Error) throw err;
-    throw new Error("Bağlantı koptu. API'ye ulaşılamadı.");
+    throw new Error(humanizeNetworkError(err));
   }
 }
 
@@ -310,16 +331,17 @@ export function analyzeVideo(payload: {
   is_yks_fen_question?: boolean;
   transcript_lines?: { start: number; text: string }[];
 }) {
+  // Analiz HTTP'de LLM beklemez; uzun timeout yalnızca Render uyanması için.
   return request<AnalyzeResponse>("/analyze", {
     method: "POST",
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(90_000),
   });
 }
 
 export function getAnalyzeJob(jobId: string) {
   return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`, {
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(45_000),
   });
 }
 

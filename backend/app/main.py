@@ -513,7 +513,7 @@ def analyze_video(
 
     leader = claim_work(video_id, payload.subject, focus_bkt)
     if not leader:
-        wait_work(video_id, payload.subject, timeout=12.0, focus_bucket=focus_bkt)
+        # Uzun bekleme tarayıcı timeout'una yol açıyor; cache/shared bir kez bak.
         cached = cache.load(cache_key) or cache.find_cached(
             video_id, payload.subject, exam_target, focus_bucket=focus_bkt
         )
@@ -553,12 +553,10 @@ def analyze_video(
                 subject=payload.subject,
                 exam_target=exam_target,
             )
-        leader = claim_work(video_id, payload.subject, focus_bkt)
-        if not leader:
-            credit_service.refund(db, user_id, reservation)
-            raise _busy_http(
-                ServiceBusyError("Aynı video çözülüyor. 15 saniye sonra tekrar dene.")
-            )
+        credit_service.refund(db, user_id, reservation)
+        raise _busy_http(
+            ServiceBusyError("Aynı video çözülüyor. 15 saniye sonra tekrar dene.")
+        )
 
     hold_lock = False
     try:

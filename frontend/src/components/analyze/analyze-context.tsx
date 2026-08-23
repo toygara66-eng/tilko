@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { analyzeVideo, getAnalyzeJob, type AnalyzeResponse } from "@/lib/api";
+import { analyzeVideo, getAnalyzeJob, wakeApi, humanizeNetworkError, type AnalyzeResponse } from "@/lib/api";
 import {
   fetchCaptionsForVideo,
   parseTranscriptPaste,
@@ -187,9 +187,10 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           fails += 1;
           if (fails >= 8) {
             setError(
-              err instanceof Error
-                ? err.message
-                : "Analiz durumu alınamadı. Biraz bekleyip tekrar dene.",
+              humanizeNetworkError(
+                err,
+                "Analiz durumu alınamadı. Biraz bekleyip tekrar dene.",
+              ),
             );
             void refresh();
             return;
@@ -266,6 +267,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         lastDoneVideo.current = nextId;
         void (async () => {
           try {
+            await wakeApi();
             const data = await analyzeVideo({
               video_url: input.video_url,
               user_id: getUserId(),
@@ -312,6 +314,8 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         });
 
       try {
+        await wakeApi();
+        if (token !== job.current) return;
         let data =
           pasted.length >= 3 ? await run(pasted) : await run(undefined);
         if (token !== job.current) return;
@@ -369,7 +373,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
             /* aşağıda orijinal hata */
           }
         }
-        setError(msg);
+        setError(humanizeNetworkError(err, "Analiz başarısız"));
         void refresh();
       } finally {
         if (token === job.current) {
