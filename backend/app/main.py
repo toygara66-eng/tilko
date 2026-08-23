@@ -118,7 +118,6 @@ from app.services.scale import (
     ServiceBusyError,
     claim_work,
     release_work,
-    wait_work,
 )
 from app.security.auth import (
     actor,
