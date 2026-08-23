@@ -1783,6 +1783,10 @@ def _public_analyze_error(exc: BaseException) -> str:
             "Model veya altyazı zaman aşımına uğradı. "
             "20 saniye bekleyip Analiz et’e bir kez daha bas."
         )
+    if "request too large" in low or "reduce your message size" in low or "413" in low:
+        return (
+            "İstek modele fazla geldi. 20 sn bekle, aynı videoyu bir kez daha dene."
+        )
     if "bu anahtarda yok" in low or "model yok" in low or "model_not_found" in low:
         return "Model ayarı güncelleniyor. 20 sn bekle, Analiz et’e bir kez daha bas."
     return text[:280]

@@ -786,16 +786,38 @@ def _gemini_native_completion(
 
 
 def _normalize_groq_model(raw: str | None) -> str:
-    """Render'da eski GROQ_MODEL=openai/gpt-oss-120b kalmış olabilir; geçerli id'ye çevir."""
+    """Analizde yalnızca hızlı/ucuz Llama; gpt-oss 8K TPM ile patlıyor."""
     model = (raw or "").strip() or "llama-3.1-8b-instant"
     lowered = model.lower()
     if (
         "gpt-oss" in lowered
         or "120b" in lowered
+        or "70b" in lowered
         or lowered in {"", "auto", "default"}
     ):
         return "llama-3.1-8b-instant"
     return model
+
+
+def _shrink_prompts_for_provider(
+    system_prompt: str, user_prompt: str
+) -> tuple[str, str]:
+    """Groq 8K TPM: girdi+çıktı rezervasyonu sınırı aşıyor (413)."""
+    name = (_active_name or settings.llm_provider or "").strip().lower()
+    if name != "groq":
+        return system_prompt, user_prompt
+    system = system_prompt
+    user = user_prompt
+    if len(system) > 2500:
+        system = system[:2500] + "\n...(kısaltıldı)"
+    if len(user) > 4200:
+        # Altyazı bloğunu kısalt; şema talimatını korumaya çalış.
+        head = user[:800]
+        tail = user[-600:] if len(user) > 1400 else ""
+        mid_budget = 4200 - len(head) - len(tail) - 40
+        mid = user[800 : 800 + max(500, mid_budget)]
+        user = f"{head}\n{mid}\n...(altyazı kısaltıldı)\n{tail}".strip()
+    return system, user
 
 
 def _gemini_client(timeout=None) -> tuple[OpenAI, str] | None:
@@ -1110,7 +1132,11 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        kwargs["max_tokens"] = 4500
+        # Groq free TPM ~8K; 4500 max_tokens rezervasyonu 413 verir.
+        if (_active_name or settings.llm_provider or "").lower() == "groq":
+            kwargs["max_tokens"] = 1200
+        else:
+            kwargs["max_tokens"] = 4500
     model_id = str(model or "")
     if (
         json_mode
@@ -1144,19 +1170,34 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
                         raise
             raise last
         if _active_name == "groq" and (
-            "model_not_found" in text or "error code: 404" in text
+            "model_not_found" in text
+            or "error code: 404" in text
+            or _oversized_request(text)
         ):
             last = exc
             for candidate in (
                 "llama-3.1-8b-instant",
                 "llama-3.3-70b-versatile",
-                "openai/gpt-oss-20b",
             ):
                 if candidate == kwargs.get("model"):
                     continue
                 kwargs["model"] = candidate
                 if "8b" in candidate:
                     kwargs.pop("response_format", None)
+                if _oversized_request(text):
+                    kwargs["max_tokens"] = min(int(kwargs.get("max_tokens") or 1200), 1000)
+                    # Mesajları da kısalt.
+                    msgs = list(kwargs.get("messages") or [])
+                    trimmed = []
+                    for message in msgs:
+                        row = dict(message)
+                        content = str(row.get("content") or "")
+                        if row.get("role") == "user" and len(content) > 3500:
+                            row["content"] = content[:3500] + "\n...(kısaltıldı)"
+                        elif row.get("role") == "system" and len(content) > 2000:
+                            row["content"] = content[:2000] + "\n...(kısaltıldı)"
+                        trimmed.append(row)
+                    kwargs["messages"] = trimmed
                 logger.warning("Groq model kaydırıldı: %s", candidate)
                 try:
                     return client.chat.completions.create(**kwargs)
@@ -1172,6 +1213,9 @@ def _chat_openai_compatible(
     temperature: float,
 ) -> dict:
     """OpenAI, Gemini ve Hugging Face router'ı aynı arayüzü konuşur."""
+    system_prompt, user_prompt = _shrink_prompts_for_provider(
+        system_prompt, user_prompt
+    )
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
@@ -1186,13 +1230,26 @@ def _chat_openai_compatible(
         # Timeout'u burada yutma: _chat yedek sağlayıcıya geçebilsin.
         if _is_timeout(exc):
             raise
-        err = str(exc)
-        fallback = "response_format" in err or "json_validate_failed" in err.lower()
-        if not fallback:
-            raise
-        logger.info("JSON modu tutmadı, düz metinle deneniyor.")
-        response = _openai_create(messages, temperature, json_mode=False)
-        use_json = False
+        if _oversized_request(str(exc)):
+            # Bir kez daha agresif kısaltıp dene.
+            system_prompt, user_prompt = _shrink_prompts_for_provider(
+                system_prompt[:1800], user_prompt[:2800]
+            )
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt + "\n\nDaha kısa JSON yaz."},
+            ]
+            logger.warning("İstek fazla büyüdü; kısaltılmış tekrar.")
+            response = _openai_create(messages, temperature, json_mode=False)
+            use_json = False
+        else:
+            err = str(exc)
+            fallback = "response_format" in err or "json_validate_failed" in err.lower()
+            if not fallback:
+                raise
+            logger.info("JSON modu tutmadı, düz metinle deneniyor.")
+            response = _openai_create(messages, temperature, json_mode=False)
+            use_json = False
     parsed = _extract_json(_message_text(response.choices[0].message) or "{}")
     notes = _coerce_notes(parsed)
     if use_json and not notes:
@@ -1277,7 +1334,13 @@ def _chat(
                         "Cerebras anahtarı varsa LLM_FALLBACK=cerebras kalsın."
                     ) from exc
                 if _oversized_request(str(exc)):
-                    raise
+                    if task in ANALYZE_TASKS and _activate_next_analyze_provider(
+                        reason="request_too_large"
+                    ):
+                        continue
+                    raise RuntimeError(
+                        "İstek modele sığmadı. Daha kısa bir video dilimiyle tekrar dene."
+                    ) from exc
 
                 wait = _retry_after(str(exc))
                 if wait is not None:
