@@ -1947,8 +1947,28 @@ def _analyze_combined(
             if raw_notes:
                 logger.warning("Grounding boş; ham %s not kullanılıyor.", len(raw_notes))
                 notes = raw_notes[:10]
-        # Soru üretimi ayrı LLM çağrısı — notları 1+ dk bloklamasın.
-        # Birleşik prompt zaten questions ister; _collect ile gelen yeter.
+        # Sorular: birleşik JSON'dan gelen + gerekirse kısa ek üretim (max 25 sn).
+        if notes and len(questions) < max(2, count // 2):
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+            try:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    fut = pool.submit(
+                        generate_questions,
+                        notes,
+                        subject,
+                        count,
+                        None,
+                        exam_target,
+                        subject_type,
+                        is_yks_fen_question,
+                    )
+                    more = fut.result(timeout=25)
+                _collect([{"questions": more}], questions, seen, count)
+            except FuturesTimeout:
+                logger.warning("Soru üretimi zaman aşımı; notlarla devam.")
+            except Exception:
+                logger.exception("Dilim soru tamamlaması başarısız")
         if notes:
             persona = merge_personas([result.get("teacher_persona")])
             return {

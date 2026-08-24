@@ -1778,21 +1778,25 @@ def _persist_notebook(
         session.close()
 
 
-def _pack_notes(raw: object, video_id: str, start: int = 1) -> list[NoteItem]:
+def _pack_notes(
+    raw: object, video_id: str, start: int = 1, time_offset: int = 0
+) -> list[NoteItem]:
     notes: list[NoteItem] = []
     for index, item in enumerate(raw or [], start=start):
         try:
-            notes.append(_to_note(item, index, video_id))
+            notes.append(_to_note(item, index, video_id, time_offset=time_offset))
         except Exception:
             continue
     return notes
 
 
-def _pack_questions(raw: object, video_id: str, start: int = 1) -> list[QuestionItem]:
+def _pack_questions(
+    raw: object, video_id: str, start: int = 1, time_offset: int = 0
+) -> list[QuestionItem]:
     questions: list[QuestionItem] = []
     for index, item in enumerate(raw or [], start=start):
         try:
-            questions.append(_to_question(item, index, video_id))
+            questions.append(_to_question(item, index, video_id, time_offset=time_offset))
         except Exception:
             continue
     return questions
@@ -1952,21 +1956,21 @@ def _analyze_with_lines(
     except Exception:
         db.rollback()
 
-    notes = _pack_notes(llm_data.get("notes"), video_id)
-    questions = _pack_questions(llm_data.get("questions"), video_id)
+    notes = _pack_notes(
+        llm_data.get("notes"),
+        video_id,
+        time_offset=int(first.get("start") or 0),
+    )
+    questions = _pack_questions(
+        llm_data.get("questions"),
+        video_id,
+        time_offset=int(first.get("start") or 0),
+    )
+    # Offset sonrası gerçek dakika; uzun videoda >=600 filtresi notları silmesin.
     if focus_start > 0:
         floor = max(0, int(focus_start) - 120)
         filtered_notes = [n for n in notes if int(n.timestamp or 0) >= floor]
         filtered_qs = [q for q in questions if int(q.timestamp or 0) >= floor]
-        # Model dilim içi 0..300 basarsa hepsini silme.
-        if filtered_notes:
-            notes = filtered_notes
-        if filtered_qs:
-            questions = filtered_qs
-    elif transcript_duration_seconds(lines) >= 1800:
-        # Uzun videoda dilim zaten pick_content_slice ile seçildi; timestamp 0 olabilir.
-        filtered_notes = [n for n in notes if int(n.timestamp or 0) >= 600]
-        filtered_qs = [q for q in questions if int(q.timestamp or 0) >= 600]
         if filtered_notes:
             notes = filtered_notes
         if filtered_qs:
@@ -1977,21 +1981,22 @@ def _analyze_with_lines(
         reservation = credit_service.refund(db, user_id, reservation)
     overlay = credit_service.overlay(reservation)
 
-    # Tek dilim yeter; arka plan dilimleri Gemini/Groq faturasını katlar.
-    remaining: list[dict] = []
+    # 30 dk video: ilk dilim + en fazla 4 dilim daha (arka planda eklenir).
+    remaining = list(remaining_slices[:4])
+    total_chunks = 1 + len(remaining)
     if not job_id:
         job_id = jobs.create_job(
             user_id=user_id,
             video_id=video_id,
             video_url=canonical_url,
             subject=subject,
-            chunks_total=1,
+            chunks_total=total_chunks,
             overlay=overlay,
             focus_bucket=focus_bucket,
         )
     persona = ai_engine.parse_persona(llm_data.get("teacher_persona")).model_dump()
     done = 1
-    status = "done"
+    status = "running" if remaining else "done"
     jobs.set_progress(
         job_id,
         notes=[item.model_dump() for item in notes],
@@ -1999,7 +2004,7 @@ def _analyze_with_lines(
         persona=persona,
         chunks_done=done,
         status=status,
-        chunks_total=1,
+        chunks_total=total_chunks,
         overlay=overlay,
     )
     _persist_notebook(
@@ -2025,7 +2030,7 @@ def _analyze_with_lines(
                 job_id=job_id,
                 job_status="running",
                 chunks_done=done,
-                chunks_total=1 + len(remaining),
+                chunks_total=total_chunks,
                 **overlay,
             ).model_dump()
             dump["analyze_span"] = "partial"
@@ -2052,7 +2057,7 @@ def _analyze_with_lines(
                 extra_keys,
             ),
             daemon=True,
-            name=f"analyze-{job_id}",
+            name=f"analyze-cont-{job_id}",
         ).start()
     elif notes:
         dump = AnalyzeResponse(
@@ -2087,7 +2092,7 @@ def _analyze_with_lines(
         job_id=job_id,
         job_status=status,
         chunks_done=done,
-        chunks_total=1 + len(remaining),
+        chunks_total=total_chunks,
         **overlay,
     )
 
@@ -2277,13 +2282,13 @@ def _continue_analyze_job(
             llm_data = analyze_slice(
                 piece["block"],
                 subject,
-                3,
+                5,
                 exam_target,
                 subject_type,
                 is_yks_fen_question,
                 "",
                 window_label=piece.get("label") or "",
-                note_count=8,
+                note_count=6,
             )
         except Exception as exc:
             logger.warning("Dilim atlandı %s: %s", piece.get("label"), exc)
@@ -2296,9 +2301,22 @@ def _continue_analyze_job(
             )
             continue
         done += 1
-        notes.extend(_pack_notes(llm_data.get("notes"), video_id, start=len(notes) + 1))
+        offset = int(piece.get("start") or 0)
+        notes.extend(
+            _pack_notes(
+                llm_data.get("notes"),
+                video_id,
+                start=len(notes) + 1,
+                time_offset=offset,
+            )
+        )
         questions.extend(
-            _pack_questions(llm_data.get("questions"), video_id, start=len(questions) + 1)
+            _pack_questions(
+                llm_data.get("questions"),
+                video_id,
+                start=len(questions) + 1,
+                time_offset=offset,
+            )
         )
         if llm_data.get("teacher_persona"):
             personas.append(llm_data.get("teacher_persona"))
@@ -2358,10 +2376,12 @@ def _continue_analyze_job(
     cache.save(cache_key, dump)
 
 
-def _to_note(item: dict, index: int, video_id: str) -> NoteItem:
+def _to_note(
+    item: dict, index: int, video_id: str, time_offset: int = 0
+) -> NoteItem:
     if not isinstance(item, dict):
         raise TypeError("not bir nesne değil")
-    seconds = int(float(item.get("timestamp") or 0))
+    seconds = max(0, int(float(item.get("timestamp") or 0)) + int(time_offset or 0))
     detail = item.get("detail") or item.get("text") or ""
     raw_points = item.get("key_points") or []
     if not isinstance(raw_points, list):
@@ -2380,12 +2400,14 @@ def _to_note(item: dict, index: int, video_id: str) -> NoteItem:
     )
 
 
-def _to_question(item: dict, index: int, video_id: str) -> QuestionItem:
+def _to_question(
+    item: dict, index: int, video_id: str, time_offset: int = 0
+) -> QuestionItem:
     from app.services.subjects import parse_premises, parse_steps
 
     if not isinstance(item, dict):
         raise TypeError("soru bir nesne değil")
-    seconds = int(float(item.get("timestamp") or 0))
+    seconds = max(0, int(float(item.get("timestamp") or 0)) + int(time_offset or 0))
     options = item.get("options") or {}
     if isinstance(options, list):
         options = {
