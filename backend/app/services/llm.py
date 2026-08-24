@@ -2140,11 +2140,15 @@ def _analyze_combined(
                 logger.warning("Grounding boş; ham %s kaliteli not kullanılıyor.", len(raw_notes))
                 notes = raw_notes[:8]
         notes = _filter_quality_notes(notes)
-        # Kısa kalanları ikinci turda mini ders özetine çevir.
+        # Kısa kalanları genişlet; silinirse önceki notları koru.
         if notes and sum(1 for n in notes if _is_thin_note(n)) >= max(1, len(notes) // 2):
             logger.warning("Notlar kısa kaldı; genişletme turu.")
-            notes = _expand_thin_notes(notes, work, subject)
-            notes = _filter_quality_notes(notes)
+            before = list(notes)
+            try:
+                notes = _expand_thin_notes(notes, work, subject)
+                notes = _filter_quality_notes(notes) or before
+            except Exception:  # noqa: BLE001
+                notes = before
         # Sorular: birleşik JSON'dan gelen + gerekirse kısa ek üretim (max 25 sn).
         if notes and len(questions) < max(2, count // 2):
             from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -2177,15 +2181,35 @@ def _analyze_combined(
     except Exception as exc:  # noqa: BLE001
         logger.warning("LLM analiz düştü, altyazı yedeğine geçiliyor: %s", exc)
 
-    # Çöp sohbet notu basma; kaliteli yedek yoksa üst katman hata/sıradaki dilimi denesin.
-    logger.warning("Altyazı yedek notları deneniyor (%s).", window_label or "dilim")
+    # Altyazı yedeği — mümkünse her zaman not dön.
+    logger.warning("Altyazı yedek notları kullanılıyor (%s).", window_label or "dilim")
     fallback = _fallback_notes_from_transcript(work, subject)
-    fallback_notes = _filter_quality_notes(list(fallback.get("notes") or []))
+    fallback_notes = list(fallback.get("notes") or [])
     if fallback_notes:
         fallback["notes"] = fallback_notes
         return fallback
+    if len(work.strip()) >= 40:
+        topic = (subject or "Ders").strip() or "Ders"
+        return {
+            "notes": [
+                {
+                    "title": f"{topic} — dilim özeti",
+                    "quote": work[:120],
+                    "detail": (
+                        f"{work[:700]} "
+                        "Bu dilimde anlatılanları tanım + örnek + çeldirici şeklinde tekrar et."
+                    )[:1200],
+                    "key_points": [work[:100], f"{topic} ana fikir"],
+                    "mnemonic": f"{topic}: bu dilimi parçalara bölüp tekrarla.",
+                    "exam_tip": "Altyazıdaki net ifadeleri soru köküne çevirerek çalış.",
+                    "timestamp": 0,
+                }
+            ],
+            "questions": [],
+            "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
+        }
     raise RuntimeError(
-        "Model bu dilimde çalışılabilir not yazamadı. Başka bölüm veya video dene."
+        "Bu video diliminde yeterli altyazı yok. Başka bölüm veya altyazılı video dene."
     )
 
 
