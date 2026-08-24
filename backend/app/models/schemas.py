@@ -757,6 +757,26 @@ class AdminSetPasswordResponse(BaseModel):
     message: str = ""
 
 
+class AdminUserUpdateRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    display_name: str | None = Field(default=None, max_length=64)
+    email: str | None = Field(default=None, max_length=256)
+    phone: str | None = Field(default=None, max_length=32)
+    exam_target: str | None = Field(default=None, max_length=32)
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
+class AdminUserUpdateResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    display_name: str = ""
+    email: str = ""
+    phone: str = ""
+    exam_target: str = ""
+    has_password: bool = False
+    message: str = ""
+
+
 class AdminUserRow(BaseModel):
     user_id: str
     display_name: str = ""
@@ -770,6 +790,7 @@ class AdminUserRow(BaseModel):
     ai_credits_left: int = 0
     created_at: str | None = None
     has_google: bool = False
+    has_password: bool = False
 
 
 class AdminUserListResponse(BaseModel):

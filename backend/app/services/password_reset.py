@@ -270,5 +270,78 @@ def admin_set_password(db: Session, user_id: str, new_password: str) -> dict:
     return {
         "ok": True,
         "user_id": uid,
-        "message": "Şifre admin tarafından güncellendi.",
+        "message": "Şifre admin tarafından güncellendi. Bu şifreyle giriş yapılabilir.",
+    }
+
+
+def admin_update_user(
+    db: Session,
+    *,
+    user_id: str,
+    display_name: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+    exam_target: str | None = None,
+    new_password: str | None = None,
+) -> dict:
+    from app.security.auth import VALID_EXAMS, _apply_exam
+
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("user_id gerekli.")
+    user = db.get(User, uid)
+    if user is None:
+        raise ValueError("Kullanıcı bulunamadı.")
+
+    if display_name is not None:
+        user.display_name = (display_name or "").strip()[:64]
+    if email is not None:
+        mail = (email or "").strip()
+        if mail:
+            mail = normalize_email(mail)
+            clash = db.scalars(
+                select(User).where(User.email == mail).where(User.user_id != uid)
+            ).first()
+            if clash is not None:
+                raise ValueError("Bu e-posta başka hesaba bağlı.")
+            user.email = mail
+        else:
+            user.email = ""
+    if phone is not None:
+        raw_phone = (phone or "").strip()
+        if raw_phone:
+            tel = normalize_phone(raw_phone)
+            clash = db.scalars(
+                select(User).where(User.phone == tel).where(User.user_id != uid)
+            ).first()
+            if clash is not None:
+                raise ValueError("Bu telefon başka hesaba bağlı.")
+            user.phone = tel
+        else:
+            user.phone = ""
+    if exam_target is not None:
+        exam = (exam_target or "").strip().lower()
+        if exam and exam not in VALID_EXAMS:
+            raise ValueError("Sınav hedefi geçersiz.")
+        if exam:
+            _apply_exam(user, exam)
+        else:
+            user.exam_target = ""
+    if new_password is not None and (new_password or "").strip():
+        if len(new_password) < 8:
+            raise ValueError("Şifre en az 8 karakter olmalı.")
+        user.password_hash = hash_password(new_password)
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {
+        "ok": True,
+        "user_id": uid,
+        "display_name": user.display_name or "",
+        "email": user.email or "",
+        "phone": user.phone or "",
+        "exam_target": user.exam_target or "",
+        "has_password": bool((user.password_hash or "").strip()),
+        "message": "Kullanıcı bilgileri güncellendi.",
     }

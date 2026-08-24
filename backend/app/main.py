@@ -76,6 +76,8 @@ from app.models.schemas import (
     ResetPasswordResponse,
     AdminSetPasswordRequest,
     AdminSetPasswordResponse,
+    AdminUserUpdateRequest,
+    AdminUserUpdateResponse,
     AdminUserListResponse,
     AdminUserRow,
     AdminGrantProRequest,
@@ -1038,6 +1040,7 @@ def admin_users_list(
                 ai_credits_left=int(user.ai_credits_left or 0),
                 created_at=_iso_dt(user.created_at),
                 has_google=bool((user.google_sub or "").strip()),
+                has_password=bool((user.password_hash or "").strip()),
             )
         )
     return AdminUserListResponse(users=users, count=len(users))
@@ -1098,6 +1101,27 @@ def admin_users_set_password(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AdminSetPasswordResponse.model_validate(data)
+
+
+@app.post("/admin/users/update", response_model=AdminUserUpdateResponse)
+def admin_users_update(
+    payload: AdminUserUpdateRequest, db: Session = Depends(get_db)
+) -> AdminUserUpdateResponse:
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.admin_update_user(
+            db,
+            user_id=payload.user_id,
+            display_name=payload.display_name,
+            email=payload.email,
+            phone=payload.phone,
+            exam_target=payload.exam_target,
+            new_password=payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminUserUpdateResponse.model_validate(data)
 
 
 @app.post("/admin/promo/create", response_model=PromoCreateResponse)

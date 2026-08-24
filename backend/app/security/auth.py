@@ -234,12 +234,29 @@ def find_user_by_login(db: Session, identifier: str):
         user = db.scalars(select(User).where(User.email == email)).first()
         if user is not None:
             return user
+        # Eski/eksik kayıtlarda email sütunu boş kalmış olabilir; türetilmiş id dene.
+        derived = db.get(User, _uid_from_email(email))
+        if derived is not None:
+            if not (derived.email or "").strip():
+                derived.email = email
+                db.add(derived)
+                db.commit()
+            return derived
     try:
         phone = normalize_phone(raw)
     except ValueError:
         phone = ""
     if phone:
-        return db.scalars(select(User).where(User.phone == phone)).first()
+        user = db.scalars(select(User).where(User.phone == phone)).first()
+        if user is not None:
+            return user
+        derived = db.get(User, _uid_from_phone(phone))
+        if derived is not None:
+            if not (derived.phone or "").strip():
+                derived.phone = phone
+                db.add(derived)
+                db.commit()
+            return derived
     return None
 
 
@@ -291,7 +308,10 @@ def register_user(
 
     existing = db.get(User, uid)
     if existing is not None and (existing.password_hash or "").strip():
-        raise ValueError("Bu kullanıcı zaten kayıtlı. Giriş yap.")
+        # Aynı e-posta/telefon başka id'de değilse ve bu kayıt "boş iskelet" ise üzerine yaz.
+        skeleton = not (existing.email or existing.phone or existing.display_name or "").strip()
+        if not skeleton:
+            raise ValueError("Bu kullanıcı zaten kayıtlı. Giriş yap.")
 
     hashed = hash_password(password)
     user = existing or get_or_create_user(db, uid)
@@ -340,7 +360,10 @@ def login_user(
     user = find_user_by_login(db, identifier)
     stored = (getattr(user, "password_hash", None) or "").strip() if user else ""
     if user is None or not stored or not verify_password(password, stored):
-        raise ValueError("E-posta/telefon veya şifre hatalı.")
+        raise ValueError(
+            "E-posta/telefon veya şifre hatalı. "
+            "Şifreni unuttuysan 'Şifremi unuttum' ile kod al veya yeniden kayıt ol."
+        )
     intended = (role or "").strip().lower()
     actual = normalize_role(getattr(user, "role", "") or "student")
     if intended == "teacher" and actual not in {"teacher", "admin"}:

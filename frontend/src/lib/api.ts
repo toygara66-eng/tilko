@@ -1274,6 +1274,7 @@ export type AdminUserRow = {
   ai_credits_left: number;
   created_at: string | null;
   has_google: boolean;
+  has_password?: boolean;
 };
 
 export async function listAdminUsers(secret: string, q = "") {
@@ -1395,6 +1396,35 @@ export async function adminSetPassword(
     body: JSON.stringify(payload),
   });
   return readJson<{ ok: boolean; user_id: string; message: string }>(response);
+}
+
+export async function adminUpdateUser(
+  secret: string,
+  payload: {
+    user_id: string;
+    display_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    exam_target?: string | null;
+    new_password?: string | null;
+  },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/users/update`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<{
+    ok: boolean;
+    user_id: string;
+    display_name: string;
+    email: string;
+    phone: string;
+    exam_target: string;
+    has_password: boolean;
+    message: string;
+  }>(response);
 }
 
 export type TeacherStudentCard = {

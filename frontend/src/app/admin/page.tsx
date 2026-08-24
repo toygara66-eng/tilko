@@ -12,6 +12,7 @@ import {
   grantAdminCredits,
   grantAdminPro,
   adminSetPassword,
+  adminUpdateUser,
   listAdminFeedback,
   listAdminUsers,
   listExamSchedules,
@@ -402,7 +403,7 @@ export default function AdminArchivePage() {
                     >
                       <td className="px-3 py-2 align-top">
                         <p className="font-medium text-zinc-900 dark:text-white">
-                          {row.display_name || "—"}
+                          {row.display_name || "İsimsiz hesap"}
                         </p>
                         <p className="font-mono text-[10px] text-zinc-500">
                           {row.user_id}
@@ -410,11 +411,17 @@ export default function AdminArchivePage() {
                         <p className="text-[10px] text-zinc-400">
                           {formatExpiry(row.created_at)} · {row.role}
                           {row.has_google ? " · Google" : ""}
+                          {row.has_password ? " · Şifre var" : " · Şifre yok"}
                         </p>
+                        {!row.email && !row.phone ? (
+                          <p className="mt-1 text-[10px] font-medium text-amber-600">
+                            Eksik profil — e-posta/telefon ekle
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2 align-top text-zinc-600 dark:text-zinc-300">
-                        <p>{row.email || "—"}</p>
-                        <p>{row.phone || "—"}</p>
+                        <p>{row.email || "e-posta yok"}</p>
+                        <p>{row.phone || "telefon yok"}</p>
                       </td>
                       <td className="px-3 py-2 align-top">{row.exam_target || "—"}</td>
                       <td className="px-3 py-2 align-top">
@@ -499,6 +506,60 @@ export default function AdminArchivePage() {
                             }}
                           >
                             Pro kaldır
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || !secret.trim()}
+                            onClick={() => {
+                              void (async () => {
+                                const name = window.prompt(
+                                  "Ad soyad:",
+                                  row.display_name || "",
+                                );
+                                if (name == null) return;
+                                const mail = window.prompt(
+                                  "E-posta (giriş için):",
+                                  row.email || "",
+                                );
+                                if (mail == null) return;
+                                const pass = window.prompt(
+                                  "Yeni şifre (min 8, boş = değiştirme):",
+                                  "",
+                                );
+                                if (pass == null) return;
+                                if (pass.trim() && pass.trim().length < 8) {
+                                  setError("Şifre en az 8 karakter olmalı.");
+                                  return;
+                                }
+                                setBusy(true);
+                                setError("");
+                                setCreditMsg("");
+                                try {
+                                  const data = await adminUpdateUser(secret, {
+                                    user_id: row.user_id,
+                                    display_name: name.trim(),
+                                    email: mail.trim(),
+                                    new_password: pass.trim() || null,
+                                  });
+                                  setCreditMsg(
+                                    `${data.message} Artık ${data.email || row.user_id} ile giriş yapılabilir.`,
+                                  );
+                                  await loadUsers();
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Güncellenemedi",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Hesabı onar
                           </Button>
                           <Button
                             type="button"
