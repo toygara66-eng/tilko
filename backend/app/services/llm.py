@@ -79,6 +79,7 @@ _llm_stats: dict[str, object] = {
     "last_ok_provider": "",
     "last_ok_model": "",
     "last_error": "",
+    "last_gemini_error": "",
     "gemini_ok": 0,
     "gemini_fail": 0,
     "fallback_ok": 0,
@@ -534,7 +535,8 @@ _EDU_SIGNAL_RE = re.compile(
     r"coğrafya|iklim|nüfus|harita|"
     r"denklem|oran|yüzde|üçgen|alan|çevre|kesir|"
     r"tanım|istisna|kural|çeldirici|ösym|kpss|yks|"
-    r"öncül|hipotez|teorem|formül)\b"
+    r"öncül|hipotez|teorem|formül|"
+    r"ünite|konu|örnek|açıkla|ders|öğret|kavram|özet)\b"
     r")",
     re.IGNORECASE,
 )
@@ -904,6 +906,12 @@ def _is_gemini_client(client: OpenAI) -> bool:
     return "generativelanguage.googleapis.com" in base
 
 
+def _is_gemini_openai_client(client: OpenAI) -> bool:
+    """Gemini'nin OpenAI-uyumlu uç noktası (native generateContent değil)."""
+    base = str(getattr(client, "base_url", "") or "")
+    return "generativelanguage.googleapis.com" in base and "/openai" in base
+
+
 def _as_chat_response(text: str, model: str):
     message = SimpleNamespace(content=text)
     choice = SimpleNamespace(message=message)
@@ -970,6 +978,7 @@ def _gemini_native_completion(
             last = exc
             logger.warning("Gemini %s ağ hatası: %s", name, exc)
             if _is_timeout(exc):
+                _record_llm_fail("gemini", exc)
                 # Analizde ikinci modele gitme — hemen yedek sağlayıcı.
                 raise TimeoutError(f"Gemini {name} timed out") from exc
             continue
@@ -1191,6 +1200,7 @@ def _record_llm_ok(provider: str, model: str = "") -> None:
         _llm_stats["last_error"] = ""
         if name == "gemini":
             _llm_stats["gemini_ok"] = int(_llm_stats.get("gemini_ok") or 0) + 1
+            _llm_stats["last_gemini_error"] = ""
         else:
             _llm_stats["fallback_ok"] = int(_llm_stats.get("fallback_ok") or 0) + 1
 
@@ -1202,6 +1212,7 @@ def _record_llm_fail(provider: str, exc: Exception | str) -> None:
         _llm_stats["last_error"] = f"{name}: {msg}"
         if name == "gemini":
             _llm_stats["gemini_fail"] = int(_llm_stats.get("gemini_fail") or 0) + 1
+            _llm_stats["last_gemini_error"] = msg
 
 
 def _prefer_gemini_strict() -> bool:
@@ -1209,6 +1220,51 @@ def _prefer_gemini_strict() -> bool:
     return (settings.llm_provider or "").strip().lower() == "gemini" and bool(
         (settings.gemini_api_key or "").strip()
     )
+
+
+def probe_gemini() -> dict[str, object]:
+    """Küçük bir istek at; AI Studio anahtarının gerçekten çalışıp çalışmadığını göster."""
+    key = (settings.gemini_api_key or "").strip()
+    model = _gemini_model_id()
+    if not key:
+        return {"ok": False, "via": "", "model": model, "error": "GEMINI_API_KEY yok"}
+    openai_err = ""
+    # 1) OpenAI-uyumlu uç
+    try:
+        client = _openai_client(
+            api_key=key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            timeout=httpx.Timeout(25.0, connect=10.0),
+        )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": 'Sadece JSON yaz: {"ping":true}'}],
+            temperature=0,
+            max_tokens=40,
+        )
+        text = str(response.choices[0].message.content or "")[:120]
+        _record_llm_ok("gemini", model)
+        return {"ok": True, "via": "openai-compatible", "model": model, "sample": text, "error": ""}
+    except Exception as openai_exc:  # noqa: BLE001
+        openai_err = str(openai_exc)[:300]
+    # 2) Native generateContent
+    try:
+        raw = _gemini_native_completion(
+            [{"role": "user", "content": 'Sadece JSON yaz: {"ping":true}'}],
+            temperature=0,
+            json_mode=True,
+        )
+        text = str(raw.choices[0].message.content or "")[:120]
+        return {"ok": True, "via": "native", "model": model, "sample": text, "error": ""}
+    except Exception as native_exc:  # noqa: BLE001
+        native_err = str(native_exc)[:300]
+        _record_llm_fail("gemini", native_err)
+        return {
+            "ok": False,
+            "via": "",
+            "model": model,
+            "error": f"openai={openai_err} | native={native_err}",
+        }
 
 
 def analyze_llm_ready() -> dict[str, bool | str | int]:
@@ -1255,6 +1311,7 @@ def analyze_llm_ready() -> dict[str, bool | str | int]:
         "last_ok_provider": str(stats.get("last_ok_provider") or ""),
         "last_ok_model": str(stats.get("last_ok_model") or ""),
         "last_error": str(stats.get("last_error") or ""),
+        "last_gemini_error": str(stats.get("last_gemini_error") or ""),
         "gemini_ok": int(stats.get("gemini_ok") or 0),
         "gemini_fail": int(stats.get("gemini_fail") or 0),
         "fallback_ok": int(stats.get("fallback_ok") or 0),
@@ -1471,7 +1528,19 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         kwargs["response_format"] = {"type": "json_object"}
     if extra:
         kwargs["extra_body"] = extra
-    if _is_gemini_client(client) or str(model or "").startswith("gemini-"):
+    # Gemini OpenAI-uyumlu client: SDK yolu kullan (native'e zorlama — asıl hata kaynağı buydu).
+    if _is_gemini_openai_client(client):
+        try:
+            response = client.chat.completions.create(**kwargs)
+            _record_llm_ok("gemini", str(kwargs.get("model") or ""))
+            return response
+        except Exception as exc:
+            logger.warning("Gemini OpenAI-uyumlu düştü, native denenecek: %s", exc)
+            _record_llm_fail("gemini", exc)
+            return _gemini_native_completion(messages, temperature, json_mode)
+    if _is_gemini_client(client) or (
+        str(model or "").startswith("gemini-") and not _is_gemini_openai_client(client)
+    ):
         return _gemini_native_completion(messages, temperature, json_mode)
     try:
         return client.chat.completions.create(**kwargs)
@@ -1626,7 +1695,14 @@ def _chat(
                 capture.record(task, system_prompt, user_prompt, answer)
                 active = (_active_name or settings.llm_provider or "").strip().lower()
                 if active and active != "gemini":
-                    _record_llm_ok(active, settings.active_model)
+                    # Gerçek model adını mümkünse yanıt/istemciden al.
+                    model_name = ""
+                    try:
+                        pair = _named_client(active)
+                        model_name = str((pair or (None, ""))[1] or "")
+                    except Exception:  # noqa: BLE001
+                        model_name = ""
+                    _record_llm_ok(active, model_name or settings.active_model)
                 return answer
             except ServiceBusyError:
                 raise
@@ -2227,7 +2303,20 @@ def _analyze_combined(
             if raw_notes:
                 logger.warning("Grounding boş; ham %s kaliteli not kullanılıyor.", len(raw_notes))
                 notes = raw_notes[:8]
-        notes = _sanitize_note_tips(_filter_quality_notes(notes))
+        if not notes:
+            # Son yumuşak kabul: sistem çöpü değilse uzun detaylı notları tut.
+            soft = []
+            for note in _coerce_notes(result):
+                detail = str(note.get("detail") or note.get("text") or "").strip()
+                if len(detail) < 120:
+                    continue
+                if _JUNK_NOTE_RE.search(_note_blob(note)):
+                    continue
+                soft.append(note)
+            if soft:
+                logger.warning("Yumuşak kabul: %s not.", len(soft))
+                notes = soft[:6]
+        notes = _sanitize_note_tips(_filter_quality_notes(notes) or notes)
         # Kısa kalanları genişlet; silinirse önceki notları koru.
         if notes and sum(1 for n in notes if _is_thin_note(n)) >= max(1, len(notes) // 2):
             logger.warning("Notlar kısa kaldı; genişletme turu.")

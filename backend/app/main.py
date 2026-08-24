@@ -245,12 +245,30 @@ def health() -> dict:
         "last_ok_provider": str(llm.get("last_ok_provider") or ""),
         "last_ok_model": str(llm.get("last_ok_model") or ""),
         "last_error": str(llm.get("last_error") or ""),
+        "last_gemini_error": str(llm.get("last_gemini_error") or ""),
         "gemini_ok": int(llm.get("gemini_ok") or 0),
         "gemini_fail": int(llm.get("gemini_fail") or 0),
         "fallback_ok": int(llm.get("fallback_ok") or 0),
         "gemini_key_suffix": str(llm.get("gemini_key_suffix") or ""),
     }
     return body
+
+
+@app.get("/health/gemini")
+def health_gemini() -> dict:
+    """Ücretli Gemini anahtarını canlı dene (teşhis)."""
+    from app.services.llm import analyze_llm_ready, probe_gemini
+
+    probe = probe_gemini()
+    llm = analyze_llm_ready()
+    return {
+        "probe": probe,
+        "gemini_key_suffix": llm.get("gemini_key_suffix"),
+        "model": llm.get("model"),
+        "gemini_ok": llm.get("gemini_ok"),
+        "gemini_fail": llm.get("gemini_fail"),
+        "last_gemini_error": llm.get("last_gemini_error"),
+    }
 
 
 @app.get("/captions/{video_id}")
