@@ -225,14 +225,19 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
     async (jobId: string, token: number, videoUrl: string, topic: string) => {
       let fails = 0;
       const started = Date.now();
+      let freedBusy = false;
+      const freeBusy = () => {
+        if (freedBusy || token !== job.current) return;
+        freedBusy = true;
+        busyRef.current = false;
+        setBusy(false);
+      };
       while (token === job.current) {
         await sleep(Math.min(2000 + fails * 800, 6000));
         if (token !== job.current) return;
-        // 12 dk: Gemini + yedek sağlayıcı zinciri için yeterli.
         if (Date.now() - started > 12 * 60_000) {
-          setError(
-            "Analiz uzun sürdü. Sayfayı yenilemeden 20 sn bekle, bir kez daha dene.",
-          );
+          setError("Analiz uzun sürdü. Biraz sonra tekrar dene.");
+          freeBusy();
           void refresh();
           return;
         }
@@ -247,26 +252,32 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
                   "YouTube altyazısı alınamadı. Videoda altyazı (otomatik de olur) açık olsun.",
               ),
             );
+            freeBusy();
             void refresh();
             return;
           }
           remember(next, videoUrl, topic);
+          // İlk notlar gelince Analiz et tekrar basılabilir olsun.
+          if ((next.notes?.length || 0) > 0) {
+            freeBusy();
+          }
           if (!stillRunning(next)) {
             goNotebook(next, videoUrl);
+            freeBusy();
             return;
           }
         } catch (err) {
           fails += 1;
-          // Job Render yeniden başlayınca silinir — 100 sn boş dönme.
           if (isMissingJobError(err) || fails >= 30) {
             setError(
               isMissingJobError(err)
-                ? "Önceki analiz sunucuda kalmamış (yeniden başlama). Linki tekrar Analiz et."
+                ? "Önceki analiz sunucuda kalmamış. Linki tekrar Analiz et."
                 : humanizeNetworkError(
                     err,
-                    "Analiz durumu alınamadı. Biraz bekleyip tekrar dene.",
+                    "Analiz durumu alınamadı. Biraz sonra tekrar dene.",
                   ),
             );
+            freeBusy();
             void refresh();
             return;
           }
@@ -325,59 +336,32 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
 
   const startAnalyze = useCallback(
     async (input: AnalyzeStartInput) => {
-      if (busyRef.current) return;
+      // Önceki arka plan poll'unu iptal et; yeni analiz başlasın.
+      job.current += 1;
+      const token = job.current;
       const nextId = extractYoutubeId(input.video_url);
-      const sameVideo =
-        Boolean(nextId) &&
-        (nextId === lastDoneVideo.current ||
-          nextId === extractYoutubeId(url) ||
-          nextId === (result?.video_id || ""));
-      const alreadyReady =
-        sameVideo &&
-        (result?.notes?.length || 0) > 0 &&
-        !stillRunning(result!);
+      if (!nextId && !(input.video_url || "").trim()) {
+        setError("Önce YouTube linkini yapıştır.");
+        return;
+      }
 
       setError("");
       setUrl(input.video_url);
       setSubject(input.subject || "");
       setPanelOpen(false);
 
-      // Aynı link + hazır not varsa paneli/busy'yi hiç açma.
-      if (alreadyReady) {
-        lastDoneVideo.current = nextId;
-        void (async () => {
-          try {
-            await wakeApi();
-            const data = await analyzeVideo({
-              video_url: input.video_url,
-              user_id: getUserId(),
-              subject: input.subject,
-              question_count: input.question_count,
-              ad_watched: input.ad_watched,
-              subject_type: input.subject_type,
-              is_yks_fen_question: input.is_yks_fen_question,
-            });
-            if (data.notes?.length) {
-              remember(data, input.video_url, input.subject || "");
-              void refresh();
-            }
-          } catch {
-            /* yereldeki not kalsın */
-          }
-        })();
-        return;
-      }
-
-      const token = ++job.current;
       const startedAt = Date.now();
       activeJobId.current = "";
       busyRef.current = true;
       setBusy(true);
-      if (!sameVideo) {
-        setResult(null);
-      }
+      setResult(null);
       const topic = input.subject || "";
       const pasted = parseTranscriptPaste(input.transcript_text || "");
+      const sameVideo =
+        Boolean(nextId) &&
+        (nextId === lastDoneVideo.current ||
+          nextId === extractYoutubeId(url) ||
+          nextId === (result?.video_id || ""));
 
       const run = (transcript_lines?: { start: number; text: string }[]) =>
         analyzeVideo({
@@ -402,7 +386,6 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           pasted.length >= 3
             ? pasted
             : ([] as { start: number; text: string }[]);
-        // Altyazıyı önce telefonda/tarayıcıda çek; sunucu OpenRouter'a düşmesin.
         if (captions.length < 3) {
           try {
             captions = await fetchCaptionsForVideo(input.video_url);
@@ -439,9 +422,18 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         remember(data, input.video_url, topic);
         void refresh();
         if (stillRunning(data) && data.job_id) {
-          await pollUntilDone(data.job_id, token, input.video_url, topic);
+          // Notlar geldiyse butonu aç; dilimler arka planda devam etsin.
+          if ((data.notes?.length || 0) > 0) {
+            busyRef.current = false;
+            setBusy(false);
+          }
+          void pollUntilDone(data.job_id, token, input.video_url, topic);
         } else {
           goNotebook(data, input.video_url);
+          if (token === job.current) {
+            busyRef.current = false;
+            setBusy(false);
+          }
         }
       } catch (err) {
         if (token !== job.current) return;
@@ -460,9 +452,17 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
               remember(data, input.video_url, topic);
               void refresh();
               if (stillRunning(data) && data.job_id) {
-                await pollUntilDone(data.job_id, token, input.video_url, topic);
+                if ((data.notes?.length || 0) > 0) {
+                  busyRef.current = false;
+                  setBusy(false);
+                }
+                void pollUntilDone(data.job_id, token, input.video_url, topic);
               } else {
                 goNotebook(data, input.video_url);
+                if (token === job.current) {
+                  busyRef.current = false;
+                  setBusy(false);
+                }
               }
               return;
             }
@@ -472,7 +472,6 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         }
         setError(humanizeNetworkError(err, "Analiz başarısız"));
         void refresh();
-      } finally {
         if (token === job.current) {
           busyRef.current = false;
           setBusy(false);
@@ -483,14 +482,13 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   );
 
   const cancelAnalyze = useCallback(() => {
-    if (!busyRef.current) return;
     const jobId = activeJobId.current || result?.job_id || "";
     job.current += 1;
     activeJobId.current = "";
     busyRef.current = false;
     setBusy(false);
     setElapsed(0);
-    setError("Analiz iptal edildi. Yeni linkle Analiz et.");
+    setError("");
     setResult((prev) => {
       const hasNotes = (prev?.notes?.length || 0) > 0;
       if (!prev || !hasNotes) {

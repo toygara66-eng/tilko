@@ -76,6 +76,9 @@ export function Dashboard() {
   function onAnalyze(event: FormEvent) {
     event.preventDefault();
     if (outOfTrialCredits || outOfAdCredits) return;
+    if (!url.trim()) {
+      return;
+    }
     if (adTier) {
       setAdOpen(true);
       return;
@@ -298,9 +301,27 @@ export function Dashboard() {
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
           {busy ? (
             <p className="text-sm text-orange-700 dark:text-orange-200">
-              {result
-                ? `İlk dilimler hazır (${result.chunks_done ?? 1}/${result.chunks_total ?? 1}). Kalan 5 dakikalar kendiliğinden ekleniyor.`
+              {result?.notes?.length
+                ? `Notlar geliyor (${result.chunks_done ?? 1}/${result.chunks_total ?? 1}). Dilimler ekleniyor…`
                 : `Hazırlanıyor… ${elapsed}s`}
+            </p>
+          ) : null}
+          {!busy && result?.job_status === "running" ? (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-orange-700/80 dark:text-orange-200/80">
+              <span>
+                Kalan dilimler arka planda ekleniyor
+                {result.chunks_total
+                  ? ` (${result.chunks_done ?? 1}/${result.chunks_total})`
+                  : ""}
+                . Yeni Analiz et’e basabilirsin.
+              </span>
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                onClick={() => cancelAnalyze()}
+              >
+                Durdur
+              </button>
             </p>
           ) : null}
           {result && !busy ? (
