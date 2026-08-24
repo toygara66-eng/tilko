@@ -44,18 +44,23 @@ ANALYZE_HTTP_TIMEOUT = httpx.Timeout(75.0, connect=12.0)
 GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(75.0, connect=12.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
-# Birincil = ayardaki model; lite/2.0 yedek.
+GEMINI_CHAT_MODEL = "gemini-3.5-flash-lite"
+# Birincil = ayardaki model; eski 2.x yeni anahtarlarda 404.
 GEMINI_MODEL_FALLBACKS = (
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-flash-latest",
 )
 GEMINI_UNAVAILABLE_MODELS = frozenset(
     {
+        "gemini-2.5-flash-lite",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
         "gemini-1.5-pro",
         "gemini-1.5-pro-latest",
+        "gemini-1.5-flash",
     }
 )
 OPENROUTER_FREE_MODELS = (
@@ -871,10 +876,10 @@ def _reasoning_extra() -> dict:
 
 def _gemini_model_id() -> str:
     raw = (settings.gemini_model or "").strip() or GEMINI_CHAT_MODEL
-    # Render'da kalan GEMINI_MODEL=gemini-2.5-flash → 404; sessizce güvenli modele al.
+    # Render'da kalan GEMINI_MODEL=gemini-2.5-flash-lite → yeni anahtarlarda 404.
     if raw in GEMINI_UNAVAILABLE_MODELS:
         logger.warning(
-            "GEMINI_MODEL=%s bu anahtarlarda sık 404; %s kullanılıyor.",
+            "GEMINI_MODEL=%s yeni kullanıcılar için kapalı; %s kullanılıyor.",
             raw,
             GEMINI_CHAT_MODEL,
         )

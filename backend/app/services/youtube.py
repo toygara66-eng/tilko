@@ -1129,7 +1129,7 @@ def _fetch_via_llm_youtube(
     }
     gemini_key = (settings.gemini_api_key or "").strip()
     if use_gemini_video and gemini_key:
-        for model in ("gemini-2.5-flash-lite",):
+        for model in ("gemini-3.5-flash-lite",):
             try:
                 text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
                 lines = _lines_from_model_transcript(text)

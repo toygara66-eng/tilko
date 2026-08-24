@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_model: str = "gemini-3.5-flash-lite"
     hf_api_key: str = ""
     hf_model: str = "openai/gpt-oss-120b"
     hf_base_url: str = "https://router.huggingface.co/v1"
