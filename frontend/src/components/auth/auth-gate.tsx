@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { isSignedIn, logout } from "@/lib/auth";
+import { isSignedIn } from "@/lib/auth";
 import { clearUserId } from "@/lib/user";
 
 /** Giriş/kayıt olmadan uygulama kullanılmaz. */
