@@ -1,4 +1,8 @@
-"""Paylaşılan video analiz önbelleği: SQLite (kalıcı) + dosya yedek."""
+"""Paylaşılan video analiz önbelleği: SQLite (kalıcı) + dosya yedek.
+
+ÖNEMLİ: Anahtar kullanıcıya göre DEĞİL. Bir kullanıcının ürettiği notlar,
+aynı videoyu atan tüm kullanıcılara LLM çağrılmadan verilir.
+"""
 
 from __future__ import annotations
 
@@ -60,7 +64,14 @@ def _path(key: str) -> Path:
     return _cache_dir() / f"{key}.json"
 
 
-def _usable(data: dict | None, *, focus_bucket: int, exam_target: str | None) -> bool:
+def _usable(
+    data: dict | None,
+    *,
+    focus_bucket: int,
+    exam_target: str | None = None,
+    require_exam: bool = True,
+    require_model: bool = True,
+) -> bool:
     if not data:
         return False
     notes = data.get("notes") or []
@@ -70,13 +81,17 @@ def _usable(data: dict | None, *, focus_bucket: int, exam_target: str | None) ->
     # Soru yoksa bile en az 3 not varsa paylaş (LLM maliyeti bitmesin).
     if not questions and len(notes) < 3:
         return False
-    if str(data.get("llm_model") or "") != str(settings.active_model or ""):
+    if require_model and str(data.get("llm_model") or "") != str(
+        settings.active_model or ""
+    ):
         return False
     if int(data.get("notes_depth") or 0) < MIN_NOTES_DEPTH:
         return False
     if int(data.get("focus_bucket") or 0) != int(focus_bucket or 0):
         return False
-    if str(data.get("exam_target") or "").strip() != (exam_target or "").strip():
+    if require_exam and str(data.get("exam_target") or "").strip() != (
+        exam_target or ""
+    ).strip():
         return False
     return True
 
@@ -122,6 +137,68 @@ def _load_db(lookup: str) -> dict | None:
     except Exception as exc:
         logger.warning("DB önbellek okunamadı: %s", exc)
         return None
+
+
+def _load_db_shared(
+    video_id: str,
+    subject: str | None,
+    focus_bucket: int,
+) -> tuple[dict, str] | None:
+    """Kullanıcıdan bağımsız arama: aynı video (+ mümkünse aynı ders)."""
+    vid = (video_id or "").strip()
+    if not vid:
+        return None
+    wanted_subject = (subject or "").strip().casefold()
+    bucket = int(focus_bucket or 0)
+    try:
+        from app.database.models import AnalyzeCache
+        from app.database.session import SessionLocal
+
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(AnalyzeCache)
+                .filter(AnalyzeCache.video_id == vid)
+                .filter(AnalyzeCache.focus_bucket == bucket)
+                .filter(AnalyzeCache.note_count >= 3)
+                .order_by(
+                    AnalyzeCache.hit_count.desc(),
+                    AnalyzeCache.updated_at.desc(),
+                )
+                .limit(40)
+                .all()
+            )
+            # 1) Aynı ders
+            ordered = []
+            if wanted_subject:
+                ordered.extend(
+                    r
+                    for r in rows
+                    if (r.subject or "").strip().casefold() == wanted_subject
+                )
+            # 2) Ders boşsa veya eşleşme yoksa: videodaki en iyi kayıt
+            ordered.extend(r for r in rows if r not in ordered)
+
+            for row in ordered:
+                if not row.payload_json:
+                    continue
+                try:
+                    data = json.loads(row.payload_json)
+                except json.JSONDecodeError:
+                    continue
+                # Sınav hedefi / model birebir olmasa da notları paylaş (LLM'siz).
+                if _usable(
+                    data,
+                    focus_bucket=bucket,
+                    require_exam=False,
+                    require_model=False,
+                ):
+                    return data, row.lookup_key
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Paylaşımlı DB önbellek araması başarısız: %s", exc)
+    return None
 
 
 def _save_db(lookup: str, payload: dict) -> None:
@@ -186,7 +263,7 @@ def find_cached(
     exam_target: str | None = None,
     focus_bucket: int = 0,
 ) -> dict | None:
-    """Aynı video+ders+sınav+odak için kayıtlı analizi döndür (LLM yok)."""
+    """Tüm kullanıcılar için ortak kayıt: LLM yok, kullanıcı kimliği yok."""
     bucket = int(focus_bucket or 0)
     wanted = _lookup_key(video_id, subject, exam_target, bucket)
 
@@ -195,12 +272,25 @@ def find_cached(
         assert db_hit is not None
         _bump_hit(wanted)
         logger.info(
-            "Analiz önbellek isabeti (DB) %s not=%s soru=%s",
+            "Paylaşımlı analiz önbelleği (tam eşleşme) %s not=%s — tüm kullanıcılar",
             video_id,
             len(db_hit.get("notes") or []),
-            len(db_hit.get("questions") or []),
         )
         return db_hit
+
+    # Aynı video+ders (sınav hedefi farklı olsa bile) — başka kullanıcı üretmiş olabilir.
+    shared = _load_db_shared(video_id, subject, bucket)
+    if shared:
+        data, shared_key = shared
+        _bump_hit(shared_key)
+        # Bu kullanıcının anahtarına da kopyala; sonraki istekler hızlı bulsun.
+        _save_db(wanted, data)
+        logger.info(
+            "Paylaşımlı analiz önbelleği (video ortak) %s not=%s — tüm kullanıcılar",
+            video_id,
+            len(data.get("notes") or []),
+        )
+        return data
 
     with _index_lock:
         key = _index.get(wanted)
@@ -215,8 +305,9 @@ def find_cached(
     cache_dir = _cache_dir()
     if not cache_dir.exists():
         return None
-    wanted_subject = (subject or "").strip()
+    wanted_subject = (subject or "").strip().casefold()
     wanted_exam = (exam_target or "").strip()
+    soft_hit: dict | None = None
     for path in cache_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -224,21 +315,42 @@ def find_cached(
             continue
         if data.get("video_id") != video_id:
             continue
-        if (str(data.get("subject") or "").strip()) != wanted_subject:
+        if int(data.get("focus_bucket") or 0) != bucket:
             continue
-        if not _usable(data, focus_bucket=bucket, exam_target=wanted_exam):
+        subj = (str(data.get("subject") or "").strip()).casefold()
+        exact_exam = _usable(data, focus_bucket=bucket, exam_target=wanted_exam)
+        soft = _usable(
+            data,
+            focus_bucket=bucket,
+            require_exam=False,
+            require_model=False,
+        )
+        if wanted_subject and subj and subj != wanted_subject:
             continue
-        with _index_lock:
-            _index[wanted] = path.stem
-        _save_db(wanted, data)
-        _bump_hit(wanted)
-        logger.info("Analiz önbellek isabeti (dosya→DB) %s", video_id)
-        return data
+        if exact_exam:
+            with _index_lock:
+                _index[wanted] = path.stem
+            _save_db(wanted, data)
+            _bump_hit(wanted)
+            logger.info(
+                "Paylaşımlı analiz önbelleği (dosya) %s — tüm kullanıcılar",
+                video_id,
+            )
+            return data
+        if soft and soft_hit is None:
+            soft_hit = data
+    if soft_hit:
+        _save_db(wanted, soft_hit)
+        logger.info(
+            "Paylaşımlı analiz önbelleği (dosya/yumuşak) %s — tüm kullanıcılar",
+            video_id,
+        )
+        return soft_hit
     return None
 
 
 def save(key: str, payload: dict) -> None:
-    """Sonucu dosyaya ve SQLite'a yazar; sonraki kullanıcılar LLM'siz alır."""
+    """Sonucu dosyaya ve SQLite'a yazar; sonraki TÜM kullanıcılar LLM'siz alır."""
     notes = payload.get("notes") or []
     if not notes:
         return
@@ -267,7 +379,7 @@ def save(key: str, payload: dict) -> None:
             with _index_lock:
                 _index[lookup] = key
         logger.info(
-            "Analiz önbelleğe alındı %s not=%s soru=%s",
+            "Analiz ortak önbelleğe alındı %s not=%s soru=%s (tüm kullanıcılar)",
             video_id,
             len(notes),
             len(payload.get("questions") or []),
