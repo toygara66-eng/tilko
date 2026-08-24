@@ -239,7 +239,15 @@ def settle_month(db: Session, source_month: str | None = None) -> dict:
         if user.is_free_next_month:
             from app.services.billing import grant_pro_subscription
 
-            grant_pro_subscription(db, user)
+            grant_pro_subscription(
+                db,
+                user,
+                days=31,
+                status="prize",
+                source="prize",
+                actor="sazan_avi",
+                note=f"Sazan Avı ödülü ({key}).",
+            )
         awarded += 1
 
     run = MonthlyPrizeRun(source_month=key, winner_count=awarded)

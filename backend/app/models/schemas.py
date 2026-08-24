@@ -981,6 +981,7 @@ class AdminCreditsGrantRequest(BaseModel):
     user_id: str = Field(default="", max_length=128)
     credits: int | None = Field(default=None, ge=0, le=35)
     premium: bool | None = None
+    days: int = Field(default=31, ge=1, le=3660)
 
 
 class AdminCreditsGrantResponse(BaseModel):

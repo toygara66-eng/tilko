@@ -1067,11 +1067,13 @@ def admin_credits_grant(
     uid = (payload.user_id or "").strip()
     if not uid:
         raise HTTPException(status_code=400, detail="user_id gerekli.")
+    days = int(getattr(payload, "days", None) or 31)
     view = credit_service.grant_credits(
         db,
         uid,
         credits=payload.credits,
         premium=payload.premium,
+        days=days,
     )
     return AdminCreditsGrantResponse(
         ok=True,
@@ -1081,11 +1083,26 @@ def admin_credits_grant(
         is_premium=bool(view["is_premium"]),
         is_in_trial_period=bool(view["is_in_trial_period"]),
         message=(
-            "Pro (sınırsız test) açık."
+            f"Pro açık · bitiş {view.get('subscription_expires_at') or '—'}"
             if view["is_premium"]
             else f"Kredi: {view['ai_credits_left']}/{view['ai_credit_limit']}"
         ),
     )
+
+
+@app.get("/admin/pro-logs")
+def admin_pro_logs(
+    request: Request,
+    user_id: str | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.services import billing as billing_service
+
+    rows = billing_service.list_pro_events(
+        db, user_id=user_id, limit=limit
+    )
+    return {"events": rows, "count": len(rows)}
 
 
 def _iso_dt(value) -> str | None:
@@ -1130,6 +1147,11 @@ def admin_users_list(
     users: list[AdminUserRow] = []
     for user in rows:
         billing_service.refresh_entitlement(db, user)
+    try:
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+    for user in rows:
         users.append(
             AdminUserRow(
                 user_id=user.user_id,
@@ -1163,12 +1185,15 @@ def admin_users_grant_pro(
     user = get_or_create_user(db, uid)
     billing_service.refresh_entitlement(db, user)
     if payload.revoke:
-        user.is_premium = False
-        user.subscription_status = "admin_revoked"
-        user.subscription_expires_at = None
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        billing_service.revoke_pro_subscription(
+            db,
+            user,
+            status="admin_revoked",
+            source="admin",
+            actor="admin_users",
+            note="Admin kullanıcı listesinden Pro kaldırıldı.",
+            commit=True,
+        )
         return AdminGrantProResponse(
             ok=True,
             user_id=uid,
@@ -1177,18 +1202,23 @@ def admin_users_grant_pro(
             subscription_expires_at=None,
             message="Pro kaldırıldı.",
         )
-    billing_service.grant_pro_subscription(db, user, days=int(payload.days or 31))
-    user.subscription_status = "admin"
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    billing_service.grant_pro_subscription(
+        db,
+        user,
+        days=int(payload.days or 31),
+        status="admin",
+        source="admin",
+        actor="admin_users",
+        note=f"Admin kullanıcı listesinden Pro verildi ({int(payload.days or 31)} gün).",
+        commit=True,
+    )
     return AdminGrantProResponse(
         ok=True,
         user_id=uid,
         is_premium=bool(user.is_premium),
         subscription_status=user.subscription_status or "",
         subscription_expires_at=_iso_dt(user.subscription_expires_at),
-        message=f"Pro verildi ({payload.days} gün).",
+        message=f"Pro verildi ({payload.days} gün). Bitiş: {_iso_dt(user.subscription_expires_at)}",
     )
 
 

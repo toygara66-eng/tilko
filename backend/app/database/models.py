@@ -108,6 +108,24 @@ class User(Base):
     )
 
 
+class ProEntitlementEvent(Base):
+    """Pro aç/kapa/bitiş denetim kaydı — ödeme itirazı için."""
+
+    __tablename__ = "pro_entitlement_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    action: Mapped[str] = mapped_column(String(32), default="", index=True)
+    source: Mapped[str] = mapped_column(String(32), default="", index=True)
+    days: Mapped[int] = mapped_column(Integer, default=0)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    actor: Mapped[str] = mapped_column(String(128), default="")
+    note: Mapped[str] = mapped_column(String(512), default="")
+    meta_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class DiagnosticTest(Base):
     """İlk seviye teşhisi — konu bazlı doğru/yanlış kaydı."""
 

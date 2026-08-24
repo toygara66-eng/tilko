@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database.models import PlayPurchase, User
+from app.database.models import PlayPurchase, ProEntitlementEvent, User
 from app.services.penalty import get_or_create_user
 
 logger = logging.getLogger(__name__)
@@ -69,11 +69,28 @@ def refresh_entitlement(db: Session, user: User) -> User:
     """Süresi biten aboneliği düşür — kota kontrolünden önce çağır."""
     expires = _aware(getattr(user, "subscription_expires_at", None))
     status = (getattr(user, "subscription_status", "") or "").strip().lower()
+    # Admin Pro: süre yoksa kalıcı say; rastgele düşürme.
+    if user.is_premium and status in {"admin", "prize"} and expires is None:
+        return user
     if user.is_premium and expires and expires <= utcnow():
+        was = bool(user.is_premium)
         user.is_premium = False
         user.subscription_status = "expired"
         db.add(user)
-    elif user.is_premium and status in {"revoked", "expired"}:
+        if was:
+            log_pro_event(
+                db,
+                user_id=user.user_id,
+                action="expire",
+                source="system",
+                days=0,
+                starts_at=None,
+                expires_at=expires,
+                actor="system",
+                note="Süre doldu, Pro kapatıldı.",
+                commit=False,
+            )
+    elif user.is_premium and status in {"revoked", "expired", "admin_revoked"}:
         user.is_premium = False
         db.add(user)
     return user
@@ -92,10 +109,143 @@ def public_status(user: User) -> dict:
     }
 
 
-def grant_pro_subscription(db: Session, user: User, days: int = 31) -> User:
-    """Sazan Avı birincilerine bir ay Pro — Play token olmadan prize statüsü."""
-    _grant(user, "tilko_pro_monthly", days, status="prize")
+def log_pro_event(
+    db: Session,
+    *,
+    user_id: str,
+    action: str,
+    source: str,
+    days: int = 0,
+    starts_at: datetime | None = None,
+    expires_at: datetime | None = None,
+    actor: str = "",
+    note: str = "",
+    meta: dict | None = None,
+    commit: bool = True,
+) -> ProEntitlementEvent:
+    row = ProEntitlementEvent(
+        user_id=(user_id or "").strip(),
+        action=(action or "").strip()[:32],
+        source=(source or "").strip()[:32],
+        days=int(days or 0),
+        starts_at=starts_at,
+        expires_at=expires_at,
+        actor=(actor or "").strip()[:128],
+        note=(note or "").strip()[:512],
+        meta_json=json.dumps(meta or {}, ensure_ascii=False)[:4000],
+    )
+    db.add(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+def list_pro_events(
+    db: Session,
+    *,
+    user_id: str | None = None,
+    limit: int = 200,
+) -> list[dict]:
+    query = select(ProEntitlementEvent).order_by(
+        ProEntitlementEvent.created_at.desc(),
+        ProEntitlementEvent.id.desc(),
+    )
+    uid = (user_id or "").strip()
+    if uid:
+        query = query.where(ProEntitlementEvent.user_id == uid)
+    rows = list(db.scalars(query.limit(max(1, min(int(limit or 200), 500)))).all())
+    out: list[dict] = []
+    for row in rows:
+        try:
+            meta = json.loads(row.meta_json or "{}")
+        except json.JSONDecodeError:
+            meta = {}
+        out.append(
+            {
+                "id": row.id,
+                "user_id": row.user_id,
+                "action": row.action,
+                "source": row.source,
+                "days": int(row.days or 0),
+                "starts_at": row.starts_at.isoformat() if row.starts_at else None,
+                "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+                "actor": row.actor or "",
+                "note": row.note or "",
+                "meta": meta if isinstance(meta, dict) else {},
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    return out
+
+
+def grant_pro_subscription(
+    db: Session,
+    user: User,
+    days: int = 31,
+    *,
+    status: str = "prize",
+    source: str = "prize",
+    actor: str = "",
+    note: str = "",
+    product_id: str = "tilko_pro_monthly",
+    commit: bool = False,
+) -> User:
+    """Pro aç (admin / ödül / Play). Süre ve denetim kaydı yazılır."""
+    days_n = max(1, int(days or 31))
+    before = _aware(getattr(user, "subscription_expires_at", None))
+    _grant(user, product_id, days_n, status=status)
     db.add(user)
+    log_pro_event(
+        db,
+        user_id=user.user_id,
+        action="grant",
+        source=source,
+        days=days_n,
+        starts_at=utcnow(),
+        expires_at=_aware(user.subscription_expires_at),
+        actor=actor or source,
+        note=note
+        or f"Pro verildi ({days_n} gün). Önceki bitiş: {before.isoformat() if before else 'yok'}",
+        meta={"product_id": product_id, "status": status},
+        commit=False,
+    )
+    if commit:
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+def revoke_pro_subscription(
+    db: Session,
+    user: User,
+    *,
+    status: str = "admin_revoked",
+    source: str = "admin",
+    actor: str = "",
+    note: str = "",
+    commit: bool = False,
+) -> User:
+    before = _aware(getattr(user, "subscription_expires_at", None))
+    _revoke(user, status=status)
+    user.subscription_expires_at = None
+    db.add(user)
+    log_pro_event(
+        db,
+        user_id=user.user_id,
+        action="revoke",
+        source=source,
+        days=0,
+        starts_at=None,
+        expires_at=before,
+        actor=actor or source,
+        note=note or "Pro kaldırıldı.",
+        meta={"status": status},
+        commit=False,
+    )
+    if commit:
+        db.commit()
+        db.refresh(user)
     return user
 
 
@@ -268,8 +418,19 @@ def _apply_receipt(
     user.play_purchase_token_hash = digest
     if activate:
         days = max(1, int((expires - utcnow()).total_seconds() // 86400) or product["days"])
-        _grant(user, product_id, days)
+        grant_pro_subscription(
+            db,
+            user,
+            days=days,
+            status="active",
+            source="play",
+            actor="play",
+            note=f"Play satın alma doğrulandı ({product_id}).",
+            product_id=product_id,
+            commit=False,
+        )
         user.subscription_expires_at = expires
+        user.subscription_status = "active"
     db.add(user)
     db.commit()
     db.refresh(user)

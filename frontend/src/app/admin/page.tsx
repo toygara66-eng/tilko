@@ -17,6 +17,7 @@ import {
   listAdminUsers,
   listExamSchedules,
   listPromos,
+  listProLogs,
   setAdminFeedbackStatus,
   updateExamSchedule,
   updateExamToday,
@@ -25,9 +26,11 @@ import {
   type ArchiveFeedResult,
   type ExamScheduleItem,
   type PromoCoupon,
+  type ProEntitlementEvent,
   type RagStatus,
 } from "@/lib/api";
 import { getUserId } from "@/lib/user";
+import { isSignedIn } from "@/lib/auth";
 
 const SECRET_KEY = "tilko_admin_secret";
 
@@ -77,14 +80,36 @@ export default function AdminArchivePage() {
     "pending",
   );
   const [tab, setTab] = useState<
-    "archive" | "promo" | "calendar" | "credits" | "users" | "feedback"
-  >("feedback");
+    | "archive"
+    | "promo"
+    | "calendar"
+    | "credits"
+    | "users"
+    | "feedback"
+    | "prologs"
+  >("users");
+  const [proLogs, setProLogs] = useState<ProEntitlementEvent[]>([]);
+  const [proLogQuery, setProLogQuery] = useState("");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SECRET_KEY) || "";
     if (stored) setSecret(stored);
     setMyUserId(getUserId());
   }, []);
+
+  async function loadProLogs(query = proLogQuery) {
+    setError("");
+    try {
+      window.localStorage.setItem(SECRET_KEY, secret);
+      const data = await listProLogs(secret, {
+        user_id: query.trim() || undefined,
+        limit: 250,
+      });
+      setProLogs(data.events);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Pro logları alınamadı");
+    }
+  }
 
   async function loadUsers(query = userQuery) {
     setError("");
@@ -168,11 +193,12 @@ export default function AdminArchivePage() {
           Anahtar kayıtlıysa YouTube analizi kredi düşürmez.
         </p>
       </section>
-      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-3 lg:grid-cols-6 dark:border-zinc-800 dark:bg-zinc-950/50">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-3 lg:grid-cols-7 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
             ["feedback", "Geri bildirim"],
             ["users", "Kullanıcılar"],
+            ["prologs", "Pro log"],
             ["credits", "Krediler"],
             ["calendar", "Sınav takvimi"],
             ["archive", "Arşiv"],
@@ -186,6 +212,7 @@ export default function AdminArchivePage() {
               setTab(id);
               if (id === "users" && secret.trim()) void loadUsers();
               if (id === "feedback" && secret.trim()) void loadFeedback();
+              if (id === "prologs" && secret.trim()) void loadProLogs();
             }}
             className={
               tab === id
@@ -708,16 +735,32 @@ export default function AdminArchivePage() {
       {tab === "credits" ? (
         <section className="rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-            Test kredisi
+            Test kredisi / kendine Pro
           </h2>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Bu tarayıcıdaki hesabın kredisini doldur veya Pro (sınırsız) aç.
-            Admin anahtarı kayıtlıyken Analiz et zaten kredi yakmaz.
+            Bu tarayıcıdaki hesaba Pro verir. Pro artık süre + log ile kalıcı
+            yazılır; sayfa yenilenince düşmez.
           </p>
           <p className="mt-2 font-mono text-[11px] text-zinc-500">
             user: {myUserId || "…"}
+            {!isSignedIn() || myUserId.startsWith("aday-") ? (
+              <span className="ml-2 font-sans text-red-500">
+                Uyarı: giriş yapılmamış / misafir hesap — önce Giriş yap, sonra Pro ver.
+              </span>
+            ) : null}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <label className="text-xs text-zinc-500">
+              Gün
+              <Input
+                type="number"
+                min={1}
+                max={3660}
+                className="ml-2 inline-flex h-9 w-20"
+                value={proDays}
+                onChange={(e) => setProDays(Number(e.target.value) || 31)}
+              />
+            </label>
             <Button
               type="button"
               disabled={busy || !secret.trim()}
@@ -755,11 +798,21 @@ export default function AdminArchivePage() {
                   setError("");
                   setCreditMsg("");
                   try {
-                    const data = await grantAdminCredits(secret, {
-                      user_id: getUserId(),
-                      premium: true,
+                    const uid = getUserId();
+                    if (!isSignedIn() || uid.startsWith("aday-")) {
+                      throw new Error(
+                        "Önce gerçek hesabınla giriş yap, sonra kendine Pro ver.",
+                      );
+                    }
+                    const data = await grantAdminPro(secret, {
+                      user_id: uid,
+                      days: proDays,
                     });
-                    setCreditMsg(data.message);
+                    setCreditMsg(
+                      `${data.message} · status ${data.subscription_status} · bitiş ${formatExpiry(data.subscription_expires_at)}`,
+                    );
+                    window.dispatchEvent(new Event("tilko-notebook-bump"));
+                    window.location.reload();
                   } catch (err) {
                     setError(
                       err instanceof Error ? err.message : "Pro açılamadı",
@@ -770,7 +823,7 @@ export default function AdminArchivePage() {
                 })();
               }}
             >
-              Sınırsız test (Pro)
+              Kendime Pro ver
             </Button>
             <Button
               type="button"
@@ -782,12 +835,12 @@ export default function AdminArchivePage() {
                   setError("");
                   setCreditMsg("");
                   try {
-                    const data = await grantAdminCredits(secret, {
+                    const data = await grantAdminPro(secret, {
                       user_id: getUserId(),
-                      premium: false,
-                      credits: 7,
+                      revoke: true,
                     });
-                    setCreditMsg(`Pro kapandı. ${data.message}`);
+                    setCreditMsg(data.message);
+                    window.location.reload();
                   } catch (err) {
                     setError(
                       err instanceof Error ? err.message : "Pro kapatılamadı",
@@ -806,6 +859,84 @@ export default function AdminArchivePage() {
               {creditMsg}
             </p>
           ) : null}
+          {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
+        </section>
+      ) : null}
+
+      {tab === "prologs" ? (
+        <section className="rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+            Pro denetim kaydı
+          </h2>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Kim ne zaman Pro aldı / kaybetti. “Para yatırdım Pro gelmedi” itirazında
+            buradan bak.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Input
+              value={proLogQuery}
+              onChange={(e) => setProLogQuery(e.target.value)}
+              placeholder="user_id / e-posta parçası (boş = hepsi)"
+              className="max-w-md"
+            />
+            <Button
+              type="button"
+              disabled={busy || !secret.trim()}
+              onClick={() => void loadProLogs()}
+            >
+              Getir
+            </Button>
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-zinc-50 text-[11px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
+                <tr>
+                  <th className="px-3 py-2">Zaman</th>
+                  <th className="px-3 py-2">Kullanıcı</th>
+                  <th className="px-3 py-2">İşlem</th>
+                  <th className="px-3 py-2">Kaynak</th>
+                  <th className="px-3 py-2">Gün</th>
+                  <th className="px-3 py-2">Bitiş</th>
+                  <th className="px-3 py-2">Not</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proLogs.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-4 text-zinc-500" colSpan={7}>
+                      Kayıt yok. Pro verince burada görünür.
+                    </td>
+                  </tr>
+                ) : (
+                  proLogs.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-t border-zinc-100 dark:border-zinc-800"
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap text-zinc-600 dark:text-zinc-300">
+                        {formatExpiry(row.created_at)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px]">
+                        {row.user_id}
+                      </td>
+                      <td className="px-3 py-2 font-semibold">{row.action}</td>
+                      <td className="px-3 py-2">{row.source}</td>
+                      <td className="px-3 py-2">{row.days || "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {formatExpiry(row.expires_at)}
+                      </td>
+                      <td className="px-3 py-2 max-w-xs text-zinc-600 dark:text-zinc-400">
+                        <p>{row.note}</p>
+                        <p className="text-[10px] text-zinc-400">
+                          actor: {row.actor || "—"}
+                        </p>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
           {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
         </section>
       ) : null}

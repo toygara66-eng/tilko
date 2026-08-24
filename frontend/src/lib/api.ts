@@ -1311,7 +1311,12 @@ export type AdminCreditsGrant = {
 
 export async function grantAdminCredits(
   secret: string,
-  payload: { user_id: string; credits?: number | null; premium?: boolean | null },
+  payload: {
+    user_id: string;
+    credits?: number | null;
+    premium?: boolean | null;
+    days?: number;
+  },
 ) {
   const headers = await adminHeaders(secret);
   const response = await fetch(`${API_BASE}/admin/credits/grant`, {
@@ -1320,6 +1325,33 @@ export async function grantAdminCredits(
     body: JSON.stringify(payload),
   });
   return readJson<AdminCreditsGrant>(response);
+}
+
+export type ProEntitlementEvent = {
+  id: number;
+  user_id: string;
+  action: string;
+  source: string;
+  days: number;
+  starts_at: string | null;
+  expires_at: string | null;
+  actor: string;
+  note: string;
+  meta?: Record<string, unknown>;
+  created_at: string | null;
+};
+
+export async function listProLogs(
+  secret: string,
+  opts?: { user_id?: string; limit?: number },
+) {
+  const headers = await adminHeaders(secret);
+  const params = new URLSearchParams();
+  if (opts?.user_id) params.set("user_id", opts.user_id);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const query = params.toString() ? `?${params}` : "";
+  const response = await fetch(`${API_BASE}/admin/pro-logs${query}`, { headers });
+  return readJson<{ events: ProEntitlementEvent[]; count: number }>(response);
 }
 
 export type AdminUserRow = {

@@ -250,13 +250,36 @@ def grant_credits(
     *,
     credits: int | None = None,
     premium: bool | None = None,
+    days: int = 31,
 ) -> dict:
-    """Admin: deneme kredisini doldur veya Pro (sınırsız test) aç/kapa."""
+    """Admin: deneme kredisini doldur veya Pro (süre + log ile) aç/kapa."""
+    from app.services import billing as billing_service
+
     user = reset_daily_ads(db, get_or_create_user(db, user_id))
     if credits is not None:
         user.ai_credits_left = max(0, min(int(credits), FREE_AI_CREDITS * 5))
-    if premium is not None:
-        user.is_premium = bool(premium)
+        db.add(user)
+    if premium is True:
+        billing_service.grant_pro_subscription(
+            db,
+            user,
+            days=max(1, int(days or 31)),
+            status="admin",
+            source="admin",
+            actor="admin_credits",
+            note="Admin panelinden Pro açıldı.",
+            commit=False,
+        )
+    elif premium is False:
+        billing_service.revoke_pro_subscription(
+            db,
+            user,
+            status="admin_revoked",
+            source="admin",
+            actor="admin_credits",
+            note="Admin panelinden Pro kapatıldı.",
+            commit=False,
+        )
     db.commit()
     return snapshot(db, user_id)
 
