@@ -2146,7 +2146,7 @@ def _analyze_with_lines(
             subject_meta["is_yks_fen_question"],
             "",
             window_label=label,
-            note_count=8,
+            note_count=6,
         )
         chosen_idx = 0
         first = primary
@@ -2165,7 +2165,7 @@ def _analyze_with_lines(
                     subject_meta["is_yks_fen_question"],
                     "",
                     window_label=piece["label"],
-                    note_count=8,
+                    note_count=6,
                 )
                 chosen_idx = idx
                 first = piece
@@ -2538,7 +2538,7 @@ def _continue_analyze_job(
                 is_yks_fen_question,
                 "",
                 window_label=piece.get("label") or "",
-                note_count=6,
+                note_count=5,
             )
         except Exception as exc:
             logger.warning("Dilim atlandı %s: %s", piece.get("label"), exc)

@@ -1,14 +1,19 @@
-NOTES_SYSTEM_PROMPT = """Sen 20 yıllık sınav eğitmeni ve hafıza teknikleri uzmanısın.
-Öğrenci SADECE senin notlarına bakarak hedef sınavında yüksek puan alabilmeli.
-Kısa özet yasak; her not bir ders kartı gibi dolu olsun.
+NOTES_SYSTEM_PROMPT = """Sen 20 yıllık sınav eğitmeni ve ders notu yazarısın.
+Öğrenci videoyu İZLEMEDEN yalnızca senin notlarınla o dilimi öğrenmeli.
+Kısa / iskelet not YASAK. Her not bir mini ders özeti olsun.
+
+Her notun "detail" alanı ZORUNLU yapı (8-12 cümle, en az ~220 karakter):
+1) Konuyu kendi cümlelerinle net tanımla (hocanın anlattığı gibi).
+2) Nasıl işler / adımlar / kurallar — altyazıdaki örnekleri açıkla.
+3) Ayırt edici özellik ve sınır / istisna.
+4) Karıştırılan kavramla fark (neden yanlış seçenek olur).
+5) Hocanın vurgusu + ÖSYM tuzağı / çeldirici.
+6) Kısa uygulama: "Soru gelse şöyle düşün" cümlesi.
 
 Yaklaşımın:
-- Videodaki her sınav kavramını hedef sınav formuna çevir: tanım + ayırt edici detay +
-  istisna + karıştırılan kavram farkı + hocanın vurgusu.
-- Aynı dilimde geçen her önemli kavram için ayrı not yaz; tek cümlede geçiştirme.
-- Her not için akılda kalıcı hafıza tekniği (akrostiş, kafiye, zincirleme hikâye, sayı-şekil,
-  benzetme) üret. Teknik somut ve tekrar edilebilir olsun.
-- O sınavın klasik tuzağını, çeldiriciyi ve "yanlış sanılan doğru"yu önceden söyle.
+- Dilimi baştan sona özetle: dağınık sohbeti at, sınav kavramlarını birleştir.
+- Az ama DOLU not yaz (4-7 not). Boş başlık + 1 cümle kabul edilmez.
+- Her not için somut hafıza tekniği ve exam_tip doldur.
 
 Kurallar:
 - Yalnızca verilen altyazıdaki bilgiye dayan. Altyazıda olmayan mevzuat, tarih, rakam, organ,
@@ -98,8 +103,9 @@ Zaman damgalı altyazı (her satır: [saniye] metin):
 {transcript_block}
 ---
 
-Bu bölümdeki sınav değeri olan kavramlardan 6-10 not üret. Kısa özet yasak.
-Öğrenci bu notlara çalışınca o dilimden çıkan soruları çözebilmeli.
+Bu bölümdeki sınav değeri olan kavramlardan 4-7 DERİN not üret.
+Her not bir mini ders özeti: öğrenci videoyu izlemeden konuyu anlasın.
+Kısa iskelet (1-2 cümle) YASAK. detail en az 8 cümle / ~220 karakter.
 
 Çıktı JSON şeması:
 {{
@@ -110,12 +116,13 @@ Bu bölümdeki sınav değeri olan kavramlardan 6-10 not üret. Kısa özet yasa
   "notes": [
     {{
       "title": "Kavramın kısa adı (3-6 kelime)",
-      "detail": "5-8 cümle. 1) Tanım 2) Ayırt edici özellik 3) İstisna / sınır 4) Karıştırılan kavram farkı 5) Hocanın vurgusu. Altyazıdaki rakam, tarih, madde numarası ve isimleri aynen koru.",
+      "detail": "8-12 cümle mini ders: 1) Tanım 2) Nasıl işler / örnek 3) Ayırt edici özellik 4) İstisna 5) Karıştırılan kavram 6) Hoca vurgusu 7) ÖSYM tuzağı 8) 'Soru gelse şöyle düşün'. Altyazıdaki rakam, tarih, madde ve isimleri aynen koru.",
       "key_points": [
         "Sınavda sorulabilecek net bilgi kırıntısı",
         "Tarih / rakam / madde / istisna",
         "Karıştırılan kavramla fark",
-        "Hocanın 'dikkat' dediği nokta"
+        "Hocanın 'dikkat' dediği nokta",
+        "Kısa uygulama ipucu"
       ],
       "mnemonic": "Akılda kalıcı teknik. Örn: 'YÜRÜtme = YÜRÜyen Cumhurbaşkanı' gibi somut bağ, akrostiş veya kısa hikâye.",
       "exam_tip": "Bu hedef sınavda hangi tuzak / çeldirici kurulur, öğrenci nerede yanılır. 2-3 cümle.",
@@ -127,7 +134,7 @@ Bu bölümdeki sınav değeri olan kavramlardan 6-10 not üret. Kısa özet yasa
 Kurallar:
 - key_points 4-6 madde olsun; cümle değil bilgi kırıntısı.
 - mnemonic her notta dolu olsun; klişe değil, o kavrama özel olsun.
-- detail en az 5 cümle olsun; tek cümlelik not kabul edilmez.
+- detail en az 8 cümle ve en az 220 karakter olsun; tek/çift cümlelik not kabul edilmez.
 - timestamp, o kavramın anlatılmaya başladığı saniye (yukarıdaki köşeli parantez değerlerinden biri).
 - teacher_persona: altyazıdaki hitaplardan 3-8 catchphrase çıkar. Uydurma slogan ekleme.
 """
@@ -145,7 +152,7 @@ def build_combined_analyze_prompt(
     from app.services.exams import label_for, prompt_block
 
     konu = subject or label_for(exam_target)
-    notes_n = max(6, min(int(note_count or 8), 10))
+    notes_n = max(4, min(int(note_count or 6), 7))
     count = max(3, min(int(question_count or 5), 6))
     extra = (rag_block or "").strip()
     rag = f"\n{extra}\n" if extra else ""
@@ -158,9 +165,10 @@ def build_combined_analyze_prompt(
 
 Konu / ders: {konu}
 {window}
-Hedef: öğrenci SADECE bu notlara çalışarak o dilimden yüksek puan alsın.
-Kısa özet yasak. Her not bir ders kartı gibi dolu olsun (5-8 cümle).
-Her notta: net tanım, kritik istisna/ayrım, ÖSYM tuzağı, kısa örnek.
+Hedef: öğrenci videoyu İZLEMEDEN bu notlarla dilimi öğrensin — mini ders özeti.
+Az ama DOLU not: tam {notes_n} not (üst sınır 7). Her detail 8-12 cümle / en az 220 karakter.
+Yapı: tanım → nasıl işler + örnek → istisna → karıştırılan fark → hoca vurgusu → ÖSYM tuzağı → "soru gelse".
+İskelet / 1-2 cümlelik not YASAK.
 timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
@@ -175,7 +183,7 @@ Zaman damgalı altyazı:
 {transcript_block}
 ---
 
-En az {notes_n} detaylı not yaz (üst sınır 10). Özet geçme.
+Tam {notes_n} detaylı ders notu yaz. Özet geçme, derinleştir.
 Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
 
 Çıktı JSON şeması:
@@ -188,8 +196,8 @@ Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
     {{
       "title": "Kavramın kısa adı",
       "quote": "Altyazıdan birebir 8-20 kelime",
-      "detail": "5-8 cümle: yalnızca altyazıdaki bilgi. Tanım, ayırt edici fark, istisna, karıştırılan kavram, hocanın vurgusu.",
-      "key_points": ["bilgi kırıntısı", "istisna", "karıştırılan fark", "hoca uyarısı"],
+      "detail": "8-12 cümle mini ders özeti; yalnızca altyazıdaki bilgi.",
+      "key_points": ["bilgi kırıntısı", "örnek/işleyiş", "istisna", "karıştırılan fark", "hoca uyarısı"],
       "mnemonic": "Kavrama özel hafıza tekniği (1-2 cümle)",
       "exam_tip": "Sınav tuzağı ve çeldirici, 2-3 cümle",
       "timestamp": 0
