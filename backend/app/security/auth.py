@@ -260,7 +260,8 @@ def register_user(
         raise ValueError("Hoca hesabı buradan açılamaz.")
 
     name = (display_name or "").strip()
-    if intended == "student" and len(name) < 2:
+    is_guest = (user_id or "").strip().startswith("aday-")
+    if intended == "student" and not is_guest and len(name) < 2:
         raise ValueError("Ad soyad gerekli.")
 
     mail = normalize_email(email) if (email or "").strip() else ""
@@ -301,9 +302,10 @@ def register_user(
         _stamp_teacher(user, name)
     else:
         user.role = "student"
-        user.display_name = name[:64]
+        if name:
+            user.display_name = name[:64]
         _apply_exam(user, exam_target)
-        if not (user.exam_target or "").strip():
+        if not is_guest and not (user.exam_target or "").strip():
             raise ValueError("KPSS / YKS / sınav hedefi seç.")
     db.add(user)
     db.commit()
