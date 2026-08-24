@@ -1491,6 +1491,27 @@ export async function adminSetPassword(
   return readJson<{ ok: boolean; user_id: string; message: string }>(response);
 }
 
+export async function adminIssueResetCode(
+  secret: string,
+  payload: { user_id: string },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/users/reset-code`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<{
+    ok: boolean;
+    user_id: string;
+    email: string;
+    code: string;
+    expires_in_minutes: number;
+    email_sent: boolean;
+    message: string;
+  }>(response);
+}
+
 export async function adminUpdateUser(
   secret: string,
   payload: {

@@ -78,6 +78,8 @@ from app.models.schemas import (
     ResetPasswordResponse,
     AdminSetPasswordRequest,
     AdminSetPasswordResponse,
+    AdminResetCodeRequest,
+    AdminResetCodeResponse,
     AdminUserUpdateRequest,
     AdminUserUpdateResponse,
     AdminUserListResponse,
@@ -1235,6 +1237,19 @@ def admin_users_set_password(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AdminSetPasswordResponse.model_validate(data)
+
+
+@app.post("/admin/users/reset-code", response_model=AdminResetCodeResponse)
+def admin_users_reset_code(
+    payload: AdminResetCodeRequest, db: Session = Depends(get_db)
+) -> AdminResetCodeResponse:
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.admin_issue_reset_code(db, payload.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminResetCodeResponse.model_validate(data)
 
 
 @app.post("/admin/users/update", response_model=AdminUserUpdateResponse)

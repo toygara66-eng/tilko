@@ -12,6 +12,7 @@ import {
   grantAdminCredits,
   grantAdminPro,
   adminSetPassword,
+  adminIssueResetCode,
   adminUpdateUser,
   listAdminFeedback,
   listAdminUsers,
@@ -386,7 +387,8 @@ export default function AdminArchivePage() {
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
               E-posta ve telefon her satırda görünür (kopyala). Eski şifreler hash
-              ile saklanır, okunamaz — yeni şifre atayınca burada kopyalanabilir
+              ile saklanır, okunamaz — yeni şifre ata veya “Sıfırlama kodu” ile 6
+              haneli kod üret (mail gelmese de kullanıcıya iletebilirsin).
               kalır.
             </p>
           </div>
@@ -672,6 +674,40 @@ export default function AdminArchivePage() {
                             }}
                           >
                             Hesabı onar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || !secret.trim()}
+                            onClick={() => {
+                              void (async () => {
+                                setBusy(true);
+                                setError("");
+                                setCreditMsg("");
+                                try {
+                                  const data = await adminIssueResetCode(secret, {
+                                    user_id: row.user_id,
+                                  });
+                                  const line = `Sıfırlama kodu: ${data.code} (${data.expires_in_minutes} dk)${data.email_sent ? " · e-posta gitti" : " · e-posta gitmedi — kullanıcıya ilet"}`;
+                                  setCreditMsg(line);
+                                  window.prompt(
+                                    "Kodu kopyala / kullanıcıya ilet (Giriş → Şifremi unuttum → kod + yeni şifre):",
+                                    data.code,
+                                  );
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kod üretilemedi",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Sıfırlama kodu
                           </Button>
                           <Button
                             type="button"

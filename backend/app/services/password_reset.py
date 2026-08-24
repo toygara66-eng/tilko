@@ -183,8 +183,9 @@ def request_password_reset(db: Session, *, email: str = "", phone: str = "") -> 
             out["message"] += f" (geliştirme kodu: {code})"
     else:
         out["message"] = (
-            "Kod oluşturuldu ama e-posta gönderilemedi. Biraz sonra tekrar dene "
-            "veya Google ile giriş yap."
+            "Kod oluşturuldu ama e-posta gönderilemedi. "
+            "Spam’i kontrol et; hâlâ yoksa destek/admin’den şifre veya kod iste "
+            "ya da Google ile giriş yap."
         )
         if not settings.is_production:
             out["debug_code"] = code
@@ -252,6 +253,55 @@ def reset_password_with_code(
         "ok": True,
         "user_id": user.user_id,
         "message": "Şifren güncellendi. Yeni şifrenle giriş yapabilirsin.",
+    }
+
+
+def admin_issue_reset_code(db: Session, user_id: str) -> dict:
+    """Admin destek: e-posta gitmese bile kodu panelde gösterip kullanıcıya iletebilir."""
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("user_id gerekli.")
+    user = db.get(User, uid)
+    if user is None:
+        raise ValueError("Kullanıcı bulunamadı.")
+    if not (user.password_hash or "").strip() and (user.google_sub or "").strip():
+        raise ValueError("Bu hesap Google ile açılmış; şifre kodu gerekmez.")
+
+    code = _make_code()
+    dest = (user.email or "").strip() or (user.phone or "").strip() or uid
+    channel = "email" if (user.email or "").strip() else "phone"
+    db.execute(
+        update(PasswordReset)
+        .where(PasswordReset.user_id == user.user_id)
+        .where(PasswordReset.used.is_(False))
+        .values(used=True)
+    )
+    row = PasswordReset(
+        user_id=user.user_id,
+        code_hash=_hash_code(code, user.user_id),
+        channel=channel,
+        destination=dest,
+        expires_at=_utcnow() + timedelta(minutes=CODE_TTL_MINUTES),
+        used=False,
+    )
+    db.add(row)
+    db.commit()
+
+    mailed = False
+    if (user.email or "").strip():
+        mailed = _send_reset_email(user.email, code, user.display_name or "")
+
+    return {
+        "ok": True,
+        "user_id": uid,
+        "email": (user.email or "").strip(),
+        "code": code,
+        "expires_in_minutes": CODE_TTL_MINUTES,
+        "email_sent": mailed,
+        "message": (
+            f"Kod hazır ({CODE_TTL_MINUTES} dk). "
+            + ("E-posta da gönderildi." if mailed else "E-posta gitmedi — kodu kullanıcıya elle ilet.")
+        ),
     }
 
 

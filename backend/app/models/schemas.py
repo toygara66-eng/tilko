@@ -786,6 +786,20 @@ class AdminSetPasswordResponse(BaseModel):
     message: str = ""
 
 
+class AdminResetCodeRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+
+
+class AdminResetCodeResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    email: str = ""
+    code: str = ""
+    expires_in_minutes: int = 20
+    email_sent: bool = False
+    message: str = ""
+
+
 class AdminUserUpdateRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     display_name: str | None = Field(default=None, max_length=64)
