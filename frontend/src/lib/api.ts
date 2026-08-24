@@ -28,6 +28,11 @@ export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatas�
   if (/failed to fetch|networkerror|load failed/i.test(blob)) {
     return "API'ye ulaşılamadı. İnterneti kontrol et veya biraz sonra dene.";
   }
+  if (
+    /\b429\b|rate\s*limit|too\s*many\s*requests|çok\s*fazla\s*istek/i.test(blob)
+  ) {
+    return "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.";
+  }
   if (/request timed out\.?/i.test(message.trim())) {
     return "Analiz şu an yoğun. Biraz sonra tekrar dene.";
   }
@@ -128,6 +133,11 @@ function formatApiDetail(detail: unknown): string {
 async function readJson<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error(
+        "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.",
+      );
+    }
     const detail = formatApiDetail((data as { detail?: unknown }).detail);
     throw new Error(
       humanizeNetworkError(

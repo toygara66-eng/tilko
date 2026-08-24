@@ -100,6 +100,19 @@ export async function ensureAuth(
       setToken(data.access_token);
       return data.access_token;
     }
+    if (login.status === 429) {
+      throw new Error(
+        "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.",
+      );
+    }
+    // Yanlış şifre / bilinmeyen kullanıcı: misafir hesabı için kayıt dene.
+    // 401 dışında (5xx vb.) kayıt spamı yapma.
+    if (login.status !== 401 && login.status !== 400) {
+      const err = (await login.json().catch(() => ({}))) as { detail?: unknown };
+      const detail =
+        typeof err.detail === "string" ? err.detail : "Oturum açılamadı";
+      throw new Error(detail);
+    }
     const register = await fetch(`${apiBase}/auth/register`, {
       method: "POST",
       headers,
@@ -107,6 +120,11 @@ export async function ensureAuth(
       signal: AbortSignal.timeout(90_000),
     });
     if (!register.ok) {
+      if (register.status === 429) {
+        throw new Error(
+          "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.",
+        );
+      }
       const err = (await register.json().catch(() => ({}))) as { detail?: unknown };
       const detail =
         typeof err.detail === "string"

@@ -252,7 +252,7 @@ def captions_lookup(request: Request, video_id: str) -> dict:
 
 
 @app.post("/auth/register", response_model=AuthResponse)
-@limiter.limit("5/minute")
+@limiter.limit("20/minute")
 def auth_register(
     request: Request, payload: AuthRequest, db: Session = Depends(get_db)
 ) -> AuthResponse:
@@ -274,7 +274,7 @@ def auth_register(
 
 @app.post("/auth/login", response_model=AuthResponse)
 @app.post("/login", response_model=AuthResponse)
-@limiter.limit("5/minute")
+@limiter.limit("40/minute")
 def auth_login(
     request: Request, payload: AuthRequest, db: Session = Depends(get_db)
 ) -> AuthResponse:
@@ -294,7 +294,7 @@ def auth_login(
 
 
 @app.post("/auth/google", response_model=AuthResponse)
-@limiter.limit("8/minute")
+@limiter.limit("30/minute")
 def auth_google(
     request: Request, payload: GoogleAuthRequest, db: Session = Depends(get_db)
 ) -> AuthResponse:
