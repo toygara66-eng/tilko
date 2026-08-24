@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
-import { NoteModeProvider } from "@/components/notes/note-mode";
+import { NoteModeProvider, NoteModeToggle } from "@/components/notes/note-mode";
 import { ThemeProvider, ThemeToggle } from "@/components/theme/theme";
 import { ProfileProvider, useProfile } from "@/components/profile/profile-context";
 import { PenaltyProvider } from "@/components/pomodoro/penalty-context";
@@ -163,6 +163,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                     Giriş
                   </Link>
                 )}
+                {hoca ? null : <NoteModeToggle compact />}
                 <ThemeToggle className="h-10 w-10 px-0 shadow-none" />
                 {hoca ? null : <FeedbackHeaderButton />}
                 <button

@@ -18,7 +18,7 @@ const caveat = Caveat({
 
 const kalam = Kalam({
   weight: ["400", "700"],
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   variable: "--font-kalam",
 });
 

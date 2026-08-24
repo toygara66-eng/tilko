@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { HumanNoteCard } from "@/components/notes/human-note-card";
+import { NoteModeToggle } from "@/components/notes/note-mode";
 import { fromNoteItem } from "@/lib/note-format";
 import { QuestionCard } from "@/components/analyze/question-card";
 import { useAnalyze } from "@/components/analyze/analyze-context";
@@ -69,7 +70,7 @@ export function NotesPanel() {
       {panelOpen ? (
         <div className="border-t border-zinc-200 dark:border-zinc-800">
           {result ? (
-            <div className="flex gap-1 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-1 px-3 py-2">
               <button
                 type="button"
                 onClick={() => setTab("notes")}
@@ -94,6 +95,7 @@ export function NotesPanel() {
               >
                 Sorular ({questionCount})
               </button>
+              <NoteModeToggle compact className="ml-auto" />
             </div>
           ) : null}
 

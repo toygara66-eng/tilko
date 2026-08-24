@@ -27,7 +27,7 @@ export function HocaNote({ text }: { text: string }) {
         "mt-4 w-full max-w-full px-3 py-2 leading-snug sm:mt-5 sm:max-w-[92%]",
         isHandwrittenMode
           ? "rounded-sm border border-red-700/25 bg-red-50/70 note-scribble text-[1.05rem] text-red-600 sm:-rotate-1 sm:text-[1.2rem] sm:ml-auto"
-          : "rounded-xl border border-red-200 bg-red-50/80 note-scribble text-base text-red-700 dark:border-red-500/35 dark:bg-red-950/50 dark:text-red-300 sm:text-lg",
+          : "rounded-xl border border-red-200 bg-red-50/80 font-sans text-base text-red-700 dark:border-red-500/35 dark:bg-red-950/50 dark:text-red-300 sm:text-lg",
       )}
     >
       <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-red-500 sm:text-[0.7rem]">

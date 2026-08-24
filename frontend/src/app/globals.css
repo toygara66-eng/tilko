@@ -58,13 +58,14 @@ body {
 }
 
 .note-hand {
-  font-family: var(--font-kalam), var(--font-caveat), cursive !important;
+  font-family: var(--font-kalam), var(--font-caveat), "Segoe Print", "Comic Sans MS", cursive !important;
   word-break: break-word;
   overflow-wrap: anywhere;
+  letter-spacing: 0.01em;
 }
 
 .note-scribble {
-  font-family: var(--font-caveat), cursive !important;
+  font-family: var(--font-caveat), var(--font-kalam), "Segoe Print", cursive !important;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
