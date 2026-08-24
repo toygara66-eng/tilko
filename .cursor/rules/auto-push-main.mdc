@@ -1,0 +1,13 @@
+---
+description: Her değişiklikten sonra main'e commit + push; sorma
+alwaysApply: true
+---
+
+# Auto deploy to main
+
+- Kod veya config değişikliği bitince **sormadan** `main` üzerinde commit et ve `origin/main`'e push et.
+- "Canlıya almak ister misin?" diye sorma; kullanıcı bunu varsayılan olarak istiyor.
+- Commit yazarı: `toygar` / `toygar@users.noreply.github.com` (`-c user.name` / `-c user.email`).
+- Portable Git varsa: `%TEMP%\PortableGit\cmd\git.exe`.
+- Push için gerekirse smart-mode approval kullan.
+- İlgisiz dosyaları (APK, lokal build artifaktları, rastgele logo denemeleri) bu işin commit'ine karıştırma; sadece o turdaki görev dosyalarını ekle.

@@ -114,12 +114,14 @@ class SavedNoteItem(NoteItem):
     saved_id: int = 0
     subject: str = ""
     video_url: str = ""
+    created_at: str | None = None
 
 
 class SavedQuestionItem(QuestionItem):
     saved_id: int = 0
     subject: str = ""
     video_url: str = ""
+    created_at: str | None = None
     teacher_persona: TeacherPersona = Field(default_factory=TeacherPersona)
 
 

@@ -390,12 +390,14 @@ export type SavedNoteItem = NoteItem & {
   saved_id: number;
   subject: string;
   video_url: string;
+  created_at?: string | null;
 };
 
 export type SavedQuestionItem = QuestionItem & {
   saved_id: number;
   subject: string;
   video_url: string;
+  created_at?: string | null;
   teacher_persona?: TeacherPersona;
 };
 

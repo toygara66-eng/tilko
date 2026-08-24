@@ -41,7 +41,7 @@ export function NotesPanel() {
                 ? `${result.chunks_done ?? 1}/${result.chunks_total ?? 1} dilim hazır · ${elapsed}s`
                 : `Hazırlanıyor… ${elapsed}s`
               : result
-                ? `${subject || "Ders"} · ${noteCount} not · ${questionCount} soru · Notlarımda durur`
+                ? `${subject || "Ders"} · bu video · ${noteCount} not · ${questionCount} soru`
                 : "Analiz bitince burada açılır"}
           </p>
         </div>

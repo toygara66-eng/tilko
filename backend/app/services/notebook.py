@@ -313,11 +313,13 @@ def _to_public(row: SavedNotebookItem) -> dict | None:
         build_watch_url(row.video_id, stamp) if row.video_id else watch
     )
     text = str(payload.get("text") or payload.get("detail") or row.title or "").strip()
+    created = row.created_at.isoformat() if row.created_at else None
     return {
         **payload,
         "saved_id": row.id,
         "subject": row.subject,
         "video_url": watch,
+        "created_at": created,
         "id": str(payload.get("id") or f"{row.kind}_{row.id}"),
         "title": str(payload.get("title") or row.title or "") or "Not",
         "text": text or str(payload.get("title") or row.title or "Not"),

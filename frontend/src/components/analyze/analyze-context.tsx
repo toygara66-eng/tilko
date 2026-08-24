@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { analyzeVideo, getAnalyzeJob, cancelAnalyzeJob, wakeApi, humanizeNetworkError, type AnalyzeResponse } from "@/lib/api";
 import {
   fetchCaptionsForVideo,
@@ -141,8 +140,6 @@ async function holdPreparing(startedAt: number, cached: boolean) {
 }
 
 export function AnalyzeProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
   const { apply, refresh } = useProfile();
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [url, setUrl] = useState("");
@@ -156,28 +153,16 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const resumed = useRef(false);
   const lastDoneVideo = useRef("");
   const activeJobId = useRef("");
-  const pathRef = useRef(pathname);
-  pathRef.current = pathname;
 
-  const goNotebook = useCallback(
-    (data: AnalyzeResponse, videoUrl: string) => {
-      if ((data.notes?.length || 0) === 0 || stillRunning(data)) return;
-      bumpNotebook();
-      const vid =
-        (data.video_id || "").trim() || extractYoutubeId(videoUrl) || "";
-      // Aynı video tekrar: paneli açma, Notlarım'a zorla gitme.
-      if (vid && vid === lastDoneVideo.current) {
-        setPanelOpen(false);
-        return;
-      }
-      if (vid) lastDoneVideo.current = vid;
-      setPanelOpen(false);
-      if (pathRef.current === "/analiz") {
-        router.push("/notlarim");
-      }
-    },
-    [router],
-  );
+  const goNotebook = useCallback((data: AnalyzeResponse, videoUrl: string) => {
+    if ((data.notes?.length || 0) === 0 || stillRunning(data)) return;
+    bumpNotebook();
+    const vid =
+      (data.video_id || "").trim() || extractYoutubeId(videoUrl) || "";
+    if (vid) lastDoneVideo.current = vid;
+    // Analiz sayfasında yalnızca bu videonun notları kalsın; arşiv Notlarım'da.
+    setPanelOpen(true);
+  }, []);
 
   const remember = useCallback(
     (data: AnalyzeResponse, videoUrl: string, topic: string) => {

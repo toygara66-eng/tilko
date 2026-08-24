@@ -326,10 +326,10 @@ export function Dashboard() {
           ) : null}
           {result && !busy ? (
             <p className="text-sm text-emerald-700 dark:text-emerald-300">
-              {result.notes.length} not ve {result.questions.length} soru hazır
-              {result.cached ? " (kayıttan)" : ""}.{" "}
+              {result.notes.length} not ve {result.questions.length} soru bu videoda hazır
+              {result.cached ? " (kayıttan)" : ""}. Aşağıda oku; arşiv için{" "}
               <Link href="/notlarim" className="text-orange-700 dark:text-orange-300">
-                Notlarımda duruyor →
+                Notlarım →
               </Link>
             </p>
           ) : null}
