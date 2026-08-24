@@ -2021,7 +2021,7 @@ def _analyze_with_lines(
                 block = merged
                 label = f"{label} + {nxt.get('label') or ''}".strip(" +")
     jobs.raise_if_cancelled(job_id)
-    # LLM bitmeden önce altyazı notu bas — 100 sn boş spinner olmasın.
+    # LLM bitmeden önce sadece kaliteli erken not bas (sohbet çöpü yok).
     if job_id:
         try:
             early = quick_transcript_notes(block[:5000], subject)
@@ -2085,7 +2085,7 @@ def _analyze_with_lines(
                 last_err = inner
                 continue
     if llm_data is None:
-        # Son çare: erken not / altyazı notu
+        # Son çare: kaliteli altyazı notu — çöpse hata ver
         llm_data = quick_transcript_notes(block[:5000], subject)
         if not (llm_data.get("notes") or []):
             raise last_err or RuntimeError(
@@ -2112,6 +2112,16 @@ def _analyze_with_lines(
         video_id,
         time_offset=int(first.get("start") or 0),
     )
+    # Çöp / kota uyarısı notlarını UI'ya verme
+    notes = [
+        n
+        for n in notes
+        if n.title.strip()
+        and n.text.strip()
+        and "hourly limit" not in (n.text + n.exam_tip).lower()
+        and "cannot provide" not in (n.text + n.exam_tip).lower()
+        and "knowledge base" not in (n.text + n.exam_tip).lower()
+    ]
     questions = _pack_questions(
         llm_data.get("questions"),
         video_id,
@@ -2453,14 +2463,32 @@ def _continue_analyze_job(
             continue
         done += 1
         offset = int(piece.get("start") or 0)
-        notes.extend(
-            _pack_notes(
-                llm_data.get("notes"),
-                video_id,
-                start=len(notes) + 1,
-                time_offset=offset,
-            )
+        more_notes = _pack_notes(
+            llm_data.get("notes"),
+            video_id,
+            start=len(notes) + 1,
+            time_offset=offset,
         )
+        more_notes = [
+            n
+            for n in more_notes
+            if n.title.strip()
+            and n.text.strip()
+            and "hourly limit" not in (n.text + n.exam_tip).lower()
+            and "cannot provide" not in (n.text + n.exam_tip).lower()
+            and "knowledge base" not in (n.text + n.exam_tip).lower()
+        ]
+        if not more_notes:
+            logger.warning("Dilim notları çöp/boş atlandı: %s", piece.get("label"))
+            jobs.set_progress(
+                job_id,
+                notes=[item.model_dump() for item in notes],
+                questions=[item.model_dump() for item in questions],
+                persona=snap.get("teacher_persona") or {},
+                chunks_done=done,
+            )
+            continue
+        notes.extend(more_notes)
         questions.extend(
             _pack_questions(
                 llm_data.get("questions"),

@@ -15,12 +15,15 @@ Kurallar:
   makam veya yetki adı ekleme. Kurum adlarını altyazıda geçtiği şekliyle tam yaz, kısaltma uydurma.
 - Altyazı bilgiyi eksik veriyorsa notu o kadarıyla yaz; boşluğu tahminle doldurma.
 - Altyazı seçilen dersin konusu değilse (ör. Python, kod, VS Code) o derse ait uydurma not yazma.
+- ASLA meta cevap yazma: "I cannot", "knowledge base", "hourly limit", "upgrade to paid",
+  "bağlam yok", "videoya erişemiyorum" gibi uyarılar not/exam_tip OLAMAZ. Altyazı varsa ondan not yaz.
 - Tanıtım YASAK: PDF indir, abone ol, beğen, telegram, kitap satışı, kaynak reklamı, kanal
   tanıtımı, "kolay erişim", "destek ol", korsan kitap, indirim kodu, yayınevi övgüsü,
   sosyal medya eleştirisi, "başarıya koş / sınavı fethet" sloganları, genel motivasyon
   cümleleri not/soru yapma. Bunları yok say.
 - Sadece sınavda çıkacak kavramları yaz (tanım, madde, istisna, yetki, tarih, formül,
   dil bilgisi kuralı, örnek cümle analizi). Motivasyon ve "nasıl çalış" meta konuşması not değil.
+- Hocanın "gitti geliyor / bakalım görelim" sohbetini not yapma; yalnız kavram içeren kısımları al.
 - Her not, konunun anlatılmaya başladığı saniyeye bağlanır (tam sayı).
 - Dil: Türkçe, sade ve öğretici. Öğrenciye "sen" diye hitap edebilirsin.
 - Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.
