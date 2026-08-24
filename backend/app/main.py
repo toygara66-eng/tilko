@@ -113,7 +113,13 @@ from app.services.credits import (
     QuotaExceededError as CreditQuotaExceededError,
     VideoTooLongError,
 )
-from app.services.llm import ConfigurationError, QuotaExhaustedError, analyze_slice, require_analyze_llm
+from app.services.llm import (
+    ConfigurationError,
+    QuotaExhaustedError,
+    analyze_slice,
+    quick_transcript_notes,
+    require_analyze_llm,
+)
 from app.services.scale import (
     ServiceBusyError,
     claim_work,
@@ -1860,6 +1866,32 @@ def _analyze_with_lines(
                 block = merged
                 label = f"{label} + {nxt.get('label') or ''}".strip(" +")
     jobs.raise_if_cancelled(job_id)
+    # LLM bitmeden önce altyazı notu bas — 100 sn boş spinner olmasın.
+    if job_id:
+        try:
+            early = quick_transcript_notes(block[:5000], subject)
+            early_notes = _pack_notes(early.get("notes"), video_id)
+            if early_notes:
+                early_overlay: dict = {}
+                try:
+                    snap0 = jobs.snapshot(job_id)
+                    if snap0:
+                        early_overlay = dict(snap0.get("overlay") or {})
+                except Exception:
+                    early_overlay = {}
+                jobs.set_progress(
+                    job_id,
+                    notes=[item.model_dump() for item in early_notes],
+                    questions=[],
+                    persona={"catchphrases": [], "tone": "öğretici, net"},
+                    chunks_done=0,
+                    status="running",
+                    chunks_total=1,
+                    overlay=early_overlay,
+                )
+        except Exception:
+            logger.exception("Erken not basımı atlandı")
+    last_err: BaseException | None = None
     try:
         llm_data = analyze_slice(
             block,
@@ -1874,7 +1906,7 @@ def _analyze_with_lines(
         )
         chosen_idx = 0
         first = primary
-    except RuntimeError as exc:
+    except Exception as exc:  # noqa: BLE001 — fallback slice dene
         last_err = exc
         llm_data = None
         for idx, piece in enumerate(candidates[1:3], start=1):
@@ -1894,13 +1926,18 @@ def _analyze_with_lines(
                 chosen_idx = idx
                 first = piece
                 break
-            except RuntimeError as inner:
+            except Exception as inner:  # noqa: BLE001
                 last_err = inner
                 continue
     if llm_data is None:
-        raise last_err or RuntimeError(
-            "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
-        )
+        # Son çare: erken not / altyazı notu
+        llm_data = quick_transcript_notes(block[:5000], subject)
+        if not (llm_data.get("notes") or []):
+            raise last_err or RuntimeError(
+                "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
+            )
+        chosen_idx = 0
+        first = primary
     jobs.raise_if_cancelled(job_id)
     remaining_slices = candidates[chosen_idx + 1 :]
     try:

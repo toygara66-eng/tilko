@@ -39,9 +39,9 @@ CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-# Ücretli Gemini: detaylı not için yeterli süre; Groq yalnızca yedek.
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(55.0, connect=10.0)
-GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(75.0, connect=12.0)
+# Ücretli Gemini: makul süre; sonsuz beklemeyip Groq/altyazı yedeğine düş.
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(40.0, connect=10.0)
+GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(40.0, connect=10.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
@@ -671,8 +671,13 @@ def _gemini_model_id() -> str:
 
 
 def _gemini_models_to_try() -> list[str]:
-    """Ücretli Gemini: yapılandırılan model önce; gerekirse 1 yedek."""
+    """Analizde tek model (2×40 sn beklemeyi kes); diğer işlerde 1 yedek."""
     primary = _gemini_model_id()
+    task = usage_task.get() or ""
+    if task in ANALYZE_TASKS:
+        if primary and primary not in GEMINI_UNAVAILABLE_MODELS:
+            return [primary]
+        return [GEMINI_CHAT_MODEL]
     ordered: list[str] = []
     for name in (primary, *GEMINI_MODEL_FALLBACKS):
         if not name or name in GEMINI_UNAVAILABLE_MODELS:
@@ -755,11 +760,8 @@ def _gemini_native_completion(
             last = exc
             logger.warning("Gemini %s ağ hatası: %s", name, exc)
             if _is_timeout(exc):
-                # Türkçe RuntimeError YASAK — _chat Groq yedeğine geçsin.
-                last = TimeoutError(f"Gemini {name} timed out")
-                if len(user) > 6000:
-                    user = user[:6000] + "\n...(kısaltıldı)"
-                continue
+                # Analizde ikinci modele gitme — hemen yedek sağlayıcı.
+                raise TimeoutError(f"Gemini {name} timed out") from exc
             continue
         if response.status_code == 400 and "thinking" in (response.text or "").lower():
             generation.pop("thinkingConfig", None)
@@ -774,8 +776,7 @@ def _gemini_native_completion(
             except Exception as exc:  # noqa: BLE001
                 last = exc
                 if _is_timeout(exc):
-                    last = TimeoutError(f"Gemini {name} timed out")
-                    continue
+                    raise TimeoutError(f"Gemini {name} timed out") from exc
                 continue
         if response.status_code == 404:
             logger.warning("Gemini model yok, sıradaki: %s", name)
@@ -1946,20 +1947,8 @@ def _analyze_combined(
             if raw_notes:
                 logger.warning("Grounding boş; ham %s not kullanılıyor.", len(raw_notes))
                 notes = raw_notes[:10]
-        if len(questions) < max(2, count // 2) and notes:
-            try:
-                more = generate_questions(
-                    notes,
-                    subject,
-                    count,
-                    persona=None,
-                    exam_target=exam_target,
-                    subject_type=subject_type,
-                    is_yks_fen_question=is_yks_fen_question,
-                )
-                _collect([{"questions": more}], questions, seen, count)
-            except Exception:
-                logger.exception("Dilim soru tamamlaması başarısız")
+        # Soru üretimi ayrı LLM çağrısı — notları 1+ dk bloklamasın.
+        # Birleşik prompt zaten questions ister; _collect ile gelen yeter.
         if notes:
             persona = merge_personas([result.get("teacher_persona")])
             return {
@@ -1973,6 +1962,11 @@ def _analyze_combined(
     # Rakip gibi: kullanıcıya "bekle/bas" demeden her zaman not dön.
     logger.warning("Altyazı yedek notları kullanılıyor (%s).", window_label or "dilim")
     return _fallback_notes_from_transcript(work, subject)
+
+
+def quick_transcript_notes(chunk: str, subject: str | None = None) -> dict:
+    """UI boş kalmasın diye LLM öncesi anında not."""
+    return _fallback_notes_from_transcript(chunk or "", subject)
 
 
 def analyze_slice(
