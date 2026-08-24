@@ -80,6 +80,8 @@ from app.models.schemas import (
     AdminSetPasswordResponse,
     AdminResetCodeRequest,
     AdminResetCodeResponse,
+    AdminDeleteUserRequest,
+    AdminDeleteUserResponse,
     AdminUserUpdateRequest,
     AdminUserUpdateResponse,
     AdminUserListResponse,
@@ -1250,6 +1252,19 @@ def admin_users_reset_code(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AdminResetCodeResponse.model_validate(data)
+
+
+@app.post("/admin/users/delete", response_model=AdminDeleteUserResponse)
+def admin_users_delete(
+    payload: AdminDeleteUserRequest, db: Session = Depends(get_db)
+) -> AdminDeleteUserResponse:
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.admin_delete_user(db, payload.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminDeleteUserResponse.model_validate(data)
 
 
 @app.post("/admin/users/update", response_model=AdminUserUpdateResponse)

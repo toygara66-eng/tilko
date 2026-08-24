@@ -800,6 +800,16 @@ class AdminResetCodeResponse(BaseModel):
     message: str = ""
 
 
+class AdminDeleteUserRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+
+
+class AdminDeleteUserResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    message: str = ""
+
+
 class AdminUserUpdateRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     display_name: str | None = Field(default=None, max_length=64)

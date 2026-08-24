@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Link2, Loader2, Plus, Sparkles, Tag, X } from "lucide-react";
+import { CalendarDays, Link2, Loader2, Plus, Sparkles, Tag, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TurkishDatePicker } from "@/components/admin/turkish-date-picker";
@@ -13,6 +13,7 @@ import {
   grantAdminPro,
   adminSetPassword,
   adminIssueResetCode,
+  adminDeleteUser,
   adminUpdateUser,
   listAdminFeedback,
   listAdminUsers,
@@ -756,6 +757,53 @@ export default function AdminArchivePage() {
                             }}
                           >
                             Şifre ata / göster
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                            disabled={busy || !secret.trim()}
+                            title="Kullanıcıyı sil"
+                            onClick={() => {
+                              void (async () => {
+                                const label =
+                                  row.display_name ||
+                                  row.email ||
+                                  row.phone ||
+                                  row.user_id;
+                                const ok = window.confirm(
+                                  `"${label}" hesabını silmek istediğine emin misin?\n\nBu işlem geri alınamaz (notlar, Pro, krediler dahil).`,
+                                );
+                                if (!ok) return;
+                                setBusy(true);
+                                setError("");
+                                setCreditMsg("");
+                                try {
+                                  const data = await adminDeleteUser(secret, {
+                                    user_id: row.user_id,
+                                  });
+                                  setTempPasswords((prev) => {
+                                    const next = { ...prev };
+                                    delete next[row.user_id];
+                                    return next;
+                                  });
+                                  setCreditMsg(data.message);
+                                  await loadUsers();
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Kullanıcı silinemedi",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            <Trash2 className="mr-1 size-3.5" />
+                            Sil
                           </Button>
                         </div>
                       </td>

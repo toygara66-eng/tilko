@@ -324,6 +324,64 @@ def admin_set_password(db: Session, user_id: str, new_password: str) -> dict:
     }
 
 
+def admin_delete_user(db: Session, user_id: str) -> dict:
+    """Kullanıcı + ilişkili satırları siler (geri alınamaz)."""
+    from sqlalchemy import delete, or_, update
+
+    from app.database import models as m
+
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("user_id gerekli.")
+    user = db.get(User, uid)
+    if user is None:
+        raise ValueError("Kullanıcı bulunamadı.")
+
+    # Bağımlı tablolar (FK yok; user_id ile temizle)
+    for model, col in (
+        (m.TrapNotebook, m.TrapNotebook.user_id),
+        (m.UserStats, m.UserStats.user_id),
+        (m.ProEntitlementEvent, m.ProEntitlementEvent.user_id),
+        (m.DiagnosticTest, m.DiagnosticTest.user_id),
+        (m.UserBaseline, m.UserBaseline.user_id),
+        (m.ProgressCheckup, m.ProgressCheckup.user_id),
+        (m.DynamicExam, m.DynamicExam.user_id),
+        (m.AiConversion, m.AiConversion.user_id),
+        (m.UserBadge, m.UserBadge.user_id),
+        (m.ChallengeLeaderboard, m.ChallengeLeaderboard.user_id),
+        (m.ChallengeSession, m.ChallengeSession.user_id),
+        (m.DeviceSighting, m.DeviceSighting.user_id),
+        (m.PrizeGrant, m.PrizeGrant.user_id),
+        (m.ReportedQuestion, m.ReportedQuestion.user_id),
+        (m.UserFeedback, m.UserFeedback.user_id),
+        (m.PasswordReset, m.PasswordReset.user_id),
+        (m.PlayPurchase, m.PlayPurchase.user_id),
+        (m.HocaHighlight, m.HocaHighlight.user_id),
+        (m.PromoRedemption, m.PromoRedemption.user_id),
+        (m.SavedNotebookItem, m.SavedNotebookItem.user_id),
+        (m.NotebookSession, m.NotebookSession.user_id),
+    ):
+        db.execute(delete(model).where(col == uid))
+
+    db.execute(delete(m.DiagnosticIpMark).where(m.DiagnosticIpMark.source_user_id == uid))
+    db.execute(delete(m.OnboardingIpMark).where(m.OnboardingIpMark.source_user_id == uid))
+    db.execute(
+        delete(m.TeacherStudent).where(
+            or_(m.TeacherStudent.teacher_id == uid, m.TeacherStudent.student_id == uid)
+        )
+    )
+    db.execute(delete(m.TeacherAssignment).where(m.TeacherAssignment.teacher_id == uid))
+    db.execute(update(User).where(User.teacher_id == uid).values(teacher_id=""))
+
+    db.delete(user)
+    db.commit()
+    return {
+        "ok": True,
+        "user_id": uid,
+        "message": "Kullanıcı ve ilişkili veriler silindi.",
+    }
+
+
 def admin_update_user(
     db: Session,
     *,
