@@ -242,6 +242,13 @@ def health() -> dict:
         "groq": bool(llm["groq"]),
         "cerebras": bool(llm["cerebras"]),
         "analyze_cache_videos": cache_videos,
+        "last_ok_provider": str(llm.get("last_ok_provider") or ""),
+        "last_ok_model": str(llm.get("last_ok_model") or ""),
+        "last_error": str(llm.get("last_error") or ""),
+        "gemini_ok": int(llm.get("gemini_ok") or 0),
+        "gemini_fail": int(llm.get("gemini_fail") or 0),
+        "fallback_ok": int(llm.get("fallback_ok") or 0),
+        "gemini_key_suffix": str(llm.get("gemini_key_suffix") or ""),
     }
     return body
 

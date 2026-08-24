@@ -39,9 +39,9 @@ CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-# Ücretli Gemini: makul süre; sonsuz beklemeyip Groq/altyazı yedeğine düş.
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(40.0, connect=10.0)
-GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(40.0, connect=10.0)
+# Ücretli Gemini: yeterince bekle. 40sn acele timeout → sessiz Groq (AI Studio kullanım 0).
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(75.0, connect=12.0)
+GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(75.0, connect=12.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
@@ -74,6 +74,15 @@ _skip_gemini = False
 _chain_index = 0
 _active_name = ""
 _last_chance_used = False
+# Teşhis: AI Studio'da kullanım yoksa hangi sağlayıcı cevap verdi?
+_llm_stats: dict[str, object] = {
+    "last_ok_provider": "",
+    "last_ok_model": "",
+    "last_error": "",
+    "gemini_ok": 0,
+    "gemini_fail": 0,
+    "fallback_ok": 0,
+}
 RETRY_AFTER_RE = re.compile(
     r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<mins>\d+)m(?!s))?\s*(?P<num>[\d.]+)\s*(?P<unit>ms|s)",
     re.IGNORECASE,
@@ -991,7 +1000,11 @@ def _gemini_native_completion(
             last = RuntimeError(f"{name}: {response.status_code} {response.text[:240]}")
             logger.warning("Gemini %s reddetti: %s", name, response.status_code)
             if response.status_code in {401, 403}:
-                raise last
+                _record_llm_fail("gemini", last)
+                raise ConfigurationError(
+                    "GEMINI_API_KEY geçersiz veya yetkisiz (401/403). "
+                    "Render'daki anahtarın Google AI Studio'daki ücretli proje anahtarıyla aynı olduğundan emin ol."
+                ) from last
             continue
         data = response.json()
         chunks: list[str] = []
@@ -1004,9 +1017,12 @@ def _gemini_native_completion(
             continue
         # MAX_TOKENS ile kesilmiş JSON sık gelir — yine de parse etmeyi dene.
         logger.info("Gemini yanıtı: %s (%s karakter)", name, len(text))
+        _record_llm_ok("gemini", name)
         return _as_chat_response(text, name)
     if last and _is_timeout(last):
+        _record_llm_fail("gemini", last)
         raise TimeoutError(str(last) or "Gemini timed out") from last
+    _record_llm_fail("gemini", last or "Gemini yanıt vermedi")
     raise last or RuntimeError("Gemini yanıt vermedi.")
 
 
@@ -1167,7 +1183,35 @@ def _named_client(name: str) -> tuple[OpenAI, str] | None:
     return None
 
 
-def analyze_llm_ready() -> dict[str, bool | str]:
+def _record_llm_ok(provider: str, model: str = "") -> None:
+    name = (provider or "").strip().lower() or "?"
+    with _provider_lock:
+        _llm_stats["last_ok_provider"] = name
+        _llm_stats["last_ok_model"] = (model or "")[:80]
+        _llm_stats["last_error"] = ""
+        if name == "gemini":
+            _llm_stats["gemini_ok"] = int(_llm_stats.get("gemini_ok") or 0) + 1
+        else:
+            _llm_stats["fallback_ok"] = int(_llm_stats.get("fallback_ok") or 0) + 1
+
+
+def _record_llm_fail(provider: str, exc: Exception | str) -> None:
+    name = (provider or "").strip().lower() or "?"
+    msg = str(exc)[:240]
+    with _provider_lock:
+        _llm_stats["last_error"] = f"{name}: {msg}"
+        if name == "gemini":
+            _llm_stats["gemini_fail"] = int(_llm_stats.get("gemini_fail") or 0) + 1
+
+
+def _prefer_gemini_strict() -> bool:
+    """Ücretli Gemini tercih ediliyorsa acele Groq'a düşme."""
+    return (settings.llm_provider or "").strip().lower() == "gemini" and bool(
+        (settings.gemini_api_key or "").strip()
+    )
+
+
+def analyze_llm_ready() -> dict[str, bool | str | int]:
     """Render env: Gemini / Nebius / Cerebras / Groq."""
     gemini = bool((settings.gemini_api_key or "").strip())
     nebius = bool((settings.nebius_api_key or "").strip())
@@ -1198,6 +1242,8 @@ def analyze_llm_ready() -> dict[str, bool | str]:
         ready = groq
     else:
         ready = gemini or nebius or groq or cerebras
+    with _provider_lock:
+        stats = dict(_llm_stats)
     return {
         "gemini": gemini,
         "nebius": nebius,
@@ -1206,6 +1252,13 @@ def analyze_llm_ready() -> dict[str, bool | str]:
         "ready": ready,
         "provider": provider or settings.llm_provider,
         "model": model,
+        "last_ok_provider": str(stats.get("last_ok_provider") or ""),
+        "last_ok_model": str(stats.get("last_ok_model") or ""),
+        "last_error": str(stats.get("last_error") or ""),
+        "gemini_ok": int(stats.get("gemini_ok") or 0),
+        "gemini_fail": int(stats.get("gemini_fail") or 0),
+        "fallback_ok": int(stats.get("fallback_ok") or 0),
+        "gemini_key_suffix": (settings.gemini_api_key or "")[-4:] if gemini else "",
     }
 
 
@@ -1560,6 +1613,7 @@ def _chat(
     global _skip_gemini, _chain_index
     last_error: Exception | None = None
     attempt = 0
+    gemini_timeouts = 0
     task_token = usage_task.set(task or "genel")
     try:
         while attempt < CHAT_RETRIES + 4:
@@ -1570,6 +1624,9 @@ def _chat(
                 else:
                     answer = _chat_openai_compatible(system_prompt, user_prompt, temperature)
                 capture.record(task, system_prompt, user_prompt, answer)
+                active = (_active_name or settings.llm_provider or "").strip().lower()
+                if active and active != "gemini":
+                    _record_llm_ok(active, settings.active_model)
                 return answer
             except ServiceBusyError:
                 raise
@@ -1578,6 +1635,12 @@ def _chat(
             except Exception as exc:
                 fatal = _fatal_message(str(exc))
                 if fatal:
+                    # Gemini anahtarı bozuksa ücretsiz yedeğe düşüp "kullanım yok" yanıltmasın.
+                    if (
+                        _prefer_gemini_strict()
+                        and ("401" in str(exc) or "403" in str(exc) or "yetkisiz" in fatal.lower())
+                    ):
+                        raise ConfigurationError(fatal) from exc
                     if _is_gemini_quota_error(str(exc)) or _is_payment_or_credit_error(str(exc)):
                         _skip_gemini = True
                     if _activate_credit_fallback():
@@ -1590,6 +1653,21 @@ def _chat(
                         "LLM isteği ASCII olmayan bir HTTP başlığı yüzünden düştü."
                     ) from exc
                 if _is_timeout(exc):
+                    # Ücretli Gemini: 2 kez aynı sağlayıcıda dene, sonra yedek.
+                    if (
+                        task in ANALYZE_TASKS
+                        and _prefer_gemini_strict()
+                        and not _skip_gemini
+                        and (_active_name or "gemini") == "gemini"
+                        and gemini_timeouts < 2
+                    ):
+                        gemini_timeouts += 1
+                        logger.warning(
+                            "Gemini timeout; yeniden denenecek (%s/2).",
+                            gemini_timeouts,
+                        )
+                        time.sleep(1.5)
+                        continue
                     if task in ANALYZE_TASKS and _activate_next_analyze_provider(
                         reason="timeout"
                     ):
