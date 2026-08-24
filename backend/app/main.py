@@ -56,6 +56,10 @@ from app.models.schemas import (
     MistakeDoctorResponse,
     FeedbackSubmitRequest,
     FeedbackSubmitResponse,
+    AdminFeedbackListResponse,
+    AdminFeedbackItem,
+    AdminFeedbackStatusRequest,
+    AdminFeedbackStatusResponse,
     SetExamTargetRequest,
     SetExamTargetResponse,
     ExamCountdownResponse,
@@ -1863,6 +1867,34 @@ def submit_feedback(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FeedbackSubmitResponse.model_validate(result)
+
+
+@app.get("/admin/feedback", response_model=AdminFeedbackListResponse)
+def admin_feedback_list(
+    status: str = "",
+    limit: int = 100,
+    db: Session = Depends(get_db),
+) -> AdminFeedbackListResponse:
+    data = feedback_service.list_feedback(db, limit=limit, status=status)
+    return AdminFeedbackListResponse(
+        items=[AdminFeedbackItem.model_validate(item) for item in data["items"]],
+        count=int(data["count"]),
+    )
+
+
+@app.post("/admin/feedback/{feedback_id}/status", response_model=AdminFeedbackStatusResponse)
+def admin_feedback_status(
+    feedback_id: int,
+    payload: AdminFeedbackStatusRequest,
+    db: Session = Depends(get_db),
+) -> AdminFeedbackStatusResponse:
+    try:
+        result = feedback_service.set_feedback_status(
+            db, feedback_id, payload.status
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminFeedbackStatusResponse.model_validate(result)
 
 
 @app.get("/api/penalty/{user_id}/next", response_model=PenaltyStatus)

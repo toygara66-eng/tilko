@@ -589,6 +589,34 @@ class FeedbackSubmitResponse(BaseModel):
     message: str = ""
 
 
+class AdminFeedbackItem(BaseModel):
+    id: int
+    user_id: str = ""
+    display_name: str = ""
+    email: str = ""
+    phone: str = ""
+    category: str = "general"
+    category_label: str = ""
+    message: str = ""
+    status: str = "pending"
+    created_at: str | None = None
+
+
+class AdminFeedbackListResponse(BaseModel):
+    items: list[AdminFeedbackItem] = Field(default_factory=list)
+    count: int = 0
+
+
+class AdminFeedbackStatusRequest(BaseModel):
+    status: str = Field(..., min_length=1, max_length=32)
+
+
+class AdminFeedbackStatusResponse(BaseModel):
+    id: int
+    status: str
+    message: str = ""
+
+
 class SetExamTargetRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
     exam_target: str = Field(..., min_length=1, max_length=32)

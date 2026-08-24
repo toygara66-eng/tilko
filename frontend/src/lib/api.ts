@@ -919,6 +919,44 @@ export function submitFeedback(payload: {
   });
 }
 
+export type AdminFeedbackItem = {
+  id: number;
+  user_id: string;
+  display_name: string;
+  email: string;
+  phone: string;
+  category: string;
+  category_label: string;
+  message: string;
+  status: string;
+  created_at: string | null;
+};
+
+export async function listAdminFeedback(secret: string, status = "") {
+  const headers = await adminHeaders(secret);
+  const params = new URLSearchParams({ limit: "150" });
+  if (status.trim()) params.set("status", status.trim());
+  const response = await fetch(`${API_BASE}/admin/feedback?${params}`, { headers });
+  return readJson<{ items: AdminFeedbackItem[]; count: number }>(response);
+}
+
+export async function setAdminFeedbackStatus(
+  secret: string,
+  feedbackId: number,
+  status: "pending" | "done" | "archived",
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(
+    `${API_BASE}/admin/feedback/${encodeURIComponent(String(feedbackId))}/status`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ status }),
+    },
+  );
+  return readJson<{ id: number; status: string; message: string }>(response);
+}
+
 export type SubscriptionPlan = {
   id: string;
   label: string;

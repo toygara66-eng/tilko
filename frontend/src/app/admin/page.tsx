@@ -11,11 +11,14 @@ import {
   getRagStatus,
   grantAdminCredits,
   grantAdminPro,
+  listAdminFeedback,
   listAdminUsers,
   listExamSchedules,
   listPromos,
+  setAdminFeedbackStatus,
   updateExamSchedule,
   updateExamToday,
+  type AdminFeedbackItem,
   type AdminUserRow,
   type ArchiveFeedResult,
   type ExamScheduleItem,
@@ -34,6 +37,8 @@ function formatExpiry(raw: string | null) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -52,9 +57,13 @@ export default function AdminArchivePage() {
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [userQuery, setUserQuery] = useState("");
   const [proDays, setProDays] = useState(31);
+  const [feedback, setFeedback] = useState<AdminFeedbackItem[]>([]);
+  const [feedbackFilter, setFeedbackFilter] = useState<"" | "pending" | "done" | "archived">(
+    "pending",
+  );
   const [tab, setTab] = useState<
-    "archive" | "promo" | "calendar" | "credits" | "users"
-  >("users");
+    "archive" | "promo" | "calendar" | "credits" | "users" | "feedback"
+  >("feedback");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SECRET_KEY) || "";
@@ -70,6 +79,17 @@ export default function AdminArchivePage() {
       setUsers(data.users);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kullanıcılar alınamadı");
+    }
+  }
+
+  async function loadFeedback(filter = feedbackFilter) {
+    setError("");
+    try {
+      window.localStorage.setItem(SECRET_KEY, secret);
+      const data = await listAdminFeedback(secret, filter);
+      setFeedback(data.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Geri bildirimler alınamadı");
     }
   }
 
@@ -133,9 +153,10 @@ export default function AdminArchivePage() {
           Anahtar kayıtlıysa YouTube analizi kredi düşürmez.
         </p>
       </section>
-      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-5 dark:border-zinc-800 dark:bg-zinc-950/50">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-3 lg:grid-cols-6 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
+            ["feedback", "Geri bildirim"],
             ["users", "Kullanıcılar"],
             ["credits", "Krediler"],
             ["calendar", "Sınav takvimi"],
@@ -149,6 +170,7 @@ export default function AdminArchivePage() {
             onClick={() => {
               setTab(id);
               if (id === "users" && secret.trim()) void loadUsers();
+              if (id === "feedback" && secret.trim()) void loadFeedback();
             }}
             className={
               tab === id
@@ -160,6 +182,159 @@ export default function AdminArchivePage() {
           </button>
         ))}
       </div>
+
+      {tab === "feedback" ? (
+        <section className="space-y-4 rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+              Geliştirmemize Yardım Et
+            </h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Kullanıcıların gönderdiği öneriler burada listelenir.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["pending", "Bekleyen"],
+                ["done", "Tamamlanan"],
+                ["archived", "Arşiv"],
+                ["", "Tümü"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id || "all"}
+                type="button"
+                onClick={() => {
+                  setFeedbackFilter(id);
+                  if (secret.trim()) void loadFeedback(id);
+                }}
+                className={
+                  feedbackFilter === id
+                    ? "rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-zinc-950"
+                    : "rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-500 dark:border-zinc-700"
+                }
+              >
+                {label}
+              </button>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!secret.trim() || busy}
+              onClick={() => void loadFeedback()}
+            >
+              Yenile
+            </Button>
+          </div>
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+          {creditMsg ? (
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">{creditMsg}</p>
+          ) : null}
+          <div className="space-y-3">
+            {feedback.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
+                Henüz geri bildirim yok. Anahtarı yazıp Yenile’ye bas.
+              </p>
+            ) : (
+              feedback.map((item) => (
+                <article
+                  key={item.id}
+                  className="rounded-xl border border-zinc-200 bg-white/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/60"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-zinc-900 dark:text-white">
+                        {item.display_name || item.user_id}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        {item.email || item.phone || item.user_id} ·{" "}
+                        {item.category_label} · {formatExpiry(item.created_at)}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                    {item.message}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {item.status !== "done" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy || !secret.trim()}
+                        onClick={() => {
+                          void (async () => {
+                            setBusy(true);
+                            setError("");
+                            setCreditMsg("");
+                            try {
+                              const data = await setAdminFeedbackStatus(
+                                secret,
+                                item.id,
+                                "done",
+                              );
+                              setCreditMsg(data.message);
+                              await loadFeedback();
+                            } catch (err) {
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Güncellenemedi",
+                              );
+                            } finally {
+                              setBusy(false);
+                            }
+                          })();
+                        }}
+                      >
+                        Tamamlandı
+                      </Button>
+                    ) : null}
+                    {item.status !== "archived" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || !secret.trim()}
+                        onClick={() => {
+                          void (async () => {
+                            setBusy(true);
+                            setError("");
+                            setCreditMsg("");
+                            try {
+                              const data = await setAdminFeedbackStatus(
+                                secret,
+                                item.id,
+                                "archived",
+                              );
+                              setCreditMsg(data.message);
+                              await loadFeedback();
+                            } catch (err) {
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Arşivlenemedi",
+                              );
+                            } finally {
+                              setBusy(false);
+                            }
+                          })();
+                        }}
+                      >
+                        Arşivle
+                      </Button>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {tab === "users" ? (
         <section className="space-y-4 rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
