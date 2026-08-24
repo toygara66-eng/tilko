@@ -469,15 +469,15 @@ export default function GirisPage() {
         </Button>
       ) : null}
 
-      {!isForgot && !isReset && !isRegister && mode === "student" && channel !== "google" ? (
+      {!isForgot && !isReset && !isRegister ? (
         <button
           type="button"
-          className="mt-3 text-center text-xs font-semibold text-orange-600 underline-offset-2 hover:underline"
+          className="mt-4 w-full rounded-xl border border-orange-300/70 bg-orange-50 px-3 py-3 text-sm font-semibold text-orange-800 transition hover:bg-orange-100 dark:border-orange-500/40 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-950/70"
           onClick={() => {
             setScreen("forgot");
             setError("");
             setInfo("");
-            if (channel === "google") setChannel("email");
+            setChannel(channel === "phone" ? "phone" : "email");
           }}
         >
           Şifremi unuttum

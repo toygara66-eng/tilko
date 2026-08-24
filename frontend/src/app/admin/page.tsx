@@ -44,6 +44,17 @@ function formatExpiry(raw: string | null) {
   });
 }
 
+async function copyText(label: string, value: string) {
+  const text = (value || "").trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    window.alert(`${label} panoya kopyalandı.`);
+  } catch {
+    window.prompt("Kopyala:", text);
+  }
+}
+
 export default function AdminArchivePage() {
   const [secret, setSecret] = useState("");
   const [examTarget, setExamTarget] = useState("kpss_lisans");
@@ -59,6 +70,8 @@ export default function AdminArchivePage() {
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [userQuery, setUserQuery] = useState("");
   const [proDays, setProDays] = useState(31);
+  /** Admin yeni şifre atayınca ekranda göster (eski hash okunamaz). */
+  const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<AdminFeedbackItem[]>([]);
   const [feedbackFilter, setFeedbackFilter] = useState<"" | "pending" | "done" | "archived">(
     "pending",
@@ -345,7 +358,9 @@ export default function AdminArchivePage() {
               Kayıtlı kullanıcılar
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Ad, e-posta, telefon, sınav hedefi, Pro durumu ve bitiş tarihi.
+              E-posta ve telefon her satırda görünür (kopyala). Eski şifreler hash
+              ile saklanır, okunamaz — yeni şifre atayınca burada kopyalanabilir
+              kalır.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -382,7 +397,7 @@ export default function AdminArchivePage() {
               <thead className="bg-zinc-50 text-[10px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
                 <tr>
                   <th className="px-3 py-2">Kişi</th>
-                  <th className="px-3 py-2">İletişim</th>
+                  <th className="px-3 py-2">Giriş bilgileri</th>
                   <th className="px-3 py-2">Sınav</th>
                   <th className="px-3 py-2">Pro</th>
                   <th className="px-3 py-2">İşlem</th>
@@ -396,7 +411,9 @@ export default function AdminArchivePage() {
                     </td>
                   </tr>
                 ) : (
-                  users.map((row) => (
+                  users.map((row) => {
+                    const tempPass = tempPasswords[row.user_id] || "";
+                    return (
                     <tr
                       key={row.user_id}
                       className="border-t border-zinc-100 dark:border-zinc-800"
@@ -411,7 +428,6 @@ export default function AdminArchivePage() {
                         <p className="text-[10px] text-zinc-400">
                           {formatExpiry(row.created_at)} · {row.role}
                           {row.has_google ? " · Google" : ""}
-                          {row.has_password ? " · Şifre var" : " · Şifre yok"}
                         </p>
                         {!row.email && !row.phone ? (
                           <p className="mt-1 text-[10px] font-medium text-amber-600">
@@ -419,9 +435,60 @@ export default function AdminArchivePage() {
                           </p>
                         ) : null}
                       </td>
-                      <td className="px-3 py-2 align-top text-zinc-600 dark:text-zinc-300">
-                        <p>{row.email || "e-posta yok"}</p>
-                        <p>{row.phone || "telefon yok"}</p>
+                      <td className="px-3 py-2 align-top text-zinc-700 dark:text-zinc-200">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="font-medium">
+                              {row.email || "e-posta yok"}
+                            </span>
+                            {row.email ? (
+                              <button
+                                type="button"
+                                className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 hover:bg-orange-100 dark:bg-zinc-800 dark:text-zinc-200"
+                                onClick={() => void copyText("E-posta", row.email)}
+                              >
+                                Kopyala
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span>{row.phone || "telefon yok"}</span>
+                            {row.phone ? (
+                              <button
+                                type="button"
+                                className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 hover:bg-orange-100 dark:bg-zinc-800 dark:text-zinc-200"
+                                onClick={() => void copyText("Telefon", row.phone)}
+                              >
+                                Kopyala
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/60">
+                            <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+                              Şifre
+                            </p>
+                            {tempPass ? (
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                <code className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                                  {tempPass}
+                                </code>
+                                <button
+                                  type="button"
+                                  className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+                                  onClick={() => void copyText("Şifre", tempPass)}
+                                >
+                                  Kopyala
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                                {row.has_password
+                                  ? "Kayıtlı (hash) — eski şifre okunamaz. Yeni şifre ata."
+                                  : "Şifre yok — aşağıdan ata."}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2 align-top">{row.exam_target || "—"}</td>
                       <td className="px-3 py-2 align-top">
@@ -543,8 +610,16 @@ export default function AdminArchivePage() {
                                     email: mail.trim(),
                                     new_password: pass.trim() || null,
                                   });
+                                  if (pass.trim()) {
+                                    setTempPasswords((prev) => ({
+                                      ...prev,
+                                      [row.user_id]: pass.trim(),
+                                    }));
+                                  }
                                   setCreditMsg(
-                                    `${data.message} Artık ${data.email || row.user_id} ile giriş yapılabilir.`,
+                                    `${data.message} Giriş: ${data.email || row.user_id}${
+                                      pass.trim() ? ` · şifre: ${pass.trim()}` : ""
+                                    }`,
                                   );
                                   await loadUsers();
                                 } catch (err) {
@@ -569,7 +644,7 @@ export default function AdminArchivePage() {
                             onClick={() => {
                               void (async () => {
                                 const next = window.prompt(
-                                  `${row.display_name || row.user_id} için yeni şifre (min 8):`,
+                                  `${row.display_name || row.email || row.user_id} için yeni şifre (min 8):`,
                                 );
                                 if (!next || next.trim().length < 8) {
                                   if (next != null) {
@@ -577,15 +652,23 @@ export default function AdminArchivePage() {
                                   }
                                   return;
                                 }
+                                const plain = next.trim();
                                 setBusy(true);
                                 setError("");
                                 setCreditMsg("");
                                 try {
                                   const data = await adminSetPassword(secret, {
                                     user_id: row.user_id,
-                                    new_password: next.trim(),
+                                    new_password: plain,
                                   });
-                                  setCreditMsg(data.message);
+                                  setTempPasswords((prev) => ({
+                                    ...prev,
+                                    [row.user_id]: plain,
+                                  }));
+                                  setCreditMsg(
+                                    `${data.message} Şifre: ${plain} (satırda da görünür)`,
+                                  );
+                                  await loadUsers();
                                 } catch (err) {
                                   setError(
                                     err instanceof Error
@@ -598,12 +681,13 @@ export default function AdminArchivePage() {
                               })();
                             }}
                           >
-                            Şifre sıfırla
+                            Şifre ata / göster
                           </Button>
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
