@@ -254,23 +254,33 @@ def _lines_from_json3(payload: dict) -> list[dict]:
 
 
 def _download_caption(base_url: str, headers: dict | None = None) -> list[dict]:
-    url = base_url
-    if "fmt=" not in url:
-        url += ("&" if "?" in url else "?") + "fmt=json3"
-    response = httpx.get(
-        url,
-        headers=headers
-        or {"User-Agent": WATCH_UA, "Accept-Language": "tr-TR,tr;q=0.9"},
-        timeout=18,
-        follow_redirects=True,
-    )
-    response.raise_for_status()
-    if not response.content:
-        raise ValueError("Altyazı boş geldi.")
-    lines = _lines_from_caption_bytes(response.content, "json3")
-    if lines:
-        return lines
-    raise ValueError("Altyazı biçimi okunamadı.")
+    hdrs = headers or {
+        "User-Agent": WATCH_UA,
+        "Accept-Language": "tr-TR,tr;q=0.9",
+    }
+    base = re.sub(r"([&?])fmt=[^&]*", r"\1", base_url or "").rstrip("?&")
+    last = "Altyazı boş geldi."
+    for fmt in ("json3", "srv1", "srv3", "vtt", "ttml"):
+        url = base + ("&" if "?" in base else "?") + f"fmt={fmt}"
+        try:
+            response = httpx.get(
+                url,
+                headers=hdrs,
+                timeout=18,
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            last = f"{fmt}: {exc}"
+            continue
+        if not response.content:
+            last = f"{fmt}: boş gövde"
+            continue
+        lines = _lines_from_caption_bytes(response.content, fmt)
+        if lines:
+            return lines
+        last = f"{fmt}: parse edilemedi"
+    raise ValueError(last)
 
 
 _VTT_STAMP = re.compile(
@@ -406,7 +416,7 @@ def _fetch_via_ytdlp(video_id: str) -> list[dict]:
         "noplaylist": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "tv", "web_safari"],
+                "player_client": ["android", "ios", "tv_embedded", "mweb", "web"],
                 "skip": ["dash", "hls"],
             }
         },
@@ -776,7 +786,24 @@ def _fetch_via_invidious(video_id: str) -> list[dict]:
     raise ValueError(last)
 
 
-_IOS_CLIENTS = (
+_PLAYER_CLIENTS = (
+    {
+        "client": {
+            "clientName": "ANDROID",
+            "clientVersion": "20.10.38",
+            "androidSdkVersion": 34,
+            "osName": "Android",
+            "osVersion": "14",
+            "hl": "tr",
+            "gl": "TR",
+        },
+        "headers": {
+            "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip",
+            "X-YouTube-Client-Name": "3",
+            "X-YouTube-Client-Version": "20.10.38",
+            "Content-Type": "application/json",
+        },
+    },
     {
         "client": {
             "clientName": "IOS",
@@ -813,12 +840,29 @@ _IOS_CLIENTS = (
             "Content-Type": "application/json",
         },
     },
+    {
+        "client": {
+            "clientName": "MWEB",
+            "clientVersion": "2.20250312.01.00",
+            "hl": "tr",
+            "gl": "TR",
+        },
+        "headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            ),
+            "X-YouTube-Client-Name": "2",
+            "X-YouTube-Client-Version": "2.20250312.01.00",
+            "Content-Type": "application/json",
+        },
+    },
 )
 
 
 def _fetch_via_innertube(video_id: str) -> list[dict]:
     last = "YouTube oynatıcı yanıtı alınamadı."
-    for spec in _IOS_CLIENTS:
+    for spec in _PLAYER_CLIENTS:
         try:
             response = httpx.post(
                 PLAYER_URL,
@@ -829,7 +873,7 @@ def _fetch_via_innertube(video_id: str) -> list[dict]:
                     "racyCheckOk": True,
                 },
                 headers=spec["headers"],
-                timeout=6,
+                timeout=8,
                 follow_redirects=True,
             )
             response.raise_for_status()
@@ -842,7 +886,8 @@ def _fetch_via_innertube(video_id: str) -> list[dict]:
             )
             track = _pick_caption_track(tracks)
             if not track or not track.get("baseUrl"):
-                last = f"{spec['client']['clientVersion']}: altyazı yok"
+                status = (data.get("playabilityStatus") or {}).get("status") or "?"
+                last = f"{spec['client']['clientName']}: altyazı yok ({status})"
                 continue
             lines = _download_caption(
                 str(track["baseUrl"]),
@@ -853,7 +898,7 @@ def _fetch_via_innertube(video_id: str) -> list[dict]:
             )
             if lines:
                 return lines
-            last = f"{spec['client']['clientVersion']}: altyazı boş"
+            last = f"{spec['client']['clientName']}: altyazı boş"
         except Exception as exc:  # noqa: BLE001
             last = str(exc)
     raise ValueError(last)
@@ -1120,16 +1165,13 @@ def _fetch_via_llm_youtube(
     prompt = _transcribe_prompt(subject, strict=strict)
     errors: list[str] = []
 
-    # Gemini video tokenleri günde onlarca TL yakar — sadece açıkça açılınca.
-    use_gemini_video = (os.environ.get("TILKO_GEMINI_VIDEO") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    # Gemini YouTube: ücretsiz kazıyıcılar Render IP'sinde sık düşer.
+    # Anahtar varsa son çare olarak aç (TILKO_GEMINI_VIDEO=0 ile kapatılır).
+    flag = (os.environ.get("TILKO_GEMINI_VIDEO") or "").strip().lower()
+    use_gemini_video = flag not in {"0", "false", "no", "off"}
     gemini_key = (settings.gemini_api_key or "").strip()
     if use_gemini_video and gemini_key:
-        for model in ("gemini-3.5-flash-lite",):
+        for model in ("gemini-3.5-flash-lite", "gemini-3.6-flash"):
             try:
                 text = _gemini_text_from_youtube(video_id, gemini_key, model, prompt)
                 lines = _lines_from_model_transcript(text)
@@ -1138,9 +1180,11 @@ def _fetch_via_llm_youtube(
                 errors.append(f"{model}: satır yok")
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
-                break
+                continue
     elif gemini_key and not use_gemini_video:
         errors.append("gemini-video-kapalı")
+    elif not gemini_key:
+        errors.append("gemini-key-yok")
 
     use_or = (os.environ.get("TILKO_OPENROUTER_VIDEO") or "").strip().lower() in {
         "1",
