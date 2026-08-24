@@ -10,8 +10,16 @@ import { useAnalyze } from "@/components/analyze/analyze-context";
 import { cn } from "@/lib/utils";
 
 export function NotesPanel() {
-  const { result, subject, url, busy, elapsed, panelOpen, setPanelOpen } =
-    useAnalyze();
+  const {
+    result,
+    subject,
+    url,
+    busy,
+    elapsed,
+    panelOpen,
+    setPanelOpen,
+    cancelAnalyze,
+  } = useAnalyze();
   const [tab, setTab] = useState<"notes" | "questions">("notes");
   const noteCount = result?.notes.length ?? 0;
   const questionCount = result?.questions.length ?? 0;
@@ -45,6 +53,18 @@ export function NotesPanel() {
           )}
         />
       </button>
+
+      {busy ? (
+        <div className="flex justify-end border-t border-zinc-200 px-4 py-2 dark:border-zinc-800">
+          <button
+            type="button"
+            onClick={() => cancelAnalyze()}
+            className="text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+          >
+            Analizi durdur
+          </button>
+        </div>
+      ) : null}
 
       {panelOpen ? (
         <div className="border-t border-zinc-200 dark:border-zinc-800">
@@ -89,7 +109,18 @@ export function NotesPanel() {
               </p>
             ) : null}
 
-            {tab === "notes" && result ? (
+            {tab === "notes" && result && noteCount === 0 && busy ? (
+              <p className="text-sm text-zinc-500">
+                İlk notlar geliyor… Bu kutuda görünecek.
+              </p>
+            ) : null}
+            {tab === "notes" && result && noteCount === 0 && !busy ? (
+              <p className="text-sm text-zinc-500">
+                Okunacak not yok. Analiz yarım kaldıysa linki tekrar Analiz et.
+              </p>
+            ) : null}
+
+            {tab === "notes" && result && noteCount > 0 ? (
               <div className="protect-copy space-y-6">
                 {url ? (
                   <a

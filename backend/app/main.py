@@ -651,6 +651,25 @@ def analyze_video(
             release_work(video_id, payload.subject, focus_bkt)
 
 
+@app.post("/analyze/jobs/{job_id}/cancel")
+@limiter.limit("20/minute")
+def analyze_job_cancel(request: Request, job_id: str) -> dict:
+    """Yanlış link / vazgeç: bekleyen LLM işini durdur (mümkünse kredi iadesi)."""
+    from app.services import analyze_jobs as jobs
+
+    job = jobs.snapshot(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Analiz işi bulunamadı.")
+    viewer = actor(request)
+    owner = str(job.get("user_id") or "")
+    if owner and owner != viewer:
+        raise HTTPException(status_code=403, detail="Bu analizi sadece sahibi iptal edebilir.")
+    if job.get("status") != "running":
+        return {"ok": True, "job_id": job_id, "status": job.get("status") or "done"}
+    jobs.request_cancel(job_id)
+    return {"ok": True, "job_id": job_id, "status": "cancelling"}
+
+
 @app.get("/analyze/jobs/{job_id}", response_model=AnalyzeResponse)
 @limiter.limit("40/minute")
 def analyze_job_status(
@@ -1813,6 +1832,7 @@ def _analyze_with_lines(
     from app.services import rag as rag_service
     from app.services import analyze_jobs as jobs
 
+    jobs.raise_if_cancelled(job_id)
     if not lines:
         raise ValueError("Bu video için altyazı bulunamadı.")
     mismatch = transcript_off_subject(lines, subject)
@@ -1842,6 +1862,7 @@ def _analyze_with_lines(
             if len(merged) > len(block):
                 block = merged
                 label = f"{label} + {nxt.get('label') or ''}".strip(" +")
+    jobs.raise_if_cancelled(job_id)
     try:
         llm_data = analyze_slice(
             block,
@@ -1860,6 +1881,7 @@ def _analyze_with_lines(
         last_err = exc
         llm_data = None
         for idx, piece in enumerate(candidates[1:3], start=1):
+            jobs.raise_if_cancelled(job_id)
             try:
                 llm_data = analyze_slice(
                     piece["block"],
@@ -1882,6 +1904,7 @@ def _analyze_with_lines(
         raise last_err or RuntimeError(
             "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
         )
+    jobs.raise_if_cancelled(job_id)
     remaining_slices = candidates[chosen_idx + 1 :]
     try:
         rag_service.ingest_video_signals(
@@ -2079,6 +2102,18 @@ def _analyze_lines_job(
                 credit_service.confirm_charged(db, follower_id, video_id, kind)
             except Exception:
                 logger.exception("Takipçi confirm başarısız %s", follower_id)
+    except jobs.JobCancelled:
+        logger.info("Analiz iptal %s", job_id)
+        try:
+            credit_service.refund(db, user_id, reservation)
+        except Exception:
+            logger.exception("İptal iadesi başarısız %s", job_id)
+        jobs.finish(job_id, "error", error="Analiz iptal edildi.")
+        for follower_id, kind in jobs.take_unsettled_followers(job_id):
+            try:
+                credit_service.refund_charged(db, follower_id, kind)
+            except Exception:
+                logger.exception("Takipçi iadesi başarısız %s", follower_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Arka plan analiz %s başarısız: %s", job_id, exc)
         try:
@@ -2116,9 +2151,11 @@ def _fetch_then_analyze_job(
 
     db = SessionLocal()
     try:
+        jobs.raise_if_cancelled(job_id)
         lines = fetch_transcript_lines(video_id, subject=subject)
         if not lines:
             raise ValueError("Bu video için altyazı bulunamadı.")
+        jobs.raise_if_cancelled(job_id)
         user = penalty_service.get_or_create_user(db, user_id)
         if credit_service.is_ad_tier(user) and not credit_service.already_converted(
             db, user_id, video_id
@@ -2148,6 +2185,18 @@ def _fetch_then_analyze_job(
                 credit_service.confirm_charged(db, follower_id, video_id, kind)
             except Exception:
                 logger.exception("Takipçi confirm başarısız %s", follower_id)
+    except jobs.JobCancelled:
+        logger.info("Analiz iptal %s", job_id)
+        try:
+            credit_service.refund(db, user_id, reservation)
+        except Exception:
+            logger.exception("İptal iadesi başarısız %s", job_id)
+        jobs.finish(job_id, "error", error="Analiz iptal edildi.")
+        for follower_id, kind in jobs.take_unsettled_followers(job_id):
+            try:
+                credit_service.refund_charged(db, follower_id, kind)
+            except Exception:
+                logger.exception("Takipçi iadesi başarısız %s", follower_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Arka plan analiz %s başarısız: %s", job_id, exc)
         try:
@@ -2187,6 +2236,9 @@ def _continue_analyze_job(
     personas = [snap.get("teacher_persona")]
     done = int(snap.get("chunks_done") or 1)
     for piece in remaining:
+        if jobs.is_cancel_requested(job_id):
+            jobs.finish(job_id, "error", error="Analiz iptal edildi.")
+            return
         try:
             llm_data = analyze_slice(
                 piece["block"],

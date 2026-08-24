@@ -14,6 +14,10 @@ _JOBS: dict[str, dict[str, Any]] = {}
 MAX_RUNNING_JOBS = 16
 
 
+class JobCancelled(Exception):
+    """Kullanıcı analizi iptal etti."""
+
+
 def create_job(
     *,
     user_id: str,
@@ -41,8 +45,34 @@ def create_job(
             "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
             "error": "",
             "overlay": overlay,
+            "cancel_requested": False,
         }
     return job_id
+
+
+def request_cancel(job_id: str) -> bool:
+    """Çalışan işi iptal iste; True = işaretlendi."""
+    with _lock:
+        job = _JOBS.get(job_id)
+        if not job:
+            return False
+        if job.get("status") != "running":
+            return False
+        job["cancel_requested"] = True
+        return True
+
+
+def is_cancel_requested(job_id: str | None) -> bool:
+    if not job_id:
+        return False
+    with _lock:
+        job = _JOBS.get(job_id)
+        return bool(job and job.get("cancel_requested"))
+
+
+def raise_if_cancelled(job_id: str | None) -> None:
+    if is_cancel_requested(job_id):
+        raise JobCancelled("Analiz iptal edildi.")
 
 
 def running_count() -> int:

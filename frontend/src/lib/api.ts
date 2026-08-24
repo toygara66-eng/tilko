@@ -363,6 +363,13 @@ export function getAnalyzeJob(jobId: string) {
   return request<AnalyzeResponse>(`/analyze/jobs/${encodeURIComponent(jobId)}`);
 }
 
+export function cancelAnalyzeJob(jobId: string) {
+  return request<{ ok: boolean; job_id: string; status: string }>(
+    `/analyze/jobs/${encodeURIComponent(jobId)}/cancel`,
+    { method: "POST", body: "{}" },
+  );
+}
+
 export type SavedNoteItem = NoteItem & {
   saved_id: number;
   subject: string;

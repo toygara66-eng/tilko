@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { analyzeVideo, getAnalyzeJob, wakeApi, humanizeNetworkError, type AnalyzeResponse } from "@/lib/api";
+import { analyzeVideo, getAnalyzeJob, cancelAnalyzeJob, wakeApi, humanizeNetworkError, type AnalyzeResponse } from "@/lib/api";
 import {
   fetchCaptionsForVideo,
   parseTranscriptPaste,
@@ -21,7 +21,10 @@ import { getUserId } from "@/lib/user";
 import { useProfile } from "@/components/profile/profile-context";
 
 const STORAGE_KEY = "tilko_last_analyze";
+const STORAGE_KEY_LEGACY = "tilko_last_analyze"; // eski anahtar da silinsin
 const NOTEBOOK_BUMP_KEY = "tilko_notebook_bump";
+/** Yarım running kayıtlarını bir kez temizle (eski auto-resume). */
+const CLEAR_STALE_FLAG = "tilko_cleared_stale_analyze_v2";
 
 export type AnalyzeStartInput = {
   video_url: string;
@@ -50,6 +53,7 @@ type AnalyzeContextValue = {
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
   startAnalyze: (input: AnalyzeStartInput) => Promise<void>;
+  cancelAnalyze: () => void;
 };
 
 const AnalyzeContext = createContext<AnalyzeContextValue | null>(null);
@@ -88,8 +92,45 @@ function stillRunning(data: AnalyzeResponse) {
   return Boolean(data.job_id) && (data.job_status || "done") === "running";
 }
 
+/** Render in-memory job kayboldu / 404. */
+function isMissingJobError(err: unknown): boolean {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : String(err ?? "");
+  return /404|bulunamad|not found|işi bulunamad/i.test(message);
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/** Kayıttaki yarım job'ı temizle — sayfa açılışında poll/busy yok. */
+function settleStored(saved: StoredAnalyze): AnalyzeResponse | null {
+  const notes = saved.result?.notes || [];
+  if (!notes.length) {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+  const settled: AnalyzeResponse = {
+    ...saved.result,
+    job_id: undefined,
+    job_status: "done",
+    job_error: undefined,
+  };
+  writeStored({
+    result: settled,
+    url: saved.url,
+    subject: saved.subject,
+    savedAt: Date.now(),
+  });
+  return settled;
 }
 
 /** Kayıttan gelen cevapta da kısa “hazırlanıyor” hissi kalsın. */
@@ -114,6 +155,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   const busyRef = useRef(false);
   const resumed = useRef(false);
   const lastDoneVideo = useRef("");
+  const activeJobId = useRef("");
   const pathRef = useRef(pathname);
   pathRef.current = pathname;
 
@@ -139,7 +181,26 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
 
   const remember = useCallback(
     (data: AnalyzeResponse, videoUrl: string, topic: string) => {
+      if (data.job_id && stillRunning(data)) {
+        activeJobId.current = data.job_id;
+      } else {
+        activeJobId.current = "";
+      }
       setResult(data);
+      // Running job'ı asla kaydetme — F5 / siteye girişte arka plan poll olmasın.
+      if (stillRunning(data)) {
+        apply({
+          aiCreditsLeft: data.ai_credits_left,
+          aiCreditLimit: data.ai_credit_limit,
+          isPremium: data.is_premium,
+          isInTrial: data.is_in_trial_period,
+          isAdTier: data.is_ad_tier,
+          dailyAdCredits: data.daily_ad_credits,
+          dailyAdLimit: data.daily_ad_limit,
+          trialDaysLeft: data.trial_days_left,
+        });
+        return;
+      }
       writeStored({
         result: data,
         url: videoUrl,
@@ -196,13 +257,15 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
           }
         } catch (err) {
           fails += 1;
-          // Geçici ağ/Render uykusu: hemen hata basma.
-          if (fails >= 30) {
+          // Job Render yeniden başlayınca silinir — 100 sn boş dönme.
+          if (isMissingJobError(err) || fails >= 30) {
             setError(
-              humanizeNetworkError(
-                err,
-                "Analiz durumu alınamadı. Biraz bekleyip tekrar dene.",
-              ),
+              isMissingJobError(err)
+                ? "Önceki analiz sunucuda kalmamış (yeniden başlama). Linki tekrar Analiz et."
+                : humanizeNetworkError(
+                    err,
+                    "Analiz durumu alınamadı. Biraz bekleyip tekrar dene.",
+                  ),
             );
             void refresh();
             return;
@@ -214,33 +277,39 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const saved = readStored();
-    if (!saved) return;
-    setResult(saved.result);
-    setUrl(saved.url);
-    setSubject(saved.subject);
     if (resumed.current) return;
     resumed.current = true;
-    if (!stillRunning(saved.result) || !saved.result.job_id) {
-      const vid =
-        (saved.result.video_id || "").trim() ||
-        extractYoutubeId(saved.url) ||
-        "";
-      if (vid) lastDoneVideo.current = vid;
+
+    // Eski auto-resume kalıntısı: running kaydı + eski anahtarları temizle.
+    try {
+      if (!window.localStorage.getItem(CLEAR_STALE_FLAG)) {
+        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(STORAGE_KEY_LEGACY);
+        window.localStorage.setItem(CLEAR_STALE_FLAG, "1");
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const saved = readStored();
+    if (!saved) return;
+
+    // Sayfa açılışında asla poll / busy / wake yok.
+    if (stillRunning(saved.result) || !(saved.result.notes?.length || 0)) {
+      settleStored(saved);
       return;
     }
-    const token = ++job.current;
-    busyRef.current = true;
-    setBusy(true);
-    void pollUntilDone(saved.result.job_id, token, saved.url, saved.subject).finally(
-      () => {
-        if (token === job.current) {
-          busyRef.current = false;
-          setBusy(false);
-        }
-      },
-    );
-  }, [pollUntilDone]);
+
+    setResult(saved.result);
+    setUrl(saved.url || "");
+    setSubject(saved.subject || "");
+    const vid =
+      (saved.result.video_id || "").trim() ||
+      extractYoutubeId(saved.url) ||
+      "";
+    if (vid) lastDoneVideo.current = vid;
+  }, []);
 
   useEffect(() => {
     if (!busy) {
@@ -301,6 +370,7 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
 
       const token = ++job.current;
       const startedAt = Date.now();
+      activeJobId.current = "";
       busyRef.current = true;
       setBusy(true);
       if (!sameVideo) {
@@ -412,6 +482,45 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
     [pollUntilDone, refresh, remember, goNotebook, url, result],
   );
 
+  const cancelAnalyze = useCallback(() => {
+    if (!busyRef.current) return;
+    const jobId = activeJobId.current || result?.job_id || "";
+    job.current += 1;
+    activeJobId.current = "";
+    busyRef.current = false;
+    setBusy(false);
+    setElapsed(0);
+    setError("Analiz iptal edildi. Yeni linkle Analiz et.");
+    setResult((prev) => {
+      const hasNotes = (prev?.notes?.length || 0) > 0;
+      if (!prev || !hasNotes) {
+        try {
+          window.localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        return null;
+      }
+      const settled = {
+        ...prev,
+        job_id: undefined,
+        job_status: "done" as const,
+      };
+      writeStored({
+        result: settled,
+        url,
+        subject,
+        savedAt: Date.now(),
+      });
+      return settled;
+    });
+    if (jobId) {
+      void cancelAnalyzeJob(jobId).catch(() => {
+        /* istemci zaten durdu */
+      });
+    }
+  }, [result?.job_id, url, subject]);
+
   const value = useMemo(
     () => ({
       result,
@@ -423,8 +532,19 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
       panelOpen,
       setPanelOpen,
       startAnalyze,
+      cancelAnalyze,
     }),
-    [result, url, subject, busy, elapsed, error, panelOpen, startAnalyze],
+    [
+      result,
+      url,
+      subject,
+      busy,
+      elapsed,
+      error,
+      panelOpen,
+      startAnalyze,
+      cancelAnalyze,
+    ],
   );
 
   return (

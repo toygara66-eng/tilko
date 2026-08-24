@@ -28,6 +28,7 @@ export function Dashboard() {
     elapsed,
     error,
     startAnalyze,
+    cancelAnalyze,
   } = useAnalyze();
   const [url, setUrl] = useState("");
   const [subject, setSubject] = useState("Vatandaşlık");
@@ -100,8 +101,8 @@ export function Dashboard() {
           Ders analiz et
         </h1>
         <p className="max-w-xl text-zinc-600 dark:text-zinc-400">
-          YouTube linkini yapıştır. İlk 5 dakika hemen gelir; kalanı 5’er dakikalık
-          dilimler halinde kutuya eklenir.
+          YouTube linkini yapıştırıp Analiz et’e bas. Sayfa açılınca kendiliğinden
+          başlamaz; yanlış linkte Durdur’a basabilirsin.
           {profile.weakTopics.length
             ? ` Şimdi ${profile.weakTopics.join(", ")} tarafını hedefle.`
             : ""}
@@ -225,34 +226,37 @@ export function Dashboard() {
             />
             {outOfTrialCredits || outOfAdCredits ? (
               <ProUpgradeButton className="h-12" />
+            ) : busy ? (
+              <div className="flex min-w-0 gap-2">
+                <Button
+                  type="button"
+                  size="lg"
+                  disabled
+                  className="h-12 min-w-0 flex-1"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {elapsed
+                    ? `Arka planda… ${elapsed}s`
+                    : "Analiz ediliyor"}
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="outline"
+                  className="h-12 shrink-0 border-red-300 text-red-700 hover:border-red-500 hover:text-red-800 dark:border-red-800 dark:text-red-300"
+                  onClick={() => cancelAnalyze()}
+                >
+                  Durdur
+                </Button>
+              </div>
             ) : adTier ? (
-              <Button type="submit" size="lg" disabled={busy} className="h-12">
-                {busy ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {elapsed
-                      ? `Arka planda… ${elapsed}s`
-                      : "Analiz ediliyor"}
-                  </>
-                ) : (
-                  "İzle & Çevir (Reklamlı) 📺"
-                )}
+              <Button type="submit" size="lg" className="h-12">
+                İzle & Çevir (Reklamlı) 📺
               </Button>
             ) : (
-              <Button type="submit" size="lg" disabled={busy} className="h-12">
-                {busy ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {elapsed
-                      ? `Arka planda… ${elapsed}s`
-                      : "Analiz ediliyor"}
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    Analiz et
-                  </>
-                )}
+              <Button type="submit" size="lg" className="h-12">
+                <Sparkles className="h-4 w-4" />
+                Analiz et
               </Button>
             )}
           </div>
