@@ -39,9 +39,9 @@ CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-# Gemini yavaşsa Groq'a çabuk düş (2×50 sn bekleyip "gecikti" basma).
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(45.0, connect=12.0)
-GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(32.0, connect=10.0)
+# Analiz: Groq hızlı bitsin; Gemini yedek ve kısa kapı.
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(28.0, connect=8.0)
+GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(16.0, connect=8.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
@@ -729,8 +729,12 @@ def _gemini_native_completion(
     last: Exception | None = None
     models = _gemini_models_to_try()
     for index, name in enumerate(models):
-        # İlk deneme daha cömert; timeout sonrası daha düşük çıktı tavanı.
-        out_tokens = 3200 if index == 0 else 2200
+        # Analiz: kısa çıktı = daha az timeout.
+        task = usage_task.get() or ""
+        if task in ANALYZE_TASKS:
+            out_tokens = 1600
+        else:
+            out_tokens = 3200 if index == 0 else 2200
         generation = {
             "temperature": temperature,
             "maxOutputTokens": out_tokens,
@@ -825,16 +829,28 @@ def _normalize_groq_model(raw: str | None) -> str:
 def _shrink_prompts_for_provider(
     system_prompt: str, user_prompt: str
 ) -> tuple[str, str]:
-    """Groq 8K TPM: girdi+çıktı rezervasyonu sınırı aşıyor (413)."""
+    """Groq 8K TPM + genel analiz hızı: girdi tavanı."""
     name = (_active_name or settings.llm_provider or "").strip().lower()
-    if name != "groq":
-        return system_prompt, user_prompt
+    task = usage_task.get() or ""
     system = system_prompt
     user = user_prompt
+    # Analizde her sağlayıcıda kısa tut — timeout'un ana nedeni uzun prompt.
+    if task in ANALYZE_TASKS:
+        sys_cap, user_cap = (1800, 3200) if name == "groq" else (2400, 4200)
+        if len(system) > sys_cap:
+            system = system[:sys_cap] + "\n...(kısaltıldı)"
+        if len(user) > user_cap:
+            head = user[:700]
+            tail = user[-500:] if len(user) > 1200 else ""
+            mid_budget = user_cap - len(head) - len(tail) - 40
+            mid = user[700 : 700 + max(400, mid_budget)]
+            user = f"{head}\n{mid}\n...(altyazı kısaltıldı)\n{tail}".strip()
+        return system, user
+    if name != "groq":
+        return system_prompt, user_prompt
     if len(system) > 2500:
         system = system[:2500] + "\n...(kısaltıldı)"
     if len(user) > 4200:
-        # Altyazı bloğunu kısalt; şema talimatını korumaya çalış.
         head = user[:800]
         tail = user[-600:] if len(user) > 1400 else ""
         mid_budget = 4200 - len(head) - len(tail) - 40
@@ -1042,14 +1058,18 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _provider_chain() -> list[str]:
-    """Analiz: Gemini önce (kalite), sonra ucuz yedekler."""
+    """Analiz: önce hızlı yedekler (Groq/Cerebras), Gemini kalite için sonra."""
     preferred = (settings.llm_provider or "gemini").strip().lower()
-    base = ["gemini", "groq", "cerebras", "nebius"]
+    # Hız öncelikli sıra — "yavaş kaldı"yı kesmek için.
+    speed_first = ["groq", "cerebras", "gemini", "nebius"]
     if preferred == "openrouter":
-        return ["openrouter", "gemini", "groq", "cerebras", "nebius"]
-    if preferred in base:
-        return [preferred] + [name for name in base if name != preferred]
-    return list(base)
+        return ["openrouter", *speed_first]
+    if preferred == "ollama":
+        return ["ollama"]
+    # Gemini seçili olsa bile analizde Groq önce (timeout / kota dayanıklılığı).
+    if preferred in {"gemini", "groq", "cerebras", "nebius"}:
+        return list(speed_first)
+    return list(speed_first)
 
 
 def reset_analyze_provider_chain() -> None:
@@ -1180,11 +1200,11 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        # Groq free TPM ~8K; 4500 max_tokens rezervasyonu 413 verir.
+        # Groq free TPM ~8K; düşük max_tokens hem 413 hem süreyi keser.
         if (_active_name or settings.llm_provider or "").lower() == "groq":
-            kwargs["max_tokens"] = 1200
+            kwargs["max_tokens"] = 900
         else:
-            kwargs["max_tokens"] = 4500
+            kwargs["max_tokens"] = 1800
     model_id = str(model or "")
     if (
         json_mode
@@ -1261,6 +1281,12 @@ def _chat_openai_compatible(
     temperature: float,
 ) -> dict:
     """OpenAI, Gemini ve Hugging Face router'ı aynı arayüzü konuşur."""
+    task = usage_task.get() or ""
+    if task in ANALYZE_TASKS:
+        try:
+            _fast_analyze_client()  # _active_name + shrink doğru olsun
+        except Exception:
+            pass
     system_prompt, user_prompt = _shrink_prompts_for_provider(
         system_prompt, user_prompt
     )
@@ -1271,7 +1297,9 @@ def _chat_openai_compatible(
     free = str(_openrouter_fast_model() if _active_name == "openrouter" else "").endswith(
         ":free"
     )
-    use_json = (not free) and _active_name not in {"cerebras"}
+    active = (_active_name or settings.llm_provider or "").strip().lower()
+    # Groq/Cerebras: json_object + ikinci çağrı timeout üretir.
+    use_json = (not free) and active not in {"cerebras", "groq"}
     try:
         response = _openai_create(messages, temperature, json_mode=use_json)
     except Exception as exc:
@@ -1281,7 +1309,7 @@ def _chat_openai_compatible(
         if _oversized_request(str(exc)):
             # Bir kez daha agresif kısaltıp dene.
             system_prompt, user_prompt = _shrink_prompts_for_provider(
-                system_prompt[:1800], user_prompt[:2800]
+                system_prompt[:1400], user_prompt[:2400]
             )
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -1299,27 +1327,24 @@ def _chat_openai_compatible(
             response = _openai_create(messages, temperature, json_mode=False)
             use_json = False
     parsed = _extract_json(_message_text(response.choices[0].message) or "{}")
-    notes = _coerce_notes(parsed)
-    if use_json and not notes:
-        logger.warning("JSON modu boş şablon döndü, düz metinle tekrar.")
-        response = _openai_create(messages, temperature, json_mode=False)
-        parsed = _extract_json(_message_text(response.choices[0].message) or "{}")
+    # İkinci LLM çağrısı YASAK (timeout katlar); boşsa üst katman yumuşak not alır.
     return parsed
 
 
 def _throttle_groq() -> None:
-    """Ücretsiz katmanda 8K TPM var; çağrılar arasında yer açılmazsa 429 yağar."""
+    """Ücretsiz katmanda TPM var; analiz failover'da 45 sn bekletme."""
     if _active_name != "groq" and settings.llm_provider != "groq":
         return
     global _groq_next_ok
+    task = usage_task.get() or ""
+    gap = 4.0 if task in ANALYZE_TASKS else 45.0
     with _groq_gate:
         now = time.time()
         wait = _groq_next_ok - now
         if wait > 0:
             logger.info("Groq TPM aralığı: %.1f sn bekleniyor.", wait)
             time.sleep(wait)
-        # 8K TPM, ~5-6K jeton/istek → dakikada bir istek güvenli.
-        _groq_next_ok = time.time() + 45
+        _groq_next_ok = time.time() + gap
 
 
 def _chat(
@@ -1794,16 +1819,16 @@ def _analyze_combined(
 ) -> dict:
     from app.services.exams import prompt_block
 
-    count = max(3, min(int(question_count or 5), 6))
-    notes_wanted = max(6, min(int(note_count or 8), 10))
-    # Tek çağrıda zengin bağlam; Gemini timeout olmasın diye tavan ~9K.
-    hard_cap = max(5500, min(int(settings.analyze_prompt_chars), 9000))
+    count = max(3, min(int(question_count or 5), 5))
+    notes_wanted = max(5, min(int(note_count or 6), 7))
+    # Kısa altyazı = hızlı bitiş; Groq/Gemini timeout'u keser.
+    hard_cap = max(3500, min(int(settings.analyze_prompt_chars), 5000))
     work = (chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Kısa özet YASAK; her not 5-8 cümle, "
-        "tanım + istisna + sınav tuzağı + örnek. Sadece JSON; markdown yok.\n\n"
+        "not, şık veya açıklamaya yazma. Her not 4-6 cümle: tanım + istisna + "
+        "sınav tuzağı. Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,
@@ -1836,16 +1861,14 @@ def _analyze_combined(
         logger.warning("Birleşik analiz boş not; kısa ama zorunlu not denemesi.")
         # Önceki timeout zinciri kalmasın; kısa metinle yeniden dene.
         reset_analyze_provider_chain()
-        short = work[:4500]
+        short = work[:3200]
         result = _as_dict(
             _chat(
-                NOTES_SYSTEM_PROMPT
-                + "\nTürkçe sınav notu yaz. Sadece JSON. notes boş olamaz. "
-                "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça. "
-                "Her not en az 4 cümle. Tanıtım/PDF/abone YASAK.",
+                "Türkçe KPSS notu yaz. Sadece JSON. notes boş olamaz. "
+                "Altyazıda yoksa uydurma. Her not en az 3 cümle. Tanıtım YASAK.",
                 (
                     f"Ders: {subject or 'KPSS'}\nAltyazı:\n{short}\n\n"
-                    "En az 5 detaylı not yaz. Şema: "
+                    "En az 4 not yaz. Şema: "
                     '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
                 ),
