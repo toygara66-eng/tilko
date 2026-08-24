@@ -111,6 +111,7 @@ def _add_missing_columns() -> None:
             "password_hash": "VARCHAR(256) DEFAULT ''",
             "google_sub": "VARCHAR(64) DEFAULT ''",
             "email": "VARCHAR(256) DEFAULT ''",
+            "phone": "VARCHAR(32) DEFAULT ''",
             "created_at": "DATETIME",
             "daily_ad_rewarded_credits": "INTEGER DEFAULT 1",
             "last_credit_reset_date": "DATE",

@@ -1213,6 +1213,48 @@ export async function grantAdminCredits(
   return readJson<AdminCreditsGrant>(response);
 }
 
+export type AdminUserRow = {
+  user_id: string;
+  display_name: string;
+  email: string;
+  phone: string;
+  exam_target: string;
+  role: string;
+  is_premium: boolean;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  ai_credits_left: number;
+  created_at: string | null;
+  has_google: boolean;
+};
+
+export async function listAdminUsers(secret: string, q = "") {
+  const headers = await adminHeaders(secret);
+  const query = q.trim() ? `?q=${encodeURIComponent(q.trim())}&limit=150` : "?limit=150";
+  const response = await fetch(`${API_BASE}/admin/users${query}`, { headers });
+  return readJson<{ users: AdminUserRow[]; count: number }>(response);
+}
+
+export async function grantAdminPro(
+  secret: string,
+  payload: { user_id: string; days?: number; revoke?: boolean },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/users/grant-pro`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<{
+    ok: boolean;
+    user_id: string;
+    is_premium: boolean;
+    subscription_status: string;
+    subscription_expires_at: string | null;
+    message: string;
+  }>(response);
+}
+
 export type AuthSession = {
   access_token: string;
   token_type: string;
@@ -1223,10 +1265,13 @@ export type AuthSession = {
 };
 
 export function loginAccount(payload: {
-  user_id: string;
+  user_id?: string;
+  email?: string;
+  phone?: string;
   password: string;
   role?: string;
   display_name?: string;
+  exam_target?: string;
 }) {
   return request<AuthSession>("/auth/login", {
     method: "POST",
@@ -1238,6 +1283,7 @@ export function loginWithGoogle(payload: {
   id_token: string;
   role?: string;
   display_name?: string;
+  exam_target?: string;
   link_user_id?: string;
 }) {
   return request<AuthSession>("/auth/google", {
@@ -1247,10 +1293,13 @@ export function loginWithGoogle(payload: {
 }
 
 export function registerAccount(payload: {
-  user_id: string;
+  user_id?: string;
+  email?: string;
+  phone?: string;
   password: string;
   role?: string;
   display_name?: string;
+  exam_target?: string;
 }) {
   return request<AuthSession>("/auth/register", {
     method: "POST",

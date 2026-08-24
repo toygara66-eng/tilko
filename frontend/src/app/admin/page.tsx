@@ -10,10 +10,13 @@ import {
   feedOsymArchives,
   getRagStatus,
   grantAdminCredits,
+  grantAdminPro,
+  listAdminUsers,
   listExamSchedules,
   listPromos,
   updateExamSchedule,
   updateExamToday,
+  type AdminUserRow,
   type ArchiveFeedResult,
   type ExamScheduleItem,
   type PromoCoupon,
@@ -22,6 +25,17 @@ import {
 import { getUserId } from "@/lib/user";
 
 const SECRET_KEY = "tilko_admin_secret";
+
+function formatExpiry(raw: string | null) {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export default function AdminArchivePage() {
   const [secret, setSecret] = useState("");
@@ -35,15 +49,29 @@ export default function AdminArchivePage() {
   const [error, setError] = useState("");
   const [creditMsg, setCreditMsg] = useState("");
   const [myUserId, setMyUserId] = useState("");
-  const [tab, setTab] = useState<"archive" | "promo" | "calendar" | "credits">(
-    "credits",
-  );
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [userQuery, setUserQuery] = useState("");
+  const [proDays, setProDays] = useState(31);
+  const [tab, setTab] = useState<
+    "archive" | "promo" | "calendar" | "credits" | "users"
+  >("users");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SECRET_KEY) || "";
     if (stored) setSecret(stored);
     setMyUserId(getUserId());
   }, []);
+
+  async function loadUsers(query = userQuery) {
+    setError("");
+    try {
+      window.localStorage.setItem(SECRET_KEY, secret);
+      const data = await listAdminUsers(secret, query);
+      setUsers(data.users);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kullanıcılar alınamadı");
+    }
+  }
 
   async function loadStatus() {
     setError("");
@@ -105,9 +133,10 @@ export default function AdminArchivePage() {
           Anahtar kayıtlıysa YouTube analizi kredi düşürmez.
         </p>
       </section>
-      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-5 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
+            ["users", "Kullanıcılar"],
             ["credits", "Krediler"],
             ["calendar", "Sınav takvimi"],
             ["archive", "Arşiv"],
@@ -117,7 +146,10 @@ export default function AdminArchivePage() {
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => {
+              setTab(id);
+              if (id === "users" && secret.trim()) void loadUsers();
+            }}
             className={
               tab === id
                 ? "rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-zinc-950"
@@ -128,6 +160,180 @@ export default function AdminArchivePage() {
           </button>
         ))}
       </div>
+
+      {tab === "users" ? (
+        <section className="space-y-4 rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+              Kayıtlı kullanıcılar
+            </h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Ad, e-posta, telefon, sınav hedefi, Pro durumu ve bitiş tarihi.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={userQuery}
+              onChange={(event) => setUserQuery(event.target.value)}
+              placeholder="Ara: ad, e-posta, telefon…"
+              className="min-w-[200px] flex-1"
+            />
+            <Input
+              type="number"
+              min={1}
+              max={3650}
+              value={proDays}
+              onChange={(event) => setProDays(Number(event.target.value) || 31)}
+              className="w-24"
+              title="Pro gün"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!secret.trim() || busy}
+              onClick={() => void loadUsers()}
+            >
+              Yenile
+            </Button>
+          </div>
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+          {creditMsg ? (
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">{creditMsg}</p>
+          ) : null}
+          <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-zinc-50 text-[10px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
+                <tr>
+                  <th className="px-3 py-2">Kişi</th>
+                  <th className="px-3 py-2">İletişim</th>
+                  <th className="px-3 py-2">Sınav</th>
+                  <th className="px-3 py-2">Pro</th>
+                  <th className="px-3 py-2">İşlem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                      Liste boş. Anahtarı yazıp Yenile’ye bas.
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((row) => (
+                    <tr
+                      key={row.user_id}
+                      className="border-t border-zinc-100 dark:border-zinc-800"
+                    >
+                      <td className="px-3 py-2 align-top">
+                        <p className="font-medium text-zinc-900 dark:text-white">
+                          {row.display_name || "—"}
+                        </p>
+                        <p className="font-mono text-[10px] text-zinc-500">
+                          {row.user_id}
+                        </p>
+                        <p className="text-[10px] text-zinc-400">
+                          {formatExpiry(row.created_at)} · {row.role}
+                          {row.has_google ? " · Google" : ""}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 align-top text-zinc-600 dark:text-zinc-300">
+                        <p>{row.email || "—"}</p>
+                        <p>{row.phone || "—"}</p>
+                      </td>
+                      <td className="px-3 py-2 align-top">{row.exam_target || "—"}</td>
+                      <td className="px-3 py-2 align-top">
+                        <p
+                          className={
+                            row.is_premium
+                              ? "font-semibold text-emerald-600"
+                              : "text-zinc-500"
+                          }
+                        >
+                          {row.is_premium ? "Pro var" : "Yok"}
+                        </p>
+                        <p className="text-[10px] text-zinc-500">
+                          {row.subscription_status || "—"}
+                        </p>
+                        <p className="text-[10px] text-zinc-500">
+                          Bitiş: {formatExpiry(row.subscription_expires_at)}
+                        </p>
+                        <p className="text-[10px] text-zinc-400">
+                          Kredi: {row.ai_credits_left}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={busy || !secret.trim()}
+                            onClick={() => {
+                              void (async () => {
+                                setBusy(true);
+                                setError("");
+                                setCreditMsg("");
+                                try {
+                                  const data = await grantAdminPro(secret, {
+                                    user_id: row.user_id,
+                                    days: proDays,
+                                  });
+                                  setCreditMsg(data.message);
+                                  await loadUsers();
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Pro verilemedi",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Pro ver
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || !secret.trim()}
+                            onClick={() => {
+                              void (async () => {
+                                setBusy(true);
+                                setError("");
+                                setCreditMsg("");
+                                try {
+                                  const data = await grantAdminPro(secret, {
+                                    user_id: row.user_id,
+                                    revoke: true,
+                                  });
+                                  setCreditMsg(data.message);
+                                  await loadUsers();
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Pro kaldırılamadı",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Pro kaldır
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {tab === "credits" ? (
         <section className="rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">

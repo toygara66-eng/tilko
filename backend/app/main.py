@@ -66,6 +66,10 @@ from app.models.schemas import (
     AuthRequest,
     AuthResponse,
     GoogleAuthRequest,
+    AdminUserListResponse,
+    AdminUserRow,
+    AdminGrantProRequest,
+    AdminGrantProResponse,
     SubscriptionVerifyRequest,
     SubscriptionStatusResponse,
     PromoCreateRequest,
@@ -255,6 +259,9 @@ def auth_register(
             payload.password,
             role=payload.role,
             display_name=payload.display_name,
+            email=payload.email,
+            phone=payload.phone,
+            exam_target=payload.exam_target,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -274,6 +281,8 @@ def auth_login(
             payload.password,
             role=payload.role,
             display_name=payload.display_name,
+            email=payload.email,
+            phone=payload.phone,
         )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
@@ -291,6 +300,7 @@ def auth_google(
             payload.id_token,
             role=payload.role,
             display_name=payload.display_name,
+            exam_target=payload.exam_target,
             link_user_id=payload.link_user_id,
         )
     except ValueError as exc:
@@ -923,6 +933,109 @@ def admin_credits_grant(
             if view["is_premium"]
             else f"Kredi: {view['ai_credits_left']}/{view['ai_credit_limit']}"
         ),
+    )
+
+
+def _iso_dt(value) -> str | None:
+    if value is None:
+        return None
+    try:
+        return value.isoformat()
+    except Exception:  # noqa: BLE001
+        return str(value)
+
+
+@app.get("/admin/users", response_model=AdminUserListResponse)
+def admin_users_list(
+    q: str = "",
+    limit: int = 100,
+    db: Session = Depends(get_db),
+) -> AdminUserListResponse:
+    from sqlalchemy import or_, select
+
+    from app.database.models import User
+    from app.services import billing as billing_service
+
+    cap = max(1, min(int(limit or 100), 300))
+    needle = (q or "").strip().lower()
+    stmt = select(User).order_by(User.created_at.desc()).limit(cap)
+    if needle:
+        like = f"%{needle}%"
+        stmt = (
+            select(User)
+            .where(
+                or_(
+                    User.user_id.ilike(like),
+                    User.email.ilike(like),
+                    User.phone.ilike(like),
+                    User.display_name.ilike(like),
+                )
+            )
+            .order_by(User.created_at.desc())
+            .limit(cap)
+        )
+    rows = list(db.scalars(stmt).all())
+    users: list[AdminUserRow] = []
+    for user in rows:
+        billing_service.refresh_entitlement(db, user)
+        users.append(
+            AdminUserRow(
+                user_id=user.user_id,
+                display_name=(user.display_name or "").strip(),
+                email=(user.email or "").strip(),
+                phone=(user.phone or "").strip(),
+                exam_target=(user.exam_target or "").strip(),
+                role=(user.role or "student").strip() or "student",
+                is_premium=bool(user.is_premium),
+                subscription_status=(user.subscription_status or "").strip(),
+                subscription_expires_at=_iso_dt(user.subscription_expires_at),
+                ai_credits_left=int(user.ai_credits_left or 0),
+                created_at=_iso_dt(user.created_at),
+                has_google=bool((user.google_sub or "").strip()),
+            )
+        )
+    return AdminUserListResponse(users=users, count=len(users))
+
+
+@app.post("/admin/users/grant-pro", response_model=AdminGrantProResponse)
+def admin_users_grant_pro(
+    payload: AdminGrantProRequest, db: Session = Depends(get_db)
+) -> AdminGrantProResponse:
+    from app.services import billing as billing_service
+    from app.services.penalty import get_or_create_user
+
+    uid = (payload.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="user_id gerekli.")
+    user = get_or_create_user(db, uid)
+    billing_service.refresh_entitlement(db, user)
+    if payload.revoke:
+        user.is_premium = False
+        user.subscription_status = "admin_revoked"
+        user.subscription_expires_at = None
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return AdminGrantProResponse(
+            ok=True,
+            user_id=uid,
+            is_premium=False,
+            subscription_status=user.subscription_status or "",
+            subscription_expires_at=None,
+            message="Pro kaldırıldı.",
+        )
+    billing_service.grant_pro_subscription(db, user, days=int(payload.days or 31))
+    user.subscription_status = "admin"
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return AdminGrantProResponse(
+        ok=True,
+        user_id=uid,
+        is_premium=bool(user.is_premium),
+        subscription_status=user.subscription_status or "",
+        subscription_expires_at=_iso_dt(user.subscription_expires_at),
+        message=f"Pro verildi ({payload.days} gün).",
     )
 
 

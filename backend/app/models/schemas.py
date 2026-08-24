@@ -659,16 +659,22 @@ class MotivationalQuoteResponse(BaseModel):
 
 
 class AuthRequest(BaseModel):
-    user_id: str = Field(..., min_length=3, max_length=64)
+    """Giriş/kayıt: user_id veya email veya telefon + şifre."""
+
+    user_id: str = Field(default="", max_length=64)
+    email: str = Field(default="", max_length=256)
+    phone: str = Field(default="", max_length=32)
     password: str = Field(..., min_length=8, max_length=128)
     role: str = ""
     display_name: str = Field(default="", max_length=64)
+    exam_target: str = Field(default="", max_length=32)
 
 
 class GoogleAuthRequest(BaseModel):
     id_token: str = Field(..., min_length=20, max_length=8192)
     role: str = ""
     display_name: str = Field(default="", max_length=64)
+    exam_target: str = Field(default="", max_length=32)
     link_user_id: str = Field(
         default="",
         max_length=128,
@@ -683,6 +689,41 @@ class AuthResponse(BaseModel):
     role: str = "student"
     display_name: str = ""
     dashboard: str = "/"
+
+
+class AdminUserRow(BaseModel):
+    user_id: str
+    display_name: str = ""
+    email: str = ""
+    phone: str = ""
+    exam_target: str = ""
+    role: str = "student"
+    is_premium: bool = False
+    subscription_status: str = ""
+    subscription_expires_at: str | None = None
+    ai_credits_left: int = 0
+    created_at: str | None = None
+    has_google: bool = False
+
+
+class AdminUserListResponse(BaseModel):
+    users: list[AdminUserRow] = Field(default_factory=list)
+    count: int = 0
+
+
+class AdminGrantProRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    days: int = Field(default=31, ge=1, le=3650)
+    revoke: bool = False
+
+
+class AdminGrantProResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    is_premium: bool = False
+    subscription_status: str = ""
+    subscription_expires_at: str | None = None
+    message: str = ""
 
 
 class SubscriptionPlan(BaseModel):

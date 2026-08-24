@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ import jwt
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from passlib.context import CryptContext
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -17,6 +19,7 @@ from app.services.penalty import get_or_create_user
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 USER_RE = re.compile(r"^[A-Za-z0-9_\-.]{3,64}$")
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 PUBLIC_PATHS = {
     "/",
     "/health",
@@ -31,6 +34,15 @@ PUBLIC_PATHS = {
 }
 PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi", "/captions")
 ALGORITHM = "HS256"
+VALID_EXAMS = {
+    "kpss_lisans",
+    "kpss_onlisans",
+    "kpss_ortaogretim",
+    "yks",
+    "oabt",
+    "lgs",
+    "other",
+}
 
 
 def hash_password(plain: str) -> str:
@@ -117,11 +129,59 @@ def actor(request: Request) -> str:
     return uid
 
 
+def normalize_email(raw: str) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return ""
+    if not EMAIL_RE.match(value) or len(value) > 256:
+        raise ValueError("Geçerli bir e-posta adresi gir.")
+    return value
+
+
+def normalize_phone(raw: str) -> str:
+    digits = re.sub(r"\D+", "", (raw or "").strip())
+    if not digits:
+        return ""
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = "90" + digits[1:]
+    elif len(digits) == 10 and digits.startswith("5"):
+        digits = "90" + digits
+    elif len(digits) == 12 and digits.startswith("90"):
+        pass
+    else:
+        raise ValueError("Telefon 05xx… veya +90 5xx… formatında olmalı.")
+    if not (len(digits) == 12 and digits.startswith("905")):
+        raise ValueError("Türkiye cep telefonu numarası gir (05xx…).")
+    return digits
+
+
 def _normalize_user_id(raw: str) -> str:
     value = (raw or "").strip()
     if not USER_RE.match(value):
         raise ValueError("Kullanıcı adı 3-64 karakter, harf/rakam olmalı.")
     return value
+
+
+def _normalize_exam(raw: str) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return ""
+    if value not in VALID_EXAMS:
+        raise ValueError("Sınav hedefi geçersiz (KPSS / YKS / ÖABT / LGS).")
+    return value
+
+
+def _uid_from_email(email: str) -> str:
+    local = re.sub(r"[^a-z0-9]", "", email.split("@", 1)[0].lower())[:18] or "mail"
+    digest = hashlib.sha256(email.encode("utf-8")).hexdigest()[:8]
+    uid = f"{local}_{digest}"
+    return uid[:64]
+
+
+def _uid_from_phone(phone: str) -> str:
+    return f"p_{phone}"[:64]
 
 
 def _auth_view(db: Session, user) -> dict:
@@ -146,36 +206,109 @@ def _stamp_teacher(user, display_name: str) -> None:
         user.display_name = display_name[:64]
 
 
+def _apply_exam(user, exam_target: str) -> None:
+    exam = _normalize_exam(exam_target)
+    if not exam:
+        return
+    user.exam_target = exam
+    user.is_onboarded = True
+
+
+def find_user_by_login(db: Session, identifier: str):
+    from app.database.models import User
+
+    raw = (identifier or "").strip()
+    if not raw:
+        return None
+    if USER_RE.match(raw):
+        user = db.get(User, raw)
+        if user is not None:
+            return user
+    try:
+        email = normalize_email(raw) if "@" in raw else ""
+    except ValueError:
+        email = ""
+    if email:
+        user = db.scalars(select(User).where(User.email == email)).first()
+        if user is not None:
+            return user
+    try:
+        phone = normalize_phone(raw)
+    except ValueError:
+        phone = ""
+    if phone:
+        return db.scalars(select(User).where(User.phone == phone)).first()
+    return None
+
+
 def register_user(
     db: Session,
-    user_id: str,
-    password: str,
+    user_id: str = "",
+    password: str = "",
     role: str = "student",
     display_name: str = "",
+    *,
+    email: str = "",
+    phone: str = "",
+    exam_target: str = "",
 ) -> dict:
     from app.database.models import User
     from app.services.teacher import normalize_role, set_display_name
 
-    uid = _normalize_user_id(user_id)
     intended = normalize_role(role, default="student")
     if intended == "teacher" and settings.is_production:
         raise ValueError("Hoca hesabı buradan açılamaz.")
+
+    name = (display_name or "").strip()
+    if intended == "student" and len(name) < 2:
+        raise ValueError("Ad soyad gerekli.")
+
+    mail = normalize_email(email) if (email or "").strip() else ""
+    tel = normalize_phone(phone) if (phone or "").strip() else ""
+    uid_raw = (user_id or "").strip()
+
+    if not mail and not tel and not uid_raw:
+        raise ValueError("E-posta, telefon veya kullanıcı adı gerekli.")
+
+    if mail:
+        clash = db.scalars(select(User).where(User.email == mail)).first()
+        if clash is not None and (clash.password_hash or "").strip():
+            raise ValueError("Bu e-posta zaten kayıtlı. Giriş yap.")
+    if tel:
+        clash = db.scalars(select(User).where(User.phone == tel)).first()
+        if clash is not None and (clash.password_hash or "").strip():
+            raise ValueError("Bu telefon zaten kayıtlı. Giriş yap.")
+
+    if uid_raw:
+        uid = _normalize_user_id(uid_raw)
+    elif mail:
+        uid = _uid_from_email(mail)
+    else:
+        uid = _uid_from_phone(tel)
+
     existing = db.get(User, uid)
     if existing is not None and (existing.password_hash or "").strip():
         raise ValueError("Bu kullanıcı zaten kayıtlı. Giriş yap.")
+
     hashed = hash_password(password)
-    user = get_or_create_user(db, uid)
+    user = existing or get_or_create_user(db, uid)
     user.password_hash = hashed
+    if mail:
+        user.email = mail
+    if tel:
+        user.phone = tel
     if intended == "teacher":
-        _stamp_teacher(user, (display_name or "").strip())
+        _stamp_teacher(user, name)
     else:
         user.role = "student"
-        if (display_name or "").strip():
-            user.display_name = display_name.strip()[:64]
+        user.display_name = name[:64]
+        _apply_exam(user, exam_target)
+        if not (user.exam_target or "").strip():
+            raise ValueError("KPSS / YKS / sınav hedefi seç.")
     db.add(user)
     db.commit()
-    if (display_name or "").strip():
-        set_display_name(db, uid, display_name)
+    if name:
+        set_display_name(db, uid, name)
         db.commit()
     db.refresh(user)
     return _auth_view(db, user)
@@ -183,19 +316,27 @@ def register_user(
 
 def login_user(
     db: Session,
-    user_id: str,
-    password: str,
+    user_id: str = "",
+    password: str = "",
     role: str = "",
     display_name: str = "",
+    *,
+    email: str = "",
+    phone: str = "",
 ) -> dict:
-    from app.database.models import User
     from app.services.teacher import normalize_role, set_display_name
 
-    uid = _normalize_user_id(user_id)
-    user = db.get(User, uid)
+    identifier = (
+        (email or "").strip()
+        or (phone or "").strip()
+        or (user_id or "").strip()
+    )
+    if not identifier:
+        raise ValueError("E-posta, telefon veya kullanıcı adı gerekli.")
+    user = find_user_by_login(db, identifier)
     stored = (getattr(user, "password_hash", None) or "").strip() if user else ""
     if user is None or not stored or not verify_password(password, stored):
-        raise ValueError("Kullanıcı adı veya şifre hatalı.")
+        raise ValueError("E-posta/telefon veya şifre hatalı.")
     intended = (role or "").strip().lower()
     actual = normalize_role(getattr(user, "role", "") or "student")
     if intended == "teacher" and actual not in {"teacher", "admin"}:
@@ -203,7 +344,7 @@ def login_user(
     if intended == "student" and actual in {"teacher", "admin"}:
         raise ValueError("Bu bir hoca hesabı. Hoca Girişi ile devam et.")
     if intended == "teacher" and actual in {"teacher", "admin"} and (display_name or "").strip():
-        set_display_name(db, uid, display_name)
+        set_display_name(db, user.user_id, display_name)
         db.commit()
         db.refresh(user)
     return _auth_view(db, user)
@@ -239,7 +380,6 @@ def verify_google_id_token(id_token: str) -> dict:
     if aud not in audiences:
         raise ValueError("Google istemci kimliği uyuşmuyor.")
     if str(data.get("email_verified") or "").lower() not in {"true", "1"}:
-        # Bazı Android tokenlerinde alan yok; email varsa doğrulanmış say.
         if not data.get("email"):
             raise ValueError("Google e-posta doğrulanmamış.")
     sub = str(data.get("sub") or "").strip()
@@ -254,16 +394,15 @@ def login_with_google(
     *,
     role: str = "",
     display_name: str = "",
+    exam_target: str = "",
     link_user_id: str = "",
 ) -> dict:
-    from sqlalchemy import select
-
     from app.database.models import User
     from app.services.teacher import normalize_role, set_display_name
 
     claims = verify_google_id_token(id_token)
     sub = str(claims.get("sub") or "").strip()
-    email = str(claims.get("email") or "").strip()[:256]
+    email = str(claims.get("email") or "").strip()[:256].lower()
     name = (display_name or claims.get("name") or "").strip()[:64]
     intended = normalize_role(role, default="student")
     if intended == "teacher" and settings.is_production:
@@ -292,8 +431,9 @@ def login_with_google(
         _stamp_teacher(user, name)
     elif not (getattr(user, "role", "") or "").strip() or user.role == "student":
         user.role = "student"
-    if name and not (user.display_name or "").strip():
+    if name:
         user.display_name = name
+    _apply_exam(user, exam_target)
     db.add(user)
     db.commit()
     if name:
@@ -324,7 +464,11 @@ async def jwt_guard(request: Request, call_next):
     if request.url.path == "/subscription/verify" and play_webhook_ok(request):
         request.state.play_webhook = True
         return await call_next(request)
-    if request.url.path.startswith("/admin/") or request.url.path.startswith("/bulletin") or request.url.path == "/api/prizes/settle":
+    if (
+        request.url.path.startswith("/admin/")
+        or request.url.path.startswith("/bulletin")
+        or request.url.path == "/api/prizes/settle"
+    ):
         if not admin_ok(request):
             return auth_error(401, "Admin anahtarı geçersiz.")
         request.state.admin = True
