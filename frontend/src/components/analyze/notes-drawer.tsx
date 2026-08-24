@@ -124,6 +124,21 @@ export function NotesPanel() {
 
             {tab === "notes" && result && noteCount > 0 ? (
               <div className="protect-copy space-y-6">
+                <div className="rounded-xl border border-orange-300/50 bg-orange-50/70 px-3 py-3 text-sm dark:border-orange-500/30 dark:bg-orange-950/30">
+                  <p className="font-medium text-orange-900 dark:text-orange-100">
+                    Notlar kaydedildi
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    Notlarım → {subject || "ders"} klasöründe bu sete isim verip PDF
+                    indirebilirsin.
+                  </p>
+                  <Link
+                    href="/notlarim"
+                    className="mt-2 inline-flex text-sm font-semibold text-orange-700 dark:text-orange-300"
+                  >
+                    Notlarım’da isim ver →
+                  </Link>
+                </div>
                 {url ? (
                   <a
                     href={url}

@@ -113,6 +113,8 @@ class AnalyzeResponse(BaseModel):
 class SavedNoteItem(NoteItem):
     saved_id: int = 0
     subject: str = ""
+    video_id: str = ""
+    session_label: str = ""
     video_url: str = ""
     created_at: str | None = None
 
@@ -120,6 +122,8 @@ class SavedNoteItem(NoteItem):
 class SavedQuestionItem(QuestionItem):
     saved_id: int = 0
     subject: str = ""
+    video_id: str = ""
+    session_label: str = ""
     video_url: str = ""
     created_at: str | None = None
     teacher_persona: TeacherPersona = Field(default_factory=TeacherPersona)
@@ -131,12 +135,33 @@ class NotebookSubjectCount(BaseModel):
     question_count: int = 0
 
 
+class NotebookSessionItem(BaseModel):
+    id: int = 0
+    subject: str = ""
+    video_id: str = ""
+    video_url: str = ""
+    label: str = ""
+    note_count: int = 0
+    question_count: int = 0
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 class NotebookResponse(BaseModel):
     user_id: str
     subject: str | None = None
     subjects: list[NotebookSubjectCount] = Field(default_factory=list)
+    sessions: list[NotebookSessionItem] = Field(default_factory=list)
     notes: list[SavedNoteItem] = Field(default_factory=list)
     questions: list[SavedQuestionItem] = Field(default_factory=list)
+
+
+class RenameNotebookSessionRequest(BaseModel):
+    user_id: str
+    subject: str
+    video_id: str
+    label: str = Field(..., min_length=2, max_length=160)
+    video_url: str = ""
 
 
 class CompleteTrapRequest(BaseModel):

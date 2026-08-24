@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     region: frankfurt
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: pip install -r backend/requirements.txt && (apt-get update && apt-get install -y fonts-dejavu-core || true)
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend --proxy-headers --forwarded-allow-ips '*'
     healthCheckPath: /health
     envVars:

@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Download, Pencil } from "lucide-react";
 import { HumanNoteCard } from "@/components/notes/human-note-card";
 import { NoteModeToggle } from "@/components/notes/note-mode";
 import { QuestionCard } from "@/components/analyze/question-card";
 import { fromNoteItem } from "@/lib/note-format";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
+  downloadNotebookPdf,
   listNotebook,
+  renameNotebookSession,
   type NotebookResponse,
+  type NotebookSessionItem,
   type SavedNoteItem,
   type SavedQuestionItem,
 } from "@/lib/api";
@@ -18,107 +22,19 @@ import { subjectsFor } from "@/lib/exams";
 import { useProfile } from "@/components/profile/profile-context";
 import { cn } from "@/lib/utils";
 
-type DayBucket<T> = {
-  key: string;
-  label: string;
-  items: T[];
-};
-
-function parseCreated(iso: string | null | undefined): Date | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function dayKeyFromIso(iso: string | null | undefined): string {
-  const d = parseCreated(iso);
-  if (!d) return "bilinmiyor";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function formatDayLabel(key: string): string {
-  if (key === "bilinmiyor") return "Tarihsiz";
-  const d = new Date(`${key}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return key;
-  return d.toLocaleDateString("tr-TR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatClock(iso: string | null | undefined): string {
-  const d = parseCreated(iso);
-  if (!d) return "";
-  return d.toLocaleTimeString("tr-TR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function groupByDay<T extends { created_at?: string | null }>(
-  items: T[],
-): DayBucket<T>[] {
-  const map = new Map<string, T[]>();
-  for (const item of items) {
-    const key = dayKeyFromIso(item.created_at);
-    const bag = map.get(key) || [];
-    bag.push(item);
-    map.set(key, bag);
-  }
-  const keys = [...map.keys()].sort((a, b) => {
-    if (a === "bilinmiyor") return 1;
-    if (b === "bilinmiyor") return -1;
-    return b.localeCompare(a);
-  });
-  return keys.map((key) => {
-    const bag = map.get(key) || [];
-    bag.sort((a, b) => {
-      const ta = parseCreated(a.created_at)?.getTime() ?? 0;
-      const tb = parseCreated(b.created_at)?.getTime() ?? 0;
-      return ta - tb;
-    });
-    return { key, label: formatDayLabel(key), items: bag };
-  });
-}
-
-function groupByHour<T extends { created_at?: string | null }>(
-  items: T[],
-): { label: string; items: T[] }[] {
-  const map = new Map<string, T[]>();
-  for (const item of items) {
-    const d = parseCreated(item.created_at);
-    const hourLabel = d
-      ? `${String(d.getHours()).padStart(2, "0")}:00`
-      : "Saat yok";
-    const bag = map.get(hourLabel) || [];
-    bag.push(item);
-    map.set(hourLabel, bag);
-  }
-  const keys = [...map.keys()].sort((a, b) => {
-    if (a === "Saat yok") return 1;
-    if (b === "Saat yok") return -1;
-    return a.localeCompare(b);
-  });
-  return keys.map((key) => ({
-    label: key === "Saat yok" ? key : `${key} civarı`,
-    items: map.get(key) || [],
-  }));
-}
-
 export function MyNotes() {
   const { profile } = useProfile();
   const examSubjects = subjectsFor(profile.examTarget || "kpss_lisans");
   const [subject, setSubject] = useState<string | null>(null);
-  const [dayKey, setDayKey] = useState<string | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
   const [tab, setTab] = useState<"notes" | "questions">("notes");
   const [data, setData] = useState<NotebookResponse | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const chips = useMemo(() => {
     const counts = new Map(
@@ -134,6 +50,17 @@ export function MyNotes() {
       (name) => counts.get(name) || { name, note_count: 0, question_count: 0 },
     );
   }, [data, examSubjects]);
+
+  const sessions = useMemo(() => {
+    const list = data?.sessions || [];
+    if (!subject) return list;
+    return list.filter((s) => s.subject === subject);
+  }, [data, subject]);
+
+  const activeSession = useMemo(
+    () => sessions.find((s) => s.video_id === videoId) || null,
+    [sessions, videoId],
+  );
 
   useEffect(() => {
     let live = true;
@@ -167,26 +94,29 @@ export function MyNotes() {
     };
   }, [subject]);
 
-  const notes = (subject ? data?.notes : []) || [];
-  const questions = (subject ? data?.questions : []) || [];
-  const noteDays = useMemo(() => groupByDay(notes), [notes]);
-  const questionDays = useMemo(() => groupByDay(questions), [questions]);
-  const activeDays = tab === "notes" ? noteDays : questionDays;
-  const dayBucket = dayKey
-    ? activeDays.find((d) => d.key === dayKey) || null
-    : null;
+  const notes = useMemo(() => {
+    const all = (subject ? data?.notes : []) || [];
+    if (!videoId) return all;
+    return all.filter((n) => (n.video_id || "") === videoId);
+  }, [data, subject, videoId]);
+
+  const questions = useMemo(() => {
+    const all = (subject ? data?.questions : []) || [];
+    if (!videoId) return all;
+    return all.filter((q) => (q.video_id || "") === videoId);
+  }, [data, subject, videoId]);
 
   const pickSubject = (name: string) => {
     setSubject(name);
-    setDayKey(null);
+    setVideoId(null);
   };
 
   const backToSubjects = () => {
     setSubject(null);
-    setDayKey(null);
+    setVideoId(null);
   };
 
-  const backToDays = () => setDayKey(null);
+  const backToSessions = () => setVideoId(null);
 
   const emptyArchive =
     !busy &&
@@ -196,9 +126,48 @@ export function MyNotes() {
   const emptySubject =
     !busy &&
     !!subject &&
-    !dayKey &&
+    !videoId &&
+    sessions.length === 0 &&
     notes.length === 0 &&
     questions.length === 0;
+
+  async function saveRename() {
+    if (!subject || !videoId || renameValue.trim().length < 2) return;
+    setRenameBusy(true);
+    try {
+      await renameNotebookSession({
+        user_id: getUserId(),
+        subject,
+        video_id: videoId,
+        label: renameValue.trim(),
+        video_url: activeSession?.video_url || notes[0]?.video_url || "",
+      });
+      setRenameOpen(false);
+      const payload = await listNotebook(getUserId(), subject);
+      setData(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İsim kaydedilemedi");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  async function exportPdf() {
+    if (!subject || !videoId) return;
+    setPdfBusy(true);
+    try {
+      await downloadNotebookPdf({
+        userId: getUserId(),
+        subject,
+        videoId,
+        filename: activeSession?.label || subject,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PDF indirilemedi");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -208,8 +177,8 @@ export function MyNotes() {
             Notlarım
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">
-            Ders seç → tarihi aç → o gün çıkarılan notlar saate göre sıralı durur.
-            Analiz sayfasında yalnızca o anki video görünür.
+            Ders seç → not setine isim ver → PDF indir. Örn: “Türkçe · Aker Kartal
+            ekler konu anlatımı”.
           </p>
         </div>
         <NoteModeToggle className="self-start" />
@@ -226,18 +195,18 @@ export function MyNotes() {
             Dersler
           </button>
           <span className="text-zinc-400">/</span>
-          {dayKey ? (
+          {videoId ? (
             <>
               <button
                 type="button"
-                onClick={backToDays}
+                onClick={backToSessions}
                 className="rounded-lg px-2 py-1 font-medium text-amber-800 hover:bg-orange-50 dark:text-amber-100 dark:hover:bg-zinc-800"
               >
                 {subject}
               </button>
               <span className="text-zinc-400">/</span>
-              <span className="rounded-lg px-2 py-1 font-medium text-zinc-900 dark:text-zinc-100">
-                {formatDayLabel(dayKey)}
+              <span className="max-w-[14rem] truncate rounded-lg px-2 py-1 font-medium text-zinc-900 dark:text-zinc-100 sm:max-w-xs">
+                {activeSession?.label || "Not seti"}
               </span>
             </>
           ) : (
@@ -275,15 +244,107 @@ export function MyNotes() {
         </div>
       ) : null}
 
-      {subject && !dayKey ? (
-        <>
+      {subject && !videoId ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Not setleri
+          </p>
+          {sessions.length ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {sessions.map((session) => (
+                <SessionCard
+                  key={`${session.subject}-${session.video_id}`}
+                  session={session}
+                  onOpen={() => setVideoId(session.video_id)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {subject && videoId ? (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-orange-300/50 bg-orange-50/60 p-4 dark:border-orange-500/30 dark:bg-orange-950/20 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-orange-700 dark:text-orange-300">
+                {subject}
+              </p>
+              <h2 className="truncate text-lg font-semibold text-zinc-900 dark:text-white">
+                {activeSession?.label || "İsimsiz not seti"}
+              </h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                {notes.length} not · {questions.length} soru
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10"
+                onClick={() => {
+                  setRenameValue(activeSession?.label || "");
+                  setRenameOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+                İsim ver
+              </Button>
+              <Button
+                type="button"
+                className="h-10"
+                disabled={pdfBusy || notes.length === 0}
+                onClick={() => void exportPdf()}
+              >
+                <Download className="h-4 w-4" />
+                {pdfBusy ? "Hazırlanıyor…" : "PDF indir"}
+              </Button>
+            </div>
+          </div>
+
+          {renameOpen ? (
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                Bu sete bir isim ver
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Örn: Aker Kartal ekler konu anlatımı
+              </p>
+              <Input
+                className="mt-3"
+                value={renameValue}
+                maxLength={160}
+                placeholder={`${subject} · konu anlatımı`}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveRename();
+                }}
+              />
+              <div className="mt-3 flex gap-2">
+                <Button
+                  type="button"
+                  className="h-10"
+                  disabled={renameBusy || renameValue.trim().length < 2}
+                  onClick={() => void saveRename()}
+                >
+                  {renameBusy ? "Kaydediliyor…" : "Kaydet"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10"
+                  onClick={() => setRenameOpen(false)}
+                >
+                  Vazgeç
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex gap-1">
             <button
               type="button"
-              onClick={() => {
-                setTab("notes");
-                setDayKey(null);
-              }}
+              onClick={() => setTab("notes")}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-medium",
                 tab === "notes"
@@ -295,10 +356,7 @@ export function MyNotes() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setTab("questions");
-                setDayKey(null);
-              }}
+              onClick={() => setTab("questions")}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-medium",
                 tab === "questions"
@@ -310,31 +368,12 @@ export function MyNotes() {
             </button>
           </div>
 
-          {activeDays.length ? (
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Tarihler
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {activeDays.map((day) => (
-                  <button
-                    key={day.key}
-                    type="button"
-                    onClick={() => setDayKey(day.key)}
-                    className="flex items-center justify-between rounded-xl border border-zinc-300 bg-white/50 px-4 py-3 text-left transition hover:border-orange-400/70 dark:border-zinc-700 dark:bg-zinc-900/40"
-                  >
-                    <span className="capitalize text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                      {day.label}
-                    </span>
-                    <span className="text-xs text-zinc-500">
-                      {day.items.length} {tab === "notes" ? "not" : "soru"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </>
+          {tab === "notes" ? (
+            <SessionNotesList notes={notes} />
+          ) : (
+            <SessionQuestionsList questions={questions} />
+          )}
+        </div>
       ) : null}
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
@@ -347,109 +386,77 @@ export function MyNotes() {
           lines={[
             "-> Analiz’den bir video çevir",
             "=> notlar buraya ders ders birikir",
-            "=> derse bas, tarihi aç, saate göre oku",
+            "=> sete isim verip PDF indirebilirsin",
           ]}
-          footer={
-            <Link href="/analiz" className="text-cyan-700 dark:text-cyan-300">
-              Analize git →
-            </Link>
-          }
+          warning="İlk analizin en değerli notun."
         />
       ) : null}
 
       {emptySubject ? (
         <HumanNoteCard
-          title="Bu ders henüz boş"
-          tilt={-0.6}
+          title={`${subject} boş`}
+          tilt={0.5}
           lines={[
-            "-> Analiz’de bu dersi seçip video çevir",
-            "=> notlar bu dersin altına düşer",
+            "-> Bu derste henüz kayıt yok",
+            "=> Analiz’de dersi seçip video çevir",
           ]}
-          footer={
-            <Link href="/analiz" className="text-cyan-700 dark:text-cyan-300">
-              Analize git →
-            </Link>
-          }
         />
-      ) : null}
-
-      {subject && dayKey && dayBucket && tab === "notes" ? (
-        <DayNotesList
-          subject={subject}
-          items={dayBucket.items as SavedNoteItem[]}
-        />
-      ) : null}
-
-      {subject && dayKey && dayBucket && tab === "questions" ? (
-        <DayQuestionsList items={dayBucket.items as SavedQuestionItem[]} />
-      ) : null}
-
-      {subject && dayKey && !busy && dayBucket && dayBucket.items.length === 0 ? (
-        <p className="text-sm text-zinc-500">Bu günde kayıt yok.</p>
       ) : null}
     </div>
   );
 }
 
-function DayNotesList({
-  subject,
-  items,
+function SessionCard({
+  session,
+  onOpen,
 }: {
-  subject: string;
-  items: SavedNoteItem[];
+  session: NotebookSessionItem;
+  onOpen: () => void;
 }) {
-  const hours = groupByHour(items);
   return (
-    <div className="protect-copy space-y-6">
-      {hours.map((hour) => (
-        <section key={hour.label} className="space-y-4">
-          <h2 className="sticky top-0 z-10 -mx-1 border-b border-zinc-200/80 bg-white/90 px-1 py-2 text-sm font-medium text-zinc-600 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/90 dark:text-zinc-400">
-            {hour.label}
-          </h2>
-          {hour.items.map((note, index) => (
-            <HumanNoteCard
-              key={note.saved_id || note.id}
-              {...fromNoteItem(note, index % 2 === 0 ? -1.1 : 0.9)}
-              subject={note.subject || subject}
-              footer={
-                note.video_url_with_t || note.video_url ? (
-                  <a
-                    href={note.video_url_with_t || note.video_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    videoya dön → {note.timestamp_label}
-                    {formatClock(note.created_at)
-                      ? ` · ${formatClock(note.created_at)}`
-                      : ""}
-                  </a>
-                ) : undefined
-              }
-            />
-          ))}
-        </section>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex flex-col rounded-xl border border-zinc-300 bg-white/50 px-4 py-3 text-left transition hover:border-orange-400/70 dark:border-zinc-700 dark:bg-zinc-900/40"
+    >
+      <span className="line-clamp-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+        {session.label || "İsimsiz not seti"}
+      </span>
+      <span className="mt-1 text-xs text-zinc-500">
+        {session.note_count} not · {session.question_count} soru
+      </span>
+    </button>
+  );
+}
+
+function SessionNotesList({ notes }: { notes: SavedNoteItem[] }) {
+  if (!notes.length) {
+    return <p className="text-sm text-zinc-500">Bu sette not yok.</p>;
+  }
+  return (
+    <div className="space-y-4">
+      {notes.map((note, index) => (
+        <HumanNoteCard
+          key={note.saved_id || note.id}
+          {...fromNoteItem(note, index % 2 === 0 ? -1.1 : 0.9)}
+        />
       ))}
     </div>
   );
 }
 
-function DayQuestionsList({ items }: { items: SavedQuestionItem[] }) {
-  const hours = groupByHour(items);
+function SessionQuestionsList({
+  questions,
+}: {
+  questions: SavedQuestionItem[];
+}) {
+  if (!questions.length) {
+    return <p className="text-sm text-zinc-500">Bu sette soru yok.</p>;
+  }
   return (
-    <div className="space-y-6">
-      {hours.map((hour) => (
-        <section key={hour.label} className="space-y-4">
-          <h2 className="sticky top-0 z-10 -mx-1 border-b border-zinc-200/80 bg-white/90 px-1 py-2 text-sm font-medium text-zinc-600 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/90 dark:text-zinc-400">
-            {hour.label}
-          </h2>
-          {hour.items.map((question) => (
-            <QuestionCard
-              key={question.saved_id || question.id}
-              question={question}
-              persona={question.teacher_persona}
-            />
-          ))}
-        </section>
+    <div className="space-y-4">
+      {questions.map((item) => (
+        <QuestionCard key={item.saved_id || item.id} question={item} />
       ))}
     </div>
   );

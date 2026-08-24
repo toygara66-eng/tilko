@@ -26,6 +26,7 @@ from app.models.schemas import (
     LeaderboardResponse,
     NoteItem,
     NotebookResponse,
+    RenameNotebookSessionRequest,
     PenaltyAnswerRequest,
     PenaltyAnswerResponse,
     PenaltyRequest,
@@ -868,12 +869,89 @@ def list_notebook(
             subjects_out.append(NotebookSubjectCount.model_validate(item))
         except Exception:
             continue
+    from app.models.schemas import NotebookSessionItem
+
+    sessions_out = []
+    for item in data.get("sessions") or []:
+        try:
+            sessions_out.append(NotebookSessionItem.model_validate(item))
+        except Exception:
+            continue
     return NotebookResponse(
         user_id=str(data.get("user_id") or user_id),
         subject=data.get("subject"),
         subjects=subjects_out,
+        sessions=sessions_out,
         notes=notes_out,
         questions=questions_out,
+    )
+
+
+@app.patch("/notebook/session")
+@limiter.limit("30/minute")
+def rename_notebook_session(
+    request: Request,
+    payload: RenameNotebookSessionRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.services.exams import exam_of
+
+    try:
+        row = notebook_service.rename_session(
+            db,
+            user_id=payload.user_id,
+            subject=payload.subject,
+            video_id=payload.video_id,
+            label=payload.label,
+            exam_target=exam_of(db, payload.user_id),
+            video_url=payload.video_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "session": row}
+
+
+@app.get("/notebook/{user_id}/pdf")
+@limiter.limit("12/minute")
+def download_notebook_pdf(
+    request: Request,
+    user_id: str,
+    subject: str,
+    video_id: str,
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import Response
+    from app.services.exams import exam_of
+
+    data = notebook_service.session_notes(
+        db,
+        user_id,
+        subject=subject,
+        video_id=video_id,
+        exam_target=exam_of(db, user_id),
+    )
+    notes = data.get("notes") or []
+    if not notes:
+        raise HTTPException(status_code=404, detail="Bu sette indirilecek not yok.")
+    label = str(data.get("label") or "notlar")
+    try:
+        pdf_bytes = notebook_service.build_notes_pdf_bytes(
+            label=label,
+            subject=str(data.get("subject") or subject),
+            notes=notes,
+            questions=data.get("questions") or [],
+        )
+    except Exception as exc:
+        logger.exception("PDF üretilemedi")
+        raise HTTPException(status_code=500, detail="PDF oluşturulamadı.") from exc
+    safe = "".join(ch if ch.isalnum() or ch in "-_ " else "" for ch in label).strip()
+    safe = (safe or "tilko-notlar")[:80].replace(" ", "-")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe}.pdf"',
+        },
     )
 
 

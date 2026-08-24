@@ -389,6 +389,8 @@ export function cancelAnalyzeJob(jobId: string) {
 export type SavedNoteItem = NoteItem & {
   saved_id: number;
   subject: string;
+  video_id?: string;
+  session_label?: string;
   video_url: string;
   created_at?: string | null;
 };
@@ -396,15 +398,30 @@ export type SavedNoteItem = NoteItem & {
 export type SavedQuestionItem = QuestionItem & {
   saved_id: number;
   subject: string;
+  video_id?: string;
+  session_label?: string;
   video_url: string;
   created_at?: string | null;
   teacher_persona?: TeacherPersona;
+};
+
+export type NotebookSessionItem = {
+  id: number;
+  subject: string;
+  video_id: string;
+  video_url: string;
+  label: string;
+  note_count: number;
+  question_count: number;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type NotebookResponse = {
   user_id: string;
   subject: string | null;
   subjects: { name: string; note_count: number; question_count: number }[];
+  sessions?: NotebookSessionItem[];
   notes: SavedNoteItem[];
   questions: SavedQuestionItem[];
 };
@@ -412,6 +429,50 @@ export type NotebookResponse = {
 export function listNotebook(userId: string, subject?: string) {
   const query = subject ? `?subject=${encodeURIComponent(subject)}` : "";
   return request<NotebookResponse>(`/notebook/${userId}${query}`);
+}
+
+export function renameNotebookSession(input: {
+  user_id: string;
+  subject: string;
+  video_id: string;
+  label: string;
+  video_url?: string;
+}) {
+  return request<{ ok: boolean; session: NotebookSessionItem }>("/notebook/session", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function downloadNotebookPdf(input: {
+  userId: string;
+  subject: string;
+  videoId: string;
+  filename?: string;
+}) {
+  const path =
+    `/notebook/${encodeURIComponent(input.userId)}/pdf` +
+    `?subject=${encodeURIComponent(input.subject)}` +
+    `&video_id=${encodeURIComponent(input.videoId)}`;
+  const headers: Record<string, string> = {};
+  if (!isAuthPublic(path)) {
+    const token = await ensureAuth(API_BASE, getUserId());
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || "PDF indirilemedi");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(input.filename || "tilko-notlar").replace(/[^\w\-ğüşıöçĞÜŞİÖÇ ]+/gi, "").trim() || "tilko-notlar"}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function unlockAd(userId: string) {

@@ -603,6 +603,28 @@ class SavedNotebookItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class NotebookSession(Base):
+    """Kullanıcının bir video not setine verdiği özel isim (ders klasörü altında)."""
+
+    __tablename__ = "notebook_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "subject", "video_id", name="uq_notebook_session_user_subj_vid"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    subject: Mapped[str] = mapped_column(String(64), default="", index=True)
+    video_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    video_url: Mapped[str] = mapped_column(String(256), default="")
+    label: Mapped[str] = mapped_column(String(160), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 class AnalyzeCache(Base):
     """Aynı YouTube videosu için paylaşılan analiz sonucu — LLM tekrar çağrılmaz."""
 
