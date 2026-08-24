@@ -1,4 +1,5 @@
 import logging
+import re
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -2230,16 +2231,15 @@ def _analyze_with_lines(
         video_id,
         time_offset=int(first.get("start") or 0),
     )
-    # Çöp / kota uyarısı notlarını UI'ya verme
+    # Çöp / kota / sistem hatası notlarını UI'ya verme
     notes = [
         n
         for n in notes
         if n.title.strip()
         and n.text.strip()
-        and "hourly limit" not in (n.text + n.exam_tip).lower()
-        and "cannot provide" not in (n.text + n.exam_tip).lower()
-        and "knowledge base" not in (n.text + n.exam_tip).lower()
+        and not _is_junk_public_note(n)
     ]
+    notes = [_strip_system_exam_tip(n) for n in notes]
     questions = _pack_questions(
         llm_data.get("questions"),
         video_id,
@@ -2592,10 +2592,9 @@ def _continue_analyze_job(
             for n in more_notes
             if n.title.strip()
             and n.text.strip()
-            and "hourly limit" not in (n.text + n.exam_tip).lower()
-            and "cannot provide" not in (n.text + n.exam_tip).lower()
-            and "knowledge base" not in (n.text + n.exam_tip).lower()
+            and not _is_junk_public_note(n)
         ]
+        more_notes = [_strip_system_exam_tip(n) for n in more_notes]
         if not more_notes:
             logger.warning("Dilim notları çöp/boş atlandı: %s", piece.get("label"))
             jobs.set_progress(
@@ -2684,17 +2683,55 @@ def _to_note(
     if not isinstance(raw_points, list):
         raw_points = [raw_points]
     points = [str(p).strip() for p in raw_points if str(p).strip()]
+    tip = str(item.get("exam_tip") or "").strip()
+    if _SYSTEM_EXAM_TIP_RE.search(tip):
+        tip = ""
     return NoteItem(
         id=f"note_{index}",
         title=str(item.get("title") or "").strip(),
         text=str(detail).strip(),
         key_points=points,
         mnemonic=str(item.get("mnemonic") or "").strip(),
-        exam_tip=str(item.get("exam_tip") or "").strip(),
+        exam_tip=tip,
         timestamp=seconds,
         timestamp_label=format_timestamp_label(seconds),
         video_url_with_t=build_watch_url(video_id, seconds),
     )
+
+
+_SYSTEM_EXAM_TIP_RE = re.compile(
+    r"("
+    r"çalışılabilir\s*not|model\s*bu\s*dilimde|"
+    r"başka\s*bölüm\s*veya|yeterli\s*altyazı|"
+    r"hourly\s*limit|rate[\s-]*limit|i\s*cannot|"
+    r"try\s*again\s*later|analiz\s*şu\s*an|"
+    r"cannot\s*provide|knowledge\s*base"
+    r")",
+    re.IGNORECASE,
+)
+
+_JUNK_PUBLIC_NOTE_RE = re.compile(
+    r"("
+    r"hourly\s*limit|cannot\s*provide|knowledge\s*base|"
+    r"çalışılabilir\s*not\s*yazamad|model\s*bu\s*dilimde|"
+    r"başka\s*bölüm\s*veya\s*(video|altyazılı)|"
+    r"için\s*hazırlanan\s*çalışma\s*notu|"
+    r"dersi\s*için\s*hazırlanan|"
+    r"bu\s*çalışma\s*notu\s*,?\s*.{0,40}dersinin"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_junk_public_note(note: NoteItem) -> bool:
+    blob = f"{note.title} {note.text} {note.exam_tip} {' '.join(note.key_points)}"
+    return bool(_JUNK_PUBLIC_NOTE_RE.search(blob))
+
+
+def _strip_system_exam_tip(note: NoteItem) -> NoteItem:
+    if note.exam_tip and _SYSTEM_EXAM_TIP_RE.search(note.exam_tip):
+        return note.model_copy(update={"exam_tip": ""})
+    return note
 
 
 def _to_question(

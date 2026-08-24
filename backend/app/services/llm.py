@@ -443,8 +443,10 @@ def _coerce_notes(result: dict) -> list[dict]:
             "title": title or detail[:48],
             "detail": detail or title,
         }
-        if tip and _JUNK_NOTE_RE.search(tip):
+        if tip and (_JUNK_NOTE_RE.search(tip) or _SYSTEM_TIP_RE.search(tip)):
             cleaned["exam_tip"] = ""
+        else:
+            cleaned["exam_tip"] = tip
         if _is_junk_note(cleaned):
             continue
         notes.append(cleaned)
@@ -482,7 +484,26 @@ _JUNK_NOTE_RE = re.compile(
     r"try\s*again\s*later|rate[\s-]*limit|"
     r"videoya?\s*(erişemiyorum|ulaşamıyorum)|bağlam\s*(yetersiz|yok)|"
     r"bilgim\s*(dahil|yok)|genel\s*bilgi\s*verebilirim|"
-    r"altyazı\s*(sağlanmadı|yok)|transkript\s*yok"
+    r"altyazı\s*(sağlanmadı|yok)|transkript\s*yok|"
+    # Model/sistem hatası not olarak basılmasın
+    r"çalışılabilir\s*not\s*yazamad[ıi]|model\s*bu\s*dilimde|"
+    r"başka\s*bölüm\s*veya\s*(video|altyazılı)|"
+    r"yeterli\s*altyazı\s*(yok|bulunamadı)|"
+    # Meta / şablon not (gerçek ders içeriği değil)
+    r"için\s*hazırlanan\s*çalışma\s*notu|"
+    r"dersi\s*için\s*hazırlanan|"
+    r"bu\s*çalışma\s*notu\s*,?\s*.{0,40}dersinin|"
+    r"analiz\s*şu\s*an\s*(yoğun|tamamlanamadı)"
+    r")",
+    re.IGNORECASE,
+)
+
+_SYSTEM_TIP_RE = re.compile(
+    r"("
+    r"çalışılabilir\s*not|model\s*bu\s*dilimde|"
+    r"başka\s*bölüm\s*veya|yeterli\s*altyazı|"
+    r"hourly\s*limit|rate[\s-]*limit|i\s*cannot|"
+    r"try\s*again\s*later|analiz\s*şu\s*an"
     r")",
     re.IGNORECASE,
 )
@@ -545,6 +566,10 @@ def _is_junk_note(note: dict) -> bool:
         return True
     title = str(note.get("title") or "").strip()
     detail = str(note.get("detail") or note.get("text") or "").strip()
+    tip = str(note.get("exam_tip") or "").strip()
+    if tip and _SYSTEM_TIP_RE.search(tip):
+        note["exam_tip"] = ""
+        tip = ""
     # Ham altyazı tekrarı / boş sohbet
     if _FILLER_TRANSCRIPT_RE.search(title) and not _EDU_SIGNAL_RE.search(blob):
         return True
@@ -557,6 +582,21 @@ def _is_junk_note(note: dict) -> bool:
         if top >= 6 and len(set(words)) < 12:
             return True
     return False
+
+
+def _sanitize_note_tips(notes: list[dict]) -> list[dict]:
+    """Sistem hatası / meta exam_tip'leri temizle."""
+    out: list[dict] = []
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        tip = str(note.get("exam_tip") or "")
+        if tip and (_SYSTEM_TIP_RE.search(tip) or _JUNK_NOTE_RE.search(tip)):
+            note = {**note, "exam_tip": ""}
+        if _is_junk_note(note):
+            continue
+        out.append(note)
+    return out
 
 
 def _filter_quality_notes(notes: list[dict], *, require_depth: bool = False) -> list[dict]:
@@ -1966,86 +2006,56 @@ def analyze_transcript(
 
 
 def _fallback_notes_from_transcript(chunk: str, subject: str | None) -> dict:
-    """LLM düşünce: altyazıdan çalışılabilir not üret — boş dönme."""
+    """LLM düşünce: yalnızca eğitim sinyalli altyazı parçalarından az sayıda not."""
     raw = re.sub(r"\s+", " ", (chunk or "")).strip()
-    if len(raw) < 40:
-        return {
-            "notes": [],
-            "questions": [],
-            "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
-        }
+    empty = {
+        "notes": [],
+        "questions": [],
+        "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
+    }
+    if len(raw) < 80:
+        return empty
 
     parts = [
         p.strip()
         for p in re.split(r"(?<=[.!?…])\s+|\n+", raw)
-        if len(p.strip()) >= 40
+        if len(p.strip()) >= 55
         and not _PROMO_NOTE_RE.search(p)
         and not _FILLER_TRANSCRIPT_RE.search(p)
+        and not _JUNK_NOTE_RE.search(p)
+        and _EDU_SIGNAL_RE.search(p)
     ]
-    # Önce eğitim sinyalli cümleleri tercih et.
-    edu = [p for p in parts if _EDU_SIGNAL_RE.search(p)]
-    if len(edu) >= 2:
-        parts = edu
-    elif len(parts) < 2:
-        # Cümle azsa sabit pencereler — kullanıcıya boş hata basma.
-        step = 220
-        parts = [
-            raw[i : i + step].strip()
-            for i in range(0, min(len(raw), step * 5), step)
-            if len(raw[i : i + step].strip()) >= 40
-            and not _PROMO_NOTE_RE.search(raw[i : i + step])
-        ]
+    if len(parts) < 2:
+        return empty
 
     notes: list[dict] = []
     topic = (subject or "Ders").strip() or "Ders"
-    for index, para in enumerate(parts[:5]):
+    for index, para in enumerate(parts[:3]):
         title_words = [w for w in para.split() if len(w) > 2][:6]
         title = " ".join(title_words).rstrip(" .,;:")
         if len(title) < 8:
-            title = f"{topic} — önemli nokta {index + 1}"
+            title = f"{topic} — nokta {index + 1}"
+        # Şablon cümle ekleme; sadece altyazı + kısa çalışma yönü.
         detail = (
             f"{para} "
-            f"Bu bölümde hoca {topic} bağlamında bu noktayı işliyor. "
-            f"Tanımı kendi cümlelerinle yaz; altyazıdaki örnekleri koru. "
-            f"Sınavda benzer ifade tersine çevrilerek sorulabilir — çeldiriciye dikkat et. "
-            f"Kısa tekrar: kavramı yüksek sesle bir kez söyle ve bir örnek uydur."
+            f"Tanımı kendi cümlelerinle yaz; altyazıdaki örneği koru. "
+            f"Sınavda aynı ifade tersine çevrilerek sorulabilir."
         )
         note = {
             "title": title[:72],
             "quote": para[:140],
-            "detail": detail[:1200],
-            "key_points": [
-                para[:120],
-                "Tanımı kendi cümlelerinle yaz",
-                "Benzer soruda çeldiriciyi ele",
-            ],
+            "detail": detail[:900],
+            "key_points": [para[:110], "Tanımı kendi cümlelerinle yaz"],
             "mnemonic": f"{topic}: bu cümleyi 2 kez tekrarla.",
             "exam_tip": "Soru kökünde aynı kavramın tersine çevrilmiş ifadesini ara.",
             "timestamp": index * 40,
         }
-        if _JUNK_NOTE_RE.search(_note_blob(note)):
+        if _is_junk_note(note):
             continue
         notes.append(note)
 
-    if not notes and raw:
-        notes.append(
-            {
-                "title": f"{topic} — video özeti",
-                "quote": raw[:120],
-                "detail": (
-                    f"{raw[:500]} "
-                    f"Bu dilimde anlatılanları özetleyerek tekrar et; "
-                    f"tanım + örnek + olası çeldirici şeklinde not çıkar."
-                )[:1200],
-                "key_points": [raw[:100], f"{topic} ana fikri"],
-                "mnemonic": f"{topic} videosunu parçalara bölüp tekrar et.",
-                "exam_tip": "Altyazıdaki tanımları soru formatında yazarak pekiştir.",
-                "timestamp": 0,
-            }
-        )
-
     return {
-        "notes": notes,
+        "notes": _sanitize_note_tips(notes),
         "questions": [],
         "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
     }
@@ -2139,14 +2149,14 @@ def _analyze_combined(
             if raw_notes:
                 logger.warning("Grounding boş; ham %s kaliteli not kullanılıyor.", len(raw_notes))
                 notes = raw_notes[:8]
-        notes = _filter_quality_notes(notes)
+        notes = _sanitize_note_tips(_filter_quality_notes(notes))
         # Kısa kalanları genişlet; silinirse önceki notları koru.
         if notes and sum(1 for n in notes if _is_thin_note(n)) >= max(1, len(notes) // 2):
             logger.warning("Notlar kısa kaldı; genişletme turu.")
             before = list(notes)
             try:
                 notes = _expand_thin_notes(notes, work, subject)
-                notes = _filter_quality_notes(notes) or before
+                notes = _sanitize_note_tips(_filter_quality_notes(notes)) or before
             except Exception:  # noqa: BLE001
                 notes = before
         # Sorular: birleşik JSON'dan gelen + gerekirse kısa ek üretim (max 25 sn).
@@ -2181,35 +2191,16 @@ def _analyze_combined(
     except Exception as exc:  # noqa: BLE001
         logger.warning("LLM analiz düştü, altyazı yedeğine geçiliyor: %s", exc)
 
-    # Altyazı yedeği — mümkünse her zaman not dön.
-    logger.warning("Altyazı yedek notları kullanılıyor (%s).", window_label or "dilim")
+    # Kaliteli yedek yoksa çöp basma — temiz hata ver.
+    logger.warning("Altyazı yedek notları deneniyor (%s).", window_label or "dilim")
     fallback = _fallback_notes_from_transcript(work, subject)
-    fallback_notes = list(fallback.get("notes") or [])
+    fallback_notes = _sanitize_note_tips(list(fallback.get("notes") or []))
     if fallback_notes:
         fallback["notes"] = fallback_notes
         return fallback
-    if len(work.strip()) >= 40:
-        topic = (subject or "Ders").strip() or "Ders"
-        return {
-            "notes": [
-                {
-                    "title": f"{topic} — dilim özeti",
-                    "quote": work[:120],
-                    "detail": (
-                        f"{work[:700]} "
-                        "Bu dilimde anlatılanları tanım + örnek + çeldirici şeklinde tekrar et."
-                    )[:1200],
-                    "key_points": [work[:100], f"{topic} ana fikir"],
-                    "mnemonic": f"{topic}: bu dilimi parçalara bölüp tekrarla.",
-                    "exam_tip": "Altyazıdaki net ifadeleri soru köküne çevirerek çalış.",
-                    "timestamp": 0,
-                }
-            ],
-            "questions": [],
-            "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
-        }
     raise RuntimeError(
-        "Bu video diliminde yeterli altyazı yok. Başka bölüm veya altyazılı video dene."
+        "Bu videodan anlamlı ders notu çıkarılamadı. "
+        "Altyazılı, ders anlatımlı bir bölüm dene."
     )
 
 

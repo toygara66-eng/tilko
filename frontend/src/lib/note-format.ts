@@ -14,6 +14,13 @@ function clip(text: string, max = 90) {
   return `${clean.slice(0, max).trim()}…`;
 }
 
+/** Model/sistem hatası exam_tip olarak kırmızı kutuya basılmasın. */
+function isSystemExamTip(tip: string) {
+  return /çalışılabilir\s*not|model\s*bu\s*dilimde|başka\s*bölüm\s*veya|yeterli\s*altyazı|hourly\s*limit|rate[\s-]*limit|i\s*cannot|try\s*again\s*later|cannot\s*provide|knowledge\s*base|analiz\s*şu\s*an/i.test(
+    tip,
+  );
+}
+
 export function fromNoteItem(note: NoteItem, tilt = -0.6): HumanNoteCardProps {
   const raw =
     note.key_points.length > 0
@@ -21,6 +28,7 @@ export function fromNoteItem(note: NoteItem, tilt = -0.6): HumanNoteCardProps {
       : note.text.split(/[.!?]\s+/).filter((part) => part.trim().length > 8);
   const lines = raw.slice(0, 8).map((line) => asArrow(clip(line, 110)));
   const highlights = [note.title].filter(Boolean);
+  const tip = (note.exam_tip || "").trim();
 
   return {
     title: note.title || "Ders notu",
@@ -29,7 +37,7 @@ export function fromNoteItem(note: NoteItem, tilt = -0.6): HumanNoteCardProps {
     highlights,
     lines,
     mnemonic: note.mnemonic ? clip(note.mnemonic, 140) : undefined,
-    warning: note.exam_tip || undefined,
+    warning: tip && !isSystemExamTip(tip) ? tip : undefined,
   };
 }
 
