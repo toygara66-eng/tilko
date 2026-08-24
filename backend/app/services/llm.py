@@ -704,7 +704,7 @@ def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
         note
         for note in notes
         if not _is_junk_note(note)
-        and len(str(note.get("detail") or note.get("title") or "").strip()) >= 40
+        and len(str(note.get("detail") or note.get("title") or "").strip()) >= 48
     ]
     if soft:
         logger.warning(
@@ -1966,46 +1966,84 @@ def analyze_transcript(
 
 
 def _fallback_notes_from_transcript(chunk: str, subject: str | None) -> dict:
-    """LLM düşünce: yalnızca sınav değeri olan altyazı cümlelerinden kısa not (çöp yok)."""
+    """LLM düşünce: altyazıdan çalışılabilir not üret — boş dönme."""
     raw = re.sub(r"\s+", " ", (chunk or "")).strip()
-    parts = [
-        p.strip()
-        for p in re.split(r"(?<=[.!?…])\s+|\n+", raw)
-        if len(p.strip()) >= 48
-        and not _PROMO_NOTE_RE.search(p)
-        and not _FILLER_TRANSCRIPT_RE.search(p)
-        and _EDU_SIGNAL_RE.search(p)
-    ]
-    # Eğitim sinyali yoksa boş dön — saçma sohbet notu basma.
-    if len(parts) < 2:
+    if len(raw) < 40:
         return {
             "notes": [],
             "questions": [],
             "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
         }
+
+    parts = [
+        p.strip()
+        for p in re.split(r"(?<=[.!?…])\s+|\n+", raw)
+        if len(p.strip()) >= 40
+        and not _PROMO_NOTE_RE.search(p)
+        and not _FILLER_TRANSCRIPT_RE.search(p)
+    ]
+    # Önce eğitim sinyalli cümleleri tercih et.
+    edu = [p for p in parts if _EDU_SIGNAL_RE.search(p)]
+    if len(edu) >= 2:
+        parts = edu
+    elif len(parts) < 2:
+        # Cümle azsa sabit pencereler — kullanıcıya boş hata basma.
+        step = 220
+        parts = [
+            raw[i : i + step].strip()
+            for i in range(0, min(len(raw), step * 5), step)
+            if len(raw[i : i + step].strip()) >= 40
+            and not _PROMO_NOTE_RE.search(raw[i : i + step])
+        ]
+
     notes: list[dict] = []
     topic = (subject or "Ders").strip() or "Ders"
-    for index, para in enumerate(parts[:4]):
-        title_words = para.split()[:6]
+    for index, para in enumerate(parts[:5]):
+        title_words = [w for w in para.split() if len(w) > 2][:6]
         title = " ".join(title_words).rstrip(" .,;:")
         if len(title) < 8:
             title = f"{topic} — önemli nokta {index + 1}"
         detail = (
-            f"{para} Hocanın bu noktada anlattığı kavramı şöyle özetle: tanımı net tut, "
-            f"nasıl uygulandığını bir örnekle bağla, sınavda karıştırılan noktayı yaz ve "
-            f"'soru gelse önce … diye düşün' diye bitir. Altyazıdaki ifadeleri koru."
+            f"{para} "
+            f"Bu bölümde hoca {topic} bağlamında bu noktayı işliyor. "
+            f"Tanımı kendi cümlelerinle yaz; altyazıdaki örnekleri koru. "
+            f"Sınavda benzer ifade tersine çevrilerek sorulabilir — çeldiriciye dikkat et. "
+            f"Kısa tekrar: kavramı yüksek sesle bir kez söyle ve bir örnek uydur."
         )
         note = {
             "title": title[:72],
             "quote": para[:140],
             "detail": detail[:1200],
-            "key_points": [para[:120], "Tanımı kendi cümlelerinle yaz", "Benzer soruda çeldiriciyi ele"],
-            "mnemonic": f"{topic}: bu tanımı yüksek sesle 2 kez tekrarla.",
+            "key_points": [
+                para[:120],
+                "Tanımı kendi cümlelerinle yaz",
+                "Benzer soruda çeldiriciyi ele",
+            ],
+            "mnemonic": f"{topic}: bu cümleyi 2 kez tekrarla.",
             "exam_tip": "Soru kökünde aynı kavramın tersine çevrilmiş ifadesini ara.",
             "timestamp": index * 40,
         }
-        if not _is_junk_note(note):
-            notes.append(note)
+        if _JUNK_NOTE_RE.search(_note_blob(note)):
+            continue
+        notes.append(note)
+
+    if not notes and raw:
+        notes.append(
+            {
+                "title": f"{topic} — video özeti",
+                "quote": raw[:120],
+                "detail": (
+                    f"{raw[:500]} "
+                    f"Bu dilimde anlatılanları özetleyerek tekrar et; "
+                    f"tanım + örnek + olası çeldirici şeklinde not çıkar."
+                )[:1200],
+                "key_points": [raw[:100], f"{topic} ana fikri"],
+                "mnemonic": f"{topic} videosunu parçalara bölüp tekrar et.",
+                "exam_tip": "Altyazıdaki tanımları soru formatında yazarak pekiştir.",
+                "timestamp": 0,
+            }
+        )
+
     return {
         "notes": notes,
         "questions": [],

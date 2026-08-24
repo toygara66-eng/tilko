@@ -2198,11 +2198,16 @@ def _analyze_with_lines(
                 last_err = inner
                 continue
     if llm_data is None:
-        # Son çare: kaliteli altyazı notu — çöpse hata ver
+        # Son çare: altyazı notu — mümkün olduğunca boş hata verme
         llm_data = quick_transcript_notes(block[:5000], subject)
         if not (llm_data.get("notes") or []):
+            llm_data = quick_transcript_notes(
+                "\n".join(str(c.get("block") or "") for c in candidates[:3])[:6000],
+                subject,
+            )
+        if not (llm_data.get("notes") or []):
             raise last_err or RuntimeError(
-                "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
+                "Bu videoda yeterli altyazı bulunamadı. Altyazılı bir video dene."
             )
         chosen_idx = 0
         first = primary
