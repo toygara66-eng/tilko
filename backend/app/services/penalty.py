@@ -82,9 +82,12 @@ FALLBACK_TRAPS = [
 
 
 def get_or_create_user(db: Session, user_id: str) -> User:
-    row = db.get(User, user_id)
+    uid = (user_id or "").strip()
+    if not uid or uid.startswith("aday-"):
+        raise ValueError("Devam etmek için kayıt ol veya giriş yap.")
+    row = db.get(User, uid)
     if row is None:
-        row = User(user_id=user_id, is_penalized=False, penalty_clear_count=0)
+        row = User(user_id=uid, is_penalized=False, penalty_clear_count=0)
         db.add(row)
         db.commit()
         db.refresh(row)

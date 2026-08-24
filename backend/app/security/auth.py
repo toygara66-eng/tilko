@@ -282,28 +282,33 @@ def register_user(
         raise ValueError("Hoca hesabı buradan açılamaz.")
 
     name = (display_name or "").strip()
-    is_guest = (user_id or "").strip().startswith("aday-")
-    if intended == "student" and not is_guest and len(name) < 2:
+    if intended == "student" and len(name) < 2:
         raise ValueError("Ad soyad gerekli.")
 
     mail = normalize_email(email) if (email or "").strip() else ""
     tel = normalize_phone(phone) if (phone or "").strip() else ""
     uid_raw = (user_id or "").strip()
+    if uid_raw.startswith("aday-"):
+        # Misafir kimliğiyle arka planda kayıt yok.
+        uid_raw = ""
 
+    if intended == "student" and not mail and not tel:
+        raise ValueError("Kayıt için e-posta veya telefon gerekli.")
     if not mail and not tel and not uid_raw:
         raise ValueError("E-posta, telefon veya kullanıcı adı gerekli.")
-    # Öğrenci kaydı: misafir değilse e-posta veya telefon zorunlu (sonra giriş yapılsın).
-    if intended == "student" and not is_guest and not mail and not tel:
-        raise ValueError("Kayıt için e-posta veya telefon gerekli.")
 
     if mail:
         clash = db.scalars(select(User).where(User.email == mail)).first()
-        if clash is not None and (clash.password_hash or "").strip():
-            raise ValueError("Bu e-posta zaten kayıtlı. Giriş yap.")
+        if clash is not None:
+            raise ValueError(
+                "Bu e-posta adresi sistemde kayıtlı. Giriş yap veya şifreni unuttuysan sıfırla."
+            )
     if tel:
         clash = db.scalars(select(User).where(User.phone == tel)).first()
-        if clash is not None and (clash.password_hash or "").strip():
-            raise ValueError("Bu telefon zaten kayıtlı. Giriş yap.")
+        if clash is not None:
+            raise ValueError(
+                "Bu telefon numarası sistemde kayıtlı. Giriş yap veya şifreni unuttuysan sıfırla."
+            )
 
     if uid_raw:
         uid = _normalize_user_id(uid_raw)
@@ -313,11 +318,13 @@ def register_user(
         uid = _uid_from_phone(tel)
 
     existing = db.get(User, uid)
-    if existing is not None and (existing.password_hash or "").strip():
-        # Aynı e-posta/telefon başka id'de değilse ve bu kayıt "boş iskelet" ise üzerine yaz.
-        skeleton = not (existing.email or existing.phone or existing.display_name or "").strip()
-        if not skeleton:
-            raise ValueError("Bu kullanıcı zaten kayıtlı. Giriş yap.")
+    if existing is not None and (
+        (existing.password_hash or "").strip()
+        or (existing.google_sub or "").strip()
+        or (existing.email or "").strip()
+        or (existing.phone or "").strip()
+    ):
+        raise ValueError("Bu hesap sistemde kayıtlı. Giriş yap.")
 
     hashed = hash_password(password)
     # get_or_create_user ara commit yapmasın — e-posta aynı transaction'da yazılsın.
@@ -337,7 +344,7 @@ def register_user(
         if name:
             user.display_name = name[:64]
         _apply_exam(user, exam_target)
-        if not is_guest and not (user.exam_target or "").strip():
+        if not (user.exam_target or "").strip():
             raise ValueError("KPSS / YKS / sınav hedefi seç.")
     db.add(user)
     db.flush()
@@ -486,11 +493,18 @@ def login_with_google(
         user = db.scalars(select(User).where(User.email == email)).first()
 
     link = (link_user_id or "").strip()
-    if user is None and link.startswith("aday-"):
+    # Misafir (aday-*) bağlama kapalı — yalnızca kayıtlı / Google hesapları.
+    if user is None and link and not link.startswith("aday-"):
         guest = db.get(User, link)
         if guest is not None and not (getattr(guest, "google_sub", "") or "").strip():
             user = guest
 
+    if user is None:
+        # Aynı e-posta ile şifreli hesap varsa Google yeni hesap açmasın; bağla.
+        if email:
+            by_mail = db.scalars(select(User).where(User.email == email)).first()
+            if by_mail is not None:
+                user = by_mail
     if user is None:
         uid = f"g_{sub}"[:64]
         if not USER_RE.match(uid):
@@ -554,6 +568,8 @@ async def jwt_guard(request: Request, call_next):
         uid = bearer_from(request)
     except HTTPException as exc:
         return auth_error(exc.status_code, str(exc.detail))
+    if str(uid).startswith("aday-"):
+        return auth_error(401, "Devam etmek için kayıt ol veya giriş yap.")
     request.state.user_id = uid
 
     claimed_query = request.query_params.get("user_id")

@@ -28,6 +28,7 @@ import { DiagnosticGate } from "@/components/diagnostic/gate";
 import { ExamTargetGate } from "@/components/exam-target/gate";
 import { FeedbackHeaderButton } from "@/components/feedback/feedback-form";
 import { RoleGate } from "@/components/auth/role-gate";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { IntegrityGate } from "@/components/security/integrity-gate";
 import { AnalyzeProvider } from "@/components/analyze/analyze-context";
 import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
@@ -55,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <ShellFrame>{children}</ShellFrame>
                   <ExamTargetGate />
                   <DiagnosticGate />
+                  <AuthGate />
                   <RoleGate />
                   <PenaltyLock />
                 </PomodoroProvider>

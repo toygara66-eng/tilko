@@ -11,7 +11,7 @@ import {
 } from "react";
 import { getProgress, type PrizeView, type RecommendedVideo } from "@/lib/api";
 import { getUserId } from "@/lib/user";
-import { getStoredRole } from "@/lib/auth";
+import { getStoredRole, isSignedIn } from "@/lib/auth";
 import { foxRank, RANK_ACEMI, RANK_EMOJI } from "@/lib/ranks";
 
 const PROFILE_CACHE_KEY = "tilko_profile_flags";
@@ -152,8 +152,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
+    const uid = getUserId();
+    if (!uid || uid.startsWith("aday-") || !isSignedIn()) {
+      setReady(true);
+      return;
+    }
     try {
-      const data = await getProgress(getUserId());
+      const data = await getProgress(uid);
       const next: Profile = {
         xp: data.xp,
         title: data.title || foxRank(data.xp).title,

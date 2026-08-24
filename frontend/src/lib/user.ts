@@ -1,13 +1,10 @@
 const USER_KEY = "kpss_user_id";
 const DEVICE_KEY = "tilko_device_id";
 
+/** Kayıtlı oturum user_id; yoksa boş (misafir ID üretilmez). */
 export function getUserId(): string {
   if (typeof window === "undefined") return "local";
-  const existing = window.localStorage.getItem(USER_KEY);
-  if (existing) return existing;
-  const created = `aday-${crypto.randomUUID().slice(0, 8)}`;
-  window.localStorage.setItem(USER_KEY, created);
-  return created;
+  return window.localStorage.getItem(USER_KEY) || "";
 }
 
 export function setUserId(userId: string) {

@@ -389,8 +389,8 @@ export default function AdminArchivePage() {
               E-posta ve telefon her satırda görünür (kopyala). Eski şifreler hash
               ile saklanır, okunamaz — yeni şifre ata veya “Sıfırlama kodu” ile 6
               haneli kod üret (mail gelmese de kullanıcıya iletebilirsin).
-              aday-… satırları misafir (giriş yok); kayıtlı hesaplar e-posta/telefon
-              veya Google ile görünür.
+              aday-… satırları eski misafir kalıntısıdır; yeni ziyaretçiler kayıt
+              olmadan giremez. Aynı e-posta/telefon ikinci kez kayıt olamaz.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

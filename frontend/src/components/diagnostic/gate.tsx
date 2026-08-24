@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useProfile } from "@/components/profile/profile-context";
+import { isSignedIn } from "@/lib/auth";
 
 const OPEN = new Set(["/teshis", "/hedef", "/admin", "/giris", "/hoca"]);
 
@@ -13,6 +14,7 @@ export function DiagnosticGate() {
 
   useEffect(() => {
     if (!ready) return;
+    if (!isSignedIn()) return;
     if (profile.role === "teacher" || profile.role === "admin") return;
     if (!profile.isOnboarded) return;
     // Teşhis bir kez bittiyse (yerel/IP) tekrar /teshis açma.

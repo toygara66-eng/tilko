@@ -9,7 +9,7 @@ import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in";
 import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPassword } from "@/lib/api";
 import { isSignedIn, logout, setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
-import { getUserId, setUserId } from "@/lib/user";
+import { setUserId } from "@/lib/user";
 import { EXAM_OPTIONS, type ExamTargetId } from "@/lib/exams";
 import { cn } from "@/lib/utils";
 
@@ -185,13 +185,11 @@ export default function GirisPage() {
     setBusy(true);
     setError("");
     try {
-      const guest = getUserId();
       const data = await loginWithGoogle({
         id_token: idToken,
         role: "student",
         display_name: displayName.trim(),
         exam_target: isRegister ? examTarget : "",
-        link_user_id: guest.startsWith("aday-") ? guest : "",
       });
       finishSession(data);
     } catch (err) {

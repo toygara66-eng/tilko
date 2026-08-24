@@ -87,6 +87,12 @@ export async function ensureAuth(
 ): Promise<string> {
   const current = getToken();
   if (tokenValid(current)) return current;
+  if (!userId || userId === "local" || userId.startsWith("aday-")) {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
+      window.location.assign("/giris");
+    }
+    throw new Error("Devam etmek için kayıt ol veya giriş yap.");
+  }
   if (getAuthMode() === "google") {
     if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
       window.location.assign("/giris");
@@ -96,6 +102,12 @@ export async function ensureAuth(
   if (inflight) return inflight;
   inflight = (async () => {
     const password = getAuthSecret();
+    if (!password || password.length < 8) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
+        window.location.assign("/giris");
+      }
+      throw new Error("Oturum süresi doldu. Tekrar giriş yap.");
+    }
     const body = JSON.stringify({ user_id: userId, password });
     const headers = { "Content-Type": "application/json" };
     const login = await fetch(`${apiBase}/auth/login`, {
@@ -114,38 +126,14 @@ export async function ensureAuth(
         "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.",
       );
     }
-    // Yanlış şifre / bilinmeyen kullanıcı: misafir hesabı için kayıt dene.
-    // 401 dışında (5xx vb.) kayıt spamı yapma.
-    if (login.status !== 401 && login.status !== 400) {
-      const err = (await login.json().catch(() => ({}))) as { detail?: unknown };
-      const detail =
-        typeof err.detail === "string" ? err.detail : "Oturum açılamadı";
-      throw new Error(detail);
+    // Otomatik misafir kaydı yok — kullanıcı /giris’e yönlendirilir.
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
+      window.location.assign("/giris");
     }
-    const register = await fetch(`${apiBase}/auth/register`, {
-      method: "POST",
-      headers,
-      body,
-      signal: AbortSignal.timeout(90_000),
-    });
-    if (!register.ok) {
-      if (register.status === 429) {
-        throw new Error(
-          "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.",
-        );
-      }
-      const err = (await register.json().catch(() => ({}))) as { detail?: unknown };
-      const detail =
-        typeof err.detail === "string"
-          ? err.detail
-          : Array.isArray(err.detail)
-            ? "Kayıt bilgileri geçersiz."
-            : "";
-      throw new Error(detail || "Oturum açılamadı");
-    }
-    const data = (await register.json()) as { access_token: string };
-    setToken(data.access_token);
-    return data.access_token;
+    const err = (await login.json().catch(() => ({}))) as { detail?: unknown };
+    const detail =
+      typeof err.detail === "string" ? err.detail : "Oturum açılamadı";
+    throw new Error(detail);
   })().finally(() => {
     inflight = null;
   });

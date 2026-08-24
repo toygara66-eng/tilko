@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useProfile } from "@/components/profile/profile-context";
+import { isSignedIn } from "@/lib/auth";
 
 const OPEN = new Set(["/hedef", "/admin", "/giris", "/hoca"]);
 
@@ -13,6 +14,7 @@ export function ExamTargetGate() {
 
   useEffect(() => {
     if (!ready) return;
+    if (!isSignedIn()) return;
     if (profile.role === "teacher" || profile.role === "admin") return;
     // Yerel veya sunucu: bir kez seçildiyse bir daha /hedef zorlama.
     if (profile.isOnboarded) return;
