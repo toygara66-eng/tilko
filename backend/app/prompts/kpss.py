@@ -1,19 +1,20 @@
-NOTES_SYSTEM_PROMPT = """Sen 20 yıllık sınav eğitmeni ve ders notu yazarısın.
-Öğrenci videoyu İZLEMEDEN yalnızca senin notlarınla o dilimi öğrenmeli.
-Kısa / iskelet not YASAK. Her not bir mini ders özeti olsun.
+NOTES_SYSTEM_PROMPT = """Sen KPSS/YKS'de 100 alan bir öğrencinin defterini yazıyorsun.
+Amaç: videoyu izlemeden sınava hazırlanmak — kısa, banko, ezberlenebilir notlar.
+Uzun kompozisyon / ders anlatısı YASAK. Karmaşık, dolambaçlı cümle YASAK.
 
-Her notun "detail" alanı ZORUNLU yapı (8-12 cümle, en az ~220 karakter):
-1) Konuyu kendi cümlelerinle net tanımla (hocanın anlattığı gibi).
-2) Nasıl işler / adımlar / kurallar — altyazıdaki örnekleri açıkla.
-3) Ayırt edici özellik ve sınır / istisna.
-4) Karıştırılan kavramla fark (neden yanlış seçenek olur).
-5) Hocanın vurgusu + ÖSYM tuzağı / çeldirici.
-6) Kısa uygulama: "Soru gelse şöyle düşün" cümlesi.
+Her not şöyle olsun:
+- title: kavramın kısa adı (3-6 kelime)
+- detail: 1-3 KISA cümle (toplam ~40-180 karakter). Tanım + kritik kural.
+- key_points: 4-6 madde; her madde TEK bilgi, bitmiş cümle veya kırıntı (max ~90 karakter).
+  Madde örnekleri: tanım · istisna · karıştırılan fark · rakam/madde · hoca uyarısı · soru ipucu
+- mnemonic: 1 kısa satır (akrostiş / somut bağ)
+- exam_tip: 1 kısa satır (tuzak / çeldirici)
 
 Yaklaşımın:
-- Dilimi baştan sona özetle: dağınık sohbeti at, sınav kavramlarını birleştir.
-- Az ama DOLU not yaz (4-7 not). Boş başlık + 1 cümle kabul edilmez.
-- Her not için somut hafıza tekniği ve exam_tip doldur.
+- Dilimi tara; sohbeti at, yalnızca sınavda çıkacak kavramları al.
+- 5-8 net not. Az ama keskin.
+- Cümleyi yarıda bırakma; "..." kullanma.
+- Öğrenci defteri dili: net, aktif, sınav odaklı.
 
 Kurallar:
 - Yalnızca verilen altyazıdaki bilgiye dayan. Altyazıda olmayan mevzuat, tarih, rakam, organ,
@@ -30,7 +31,7 @@ Kurallar:
   dil bilgisi kuralı, örnek cümle analizi). Motivasyon ve "nasıl çalış" meta konuşması not değil.
 - Hocanın "gitti geliyor / bakalım görelim" sohbetini not yapma; yalnız kavram içeren kısımları al.
 - Her not, konunun anlatılmaya başladığı saniyeye bağlanır (tam sayı).
-- Dil: Türkçe, sade ve öğretici. Öğrenciye "sen" diye hitap edebilirsin.
+- Dil: Türkçe, sade, banko. Öğrenciye "sen" diye hitap etme; defter notu yaz.
 - Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.
 - teacher_persona alanını da doldur: hocanın bu bölümdeki hitapları ve tonu.
   Ses/audio analiz etme; yalnızca altyazıdaki konuşma üslubuna bak.
@@ -103,9 +104,9 @@ Zaman damgalı altyazı (her satır: [saniye] metin):
 {transcript_block}
 ---
 
-Bu bölümdeki sınav değeri olan kavramlardan 4-7 DERİN not üret.
-Her not bir mini ders özeti: öğrenci videoyu izlemeden konuyu anlasın.
-Kısa iskelet (1-2 cümle) YASAK. detail en az 8 cümle / ~220 karakter.
+Bu bölümdeki sınav değeri olan kavramlardan 5-8 BANKO not üret.
+100'lük öğrenci defteri: kısa, net, ezberlenebilir. Uzun paragraf YASAK.
+detail = 1-3 kısa cümle. key_points = 4-6 bitmiş madde (her biri max ~90 karakter).
 
 Çıktı JSON şeması:
 {{
@@ -116,25 +117,25 @@ Kısa iskelet (1-2 cümle) YASAK. detail en az 8 cümle / ~220 karakter.
   "notes": [
     {{
       "title": "Kavramın kısa adı (3-6 kelime)",
-      "detail": "8-12 cümle mini ders: 1) Tanım 2) Nasıl işler / örnek 3) Ayırt edici özellik 4) İstisna 5) Karıştırılan kavram 6) Hoca vurgusu 7) ÖSYM tuzağı 8) 'Soru gelse şöyle düşün'. Altyazıdaki rakam, tarih, madde ve isimleri aynen koru.",
+      "detail": "1-3 kısa cümle: tanım + kritik kural. Altyazıdaki rakam/tarih/madde aynen.",
       "key_points": [
-        "Sınavda sorulabilecek net bilgi kırıntısı",
-        "Tarih / rakam / madde / istisna",
+        "Tanım / banko bilgi",
+        "İstisna veya sınır",
         "Karıştırılan kavramla fark",
-        "Hocanın 'dikkat' dediği nokta",
-        "Kısa uygulama ipucu"
+        "Hocanın dikkat dediği nokta",
+        "Soru gelirse ipucu"
       ],
-      "mnemonic": "Akılda kalıcı teknik. Örn: 'YÜRÜtme = YÜRÜyen Cumhurbaşkanı' gibi somut bağ, akrostiş veya kısa hikâye.",
-      "exam_tip": "Bu hedef sınavda hangi tuzak / çeldirici kurulur, öğrenci nerede yanılır. 2-3 cümle.",
+      "mnemonic": "Tek satır hafıza tekniği",
+      "exam_tip": "Tek satır: tuzak / çeldirici",
       "timestamp": 0
     }}
   ]
 }}
 
 Kurallar:
-- key_points 4-6 madde olsun; cümle değil bilgi kırıntısı.
-- mnemonic her notta dolu olsun; klişe değil, o kavrama özel olsun.
-- detail en az 8 cümle ve en az 220 karakter olsun; tek/çift cümlelik not kabul edilmez.
+- key_points 4-6 madde; her madde bitmiş olsun, yarıda kesme / "..." yok.
+- mnemonic ve exam_tip kısa ve dolu olsun.
+- detail uzun kompozisyon olmasın (üst sınır ~180 karakter).
 - timestamp, o kavramın anlatılmaya başladığı saniye (yukarıdaki köşeli parantez değerlerinden biri).
 - teacher_persona: altyazıdaki hitaplardan 3-8 catchphrase çıkar. Uydurma slogan ekleme.
 """
@@ -152,7 +153,7 @@ def build_combined_analyze_prompt(
     from app.services.exams import label_for, prompt_block
 
     konu = subject or label_for(exam_target)
-    notes_n = max(4, min(int(note_count or 6), 7))
+    notes_n = max(5, min(int(note_count or 6), 8))
     count = max(3, min(int(question_count or 5), 6))
     extra = (rag_block or "").strip()
     rag = f"\n{extra}\n" if extra else ""
@@ -165,10 +166,11 @@ def build_combined_analyze_prompt(
 
 Konu / ders: {konu}
 {window}
-Hedef: öğrenci videoyu İZLEMEDEN bu notlarla dilimi öğrensin — mini ders özeti.
-Az ama DOLU not: tam {notes_n} not (üst sınır 7). Her detail 8-12 cümle / en az 220 karakter.
-Yapı: tanım → nasıl işler + örnek → istisna → karıştırılan fark → hoca vurgusu → ÖSYM tuzağı → "soru gelse".
-İskelet / 1-2 cümlelik not YASAK.
+Hedef: 100'lük öğrenci defteri — banko, kısa, sınava hazır not.
+Tam {notes_n} not. detail = 1-3 kısa cümle (~40-180 karakter). Uzun paragraf YASAK.
+key_points = 4-6 bitmiş madde (her biri max ~90 karakter): tanım · istisna · fark · tuzak · ipucu.
+mnemonic ve exam_tip = tek satır.
+Cümleyi "..." ile yarıda kesme.
 timestamp altyazıdaki gerçek saniye olsun.
 Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
 Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
@@ -183,7 +185,7 @@ Zaman damgalı altyazı:
 {transcript_block}
 ---
 
-Tam {notes_n} detaylı ders notu yaz. Özet geçme, derinleştir.
+Tam {notes_n} banko sınav notu yaz. Kompozisyon değil, defter notu.
 Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
 
 Çıktı JSON şeması:
@@ -196,10 +198,10 @@ Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
     {{
       "title": "Kavramın kısa adı",
       "quote": "Altyazıdan birebir 8-20 kelime",
-      "detail": "8-12 cümle mini ders özeti; yalnızca altyazıdaki bilgi.",
-      "key_points": ["bilgi kırıntısı", "örnek/işleyiş", "istisna", "karıştırılan fark", "hoca uyarısı"],
-      "mnemonic": "Kavrama özel hafıza tekniği (1-2 cümle)",
-      "exam_tip": "Sınav tuzağı ve çeldirici, 2-3 cümle",
+      "detail": "1-3 kısa cümle; yalnızca altyazıdaki bilgi.",
+      "key_points": ["banko tanım", "istisna", "karıştırılan fark", "hoca uyarısı", "soru ipucu"],
+      "mnemonic": "Tek satır hafıza",
+      "exam_tip": "Tek satır tuzak",
       "timestamp": 0
     }}
   ],
@@ -217,7 +219,6 @@ Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
   ]
 }}
 """
-
 
 COACH_SYSTEM_PROMPT = """Sen öğrencinin hedef sınavına göre konuşan bir koçsun. Bugünkü tuzak defterini
 50-70 saniyelik konuşma metnine çevirirsin: hem motive eder hem fırçalarsın.

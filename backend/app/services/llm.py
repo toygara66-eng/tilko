@@ -562,12 +562,21 @@ def _note_blob(note: dict) -> str:
 
 
 def _is_thin_note(note: dict) -> bool:
-    """Çok kısa / anlatmayan not — ders özeti sayılmaz."""
+    """İskelet / boş not — banko sınav notu sayılmaz (kısa ama dolu not OK)."""
     detail = str(note.get("detail") or note.get("text") or "").strip()
-    if len(detail) < 160:
+    points = [str(p).strip() for p in (note.get("key_points") or []) if str(p).strip()]
+    tip = str(note.get("exam_tip") or "").strip()
+    title = str(note.get("title") or "").strip()
+    substance = len(detail) + sum(len(p) for p in points) + len(tip)
+    if len(points) >= 3 and substance >= 90:
+        return False
+    if len(detail) >= 40 and len(points) >= 2:
+        return False
+    if substance < 90 and len(points) < 3:
         return True
-    sentences = len(re.findall(r"[.!?…]+", detail))
-    if sentences < 4 and len(detail) < 280:
+    if len(detail) < 24 and len(points) < 2:
+        return True
+    if detail and title and detail.casefold() == title.casefold() and len(points) < 2:
         return True
     return False
 
@@ -589,7 +598,8 @@ def _is_junk_note(note: dict) -> bool:
     # Ham altyazı tekrarı / boş sohbet
     if _FILLER_TRANSCRIPT_RE.search(title) and not _EDU_SIGNAL_RE.search(blob):
         return True
-    if len(detail) < 80 and not _EDU_SIGNAL_RE.search(blob):
+    points = [str(p).strip() for p in (note.get("key_points") or []) if str(p).strip()]
+    if len(detail) < 40 and len(points) < 2 and not _EDU_SIGNAL_RE.search(blob):
         return True
     # Aynı kelimeyi 4+ kez tekrarlayan çöp
     words = re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]{3,}", blob.lower())
@@ -626,12 +636,62 @@ def _filter_quality_notes(notes: list[dict], *, require_depth: bool = False) -> 
     return out
 
 
+def _clip_at_word(text: str, max_len: int) -> str:
+    clean = re.sub(r"\s+", " ", (text or "").strip())
+    if len(clean) <= max_len:
+        return clean
+    cut = clean[:max_len].rstrip(" .…,;:")
+    space = cut.rfind(" ")
+    if space > max_len * 0.55:
+        cut = cut[:space]
+    return cut.rstrip(" .…,;:")
+
+
+def _compact_exam_notes(notes: list[dict]) -> list[dict]:
+    """Uzun kompozisyonu 100'lük öğrenci defteri formatına sıkıştır."""
+    out: list[dict] = []
+    for raw in notes:
+        if not isinstance(raw, dict):
+            continue
+        note = dict(raw)
+        detail = str(note.get("detail") or note.get("text") or "").strip()
+        points = [str(p).strip() for p in (note.get("key_points") or []) if str(p).strip()]
+        if len(points) < 3 and detail:
+            sents = [
+                s.strip()
+                for s in re.split(r"(?<=[.!?…])\s+", detail)
+                if len(s.strip()) >= 12
+            ]
+            for sent in sents:
+                if len(points) >= 6:
+                    break
+                chunk = _clip_at_word(sent, 90)
+                if chunk and chunk not in points:
+                    points.append(chunk)
+        if len(detail) > 180:
+            sents = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", detail) if s.strip()]
+            detail = " ".join(sents[:3])
+            detail = _clip_at_word(detail, 180)
+        note["detail"] = detail
+        note["text"] = detail
+        note["key_points"] = [_clip_at_word(p, 90) for p in points[:6]]
+        tip = str(note.get("exam_tip") or "").strip()
+        if tip:
+            tip_sents = re.split(r"(?<=[.!?…])\s+", tip)
+            note["exam_tip"] = _clip_at_word(tip_sents[0].strip(), 120)
+        mnemonic = str(note.get("mnemonic") or "").strip()
+        if mnemonic:
+            note["mnemonic"] = _clip_at_word(mnemonic, 120)
+        out.append(note)
+    return out
+
+
 def _expand_thin_notes(
     notes: list[dict],
     transcript: str,
     subject: str | None,
 ) -> list[dict]:
-    """Kısa kalan notları aynı altyazıyla mini ders özetine çevir."""
+    """İskelet kalan notları banko sınav maddelerine çevir."""
     thin = [n for n in notes if _is_thin_note(n)]
     if not thin:
         return notes
@@ -649,13 +709,16 @@ def _expand_thin_notes(
     try:
         result = _as_dict(
             _chat(
-                "Türkçe KPSS ders notu yazarısın. Kısa notları 8-12 cümlelik mini ders "
-                "özetine ÇEVİR. Altyazıda olmayanı uydurma. Sadece JSON.",
+                "Türkçe KPSS sınav notu yazarısın. İskelet notları 100'lük öğrenci "
+                "defteri formatına ÇEVİR: kısa detail + 4-6 banko madde. "
+                "Uzun kompozisyon YASAK. Altyazıda olmayanı uydurma. Sadece JSON.",
                 (
                     f"Ders: {subject or 'KPSS'}\n"
                     f"Altyazı:\n{(transcript or '')[:4500]}\n\n"
-                    f"Kısa notlar (genişlet):\n{json.dumps(compact, ensure_ascii=False)}\n\n"
-                    "Her not için detail en az 220 karakter / 8 cümle olsun. Şema: "
+                    f"İskelet notlar (bankola):\n{json.dumps(compact, ensure_ascii=False)}\n\n"
+                    "Her not: detail 1-3 kısa cümle (~40-180 karakter); "
+                    "key_points 4-6 bitmiş madde (her biri max ~90 karakter). "
+                    "Cümleyi '...' ile kesme. Şema: "
                     '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
                 ),
@@ -668,7 +731,6 @@ def _expand_thin_notes(
             expanded = _filter_quality_notes(_coerce_notes(result))
         if not expanded:
             return notes
-        # Genişletilenleri başlığa göre birleştir
         by_title = {
             _fold_tr(str(n.get("title") or "")): n for n in expanded if n.get("title")
         }
@@ -684,12 +746,11 @@ def _expand_thin_notes(
                 merged.append({**note, **richer})
             else:
                 merged.append(note)
-        # Yeni eklenen derin notlar
         for key, richer in by_title.items():
             if key and all(_fold_tr(str(n.get("title") or "")) != key for n in merged):
                 if not _is_thin_note(richer):
                     merged.append(richer)
-        return merged or notes
+        return _compact_exam_notes(merged or notes)
     except Exception:  # noqa: BLE001
         logger.exception("Kısa not genişletme başarısız")
         return notes
@@ -1897,6 +1958,7 @@ def generate_notes(
             len(results),
         )
     notes.sort(key=lambda n: int(float(n.get("timestamp") or 0)))
+    notes = _compact_exam_notes(_sanitize_note_tips(_filter_quality_notes(notes) or notes))
     persona = merge_personas(
         [result.get("teacher_persona") for result in results if isinstance(result, dict)]
     )
@@ -2195,16 +2257,15 @@ def _fallback_notes_from_transcript(chunk: str, subject: str | None) -> dict:
         if len(title) < 8:
             title = f"{topic} — nokta {index + 1}"
         # Şablon cümle ekleme; sadece altyazı + kısa çalışma yönü.
-        detail = (
-            f"{para} "
-            f"Tanımı kendi cümlelerinle yaz; altyazıdaki örneği koru. "
-            f"Sınavda aynı ifade tersine çevrilerek sorulabilir."
-        )
+        detail = _clip_at_word(para, 160)
         note = {
             "title": title[:72],
-            "quote": para[:140],
-            "detail": detail[:900],
-            "key_points": [para[:110], "Tanımı kendi cümlelerinle yaz"],
+            "quote": _clip_at_word(para, 120),
+            "detail": detail,
+            "key_points": [
+                _clip_at_word(para, 90),
+                "Aynı ifade soru kökünde tersine çevrilebilir",
+            ],
             "mnemonic": f"{topic}: bu cümleyi 2 kez tekrarla.",
             "exam_tip": "Soru kökünde aynı kavramın tersine çevrilmiş ifadesini ara.",
             "timestamp": index * 40,
@@ -2241,9 +2302,9 @@ def _analyze_combined(
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Kısa iskelet YASAK; her not 8-12 cümle "
-        "mini ders özeti (tanım + örnek + istisna + tuzak + 'soru gelse'). "
-        "Sadece JSON; markdown yok.\n\n"
+        "not, şık veya açıklamaya yazma. 100'lük öğrenci defteri: her not "
+        "1-3 kısa cümle detail + 4-6 banko madde; uzun kompozisyon YASAK; "
+        "cümleyi '...' ile kesme. Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,
@@ -2281,12 +2342,12 @@ def _analyze_combined(
             short = work[:4500]
             result = _as_dict(
                 _chat(
-                    "Türkçe KPSS ders notu yaz. Sadece JSON. notes boş olamaz. "
-                    "Altyazıda yoksa uydurma. Her not en az 8 cümle / 220 karakter mini ders. "
-                    "Tanıtım YASAK. İngilizce uyarı / kota / 'I cannot' YASAK.",
+                    "Türkçe KPSS banko sınav notu yaz. Sadece JSON. notes boş olamaz. "
+                    "Altyazıda yoksa uydurma. Her not: 1-3 kısa cümle + 4-6 madde. "
+                    "Uzun paragraf YASAK. Tanıtım YASAK. İngilizce uyarı / kota / 'I cannot' YASAK.",
                     (
                         f"Ders: {subject or 'KPSS'}\nAltyazı:\n{short}\n\n"
-                        "4-6 derin not yaz. Şema: "
+                        "5-7 banko not yaz. Şema: "
                         '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                         '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
                     ),
@@ -2309,26 +2370,34 @@ def _analyze_combined(
                 logger.warning("Grounding boş; ham %s kaliteli not kullanılıyor.", len(raw_notes))
                 notes = raw_notes[:8]
         if not notes:
-            # Son yumuşak kabul: sistem çöpü değilse uzun detaylı notları tut.
+            # Son yumuşak kabul: sistem çöpü değilse sınav değeri olan notları tut.
             soft = []
             for note in _coerce_notes(result):
                 detail = str(note.get("detail") or note.get("text") or "").strip()
-                if len(detail) < 120:
+                points = [
+                    str(p).strip()
+                    for p in (note.get("key_points") or [])
+                    if str(p).strip()
+                ]
+                if len(detail) < 36 and len(points) < 2:
                     continue
                 if _JUNK_NOTE_RE.search(_note_blob(note)):
                     continue
                 soft.append(note)
             if soft:
                 logger.warning("Yumuşak kabul: %s not.", len(soft))
-                notes = soft[:6]
+                notes = soft[:8]
         notes = _sanitize_note_tips(_filter_quality_notes(notes) or notes)
-        # Kısa kalanları genişlet; silinirse önceki notları koru.
+        notes = _compact_exam_notes(notes)
+        # İskelet kalanları bankola; silinirse önceki notları koru.
         if notes and sum(1 for n in notes if _is_thin_note(n)) >= max(1, len(notes) // 2):
-            logger.warning("Notlar kısa kaldı; genişletme turu.")
+            logger.warning("Notlar iskelet kaldı; banko sıkıştırma turu.")
             before = list(notes)
             try:
                 notes = _expand_thin_notes(notes, work, subject)
-                notes = _sanitize_note_tips(_filter_quality_notes(notes)) or before
+                notes = _compact_exam_notes(
+                    _sanitize_note_tips(_filter_quality_notes(notes)) or before
+                )
             except Exception:  # noqa: BLE001
                 notes = before
         # Sorular: birleşik JSON'dan gelen + gerekirse kısa ek üretim (max 25 sn).

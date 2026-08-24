@@ -8,10 +8,13 @@ function asArrow(line: string) {
   return `-> ${trimmed}`;
 }
 
-function clip(text: string, max = 90) {
+/** Kelime sınırında kısalt; "..." ile cümle ortasında kesme. */
+function softClip(text: string, max: number) {
   const clean = text.replace(/\s+/g, " ").trim();
   if (clean.length <= max) return clean;
-  return `${clean.slice(0, max).trim()}…`;
+  const cut = clean.slice(0, max).replace(/[.…,;:\s]+$/u, "");
+  const space = cut.lastIndexOf(" ");
+  return (space > max * 0.55 ? cut.slice(0, space) : cut).trim();
 }
 
 /** Model/sistem hatası exam_tip olarak kırmızı kutuya basılmasın. */
@@ -26,7 +29,12 @@ export function fromNoteItem(note: NoteItem, tilt = -0.6): HumanNoteCardProps {
     note.key_points.length > 0
       ? note.key_points
       : note.text.split(/[.!?]\s+/).filter((part) => part.trim().length > 8);
-  const lines = raw.slice(0, 8).map((line) => asArrow(clip(line, 110)));
+  // Banko maddeleri tam göster; yarıda "…" koyma.
+  const lines = raw
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((line) => asArrow(line));
   const highlights = [note.title].filter(Boolean);
   const tip = (note.exam_tip || "").trim();
 
@@ -36,14 +44,14 @@ export function fromNoteItem(note: NoteItem, tilt = -0.6): HumanNoteCardProps {
     tilt,
     highlights,
     lines,
-    mnemonic: note.mnemonic ? clip(note.mnemonic, 140) : undefined,
+    mnemonic: note.mnemonic ? note.mnemonic.replace(/\s+/g, " ").trim() : undefined,
     warning: tip && !isSystemExamTip(tip) ? tip : undefined,
   };
 }
 
 export function fromTrapItem(trap: TrapItem, tilt = 0.8): HumanNoteCardProps {
   const options = Object.entries(trap.options || {}).map(
-    ([letter, text]) => `${letter}) ${clip(text, 70)}`,
+    ([letter, text]) => `${letter}) ${softClip(text, 100)}`,
   );
   return {
     variant: "trap",
@@ -52,15 +60,15 @@ export function fromTrapItem(trap: TrapItem, tilt = 0.8): HumanNoteCardProps {
     tilt,
     highlights: [trap.chosen, trap.correct].filter(Boolean),
     lines: [
-      asArrow(clip(trap.question_text, 140)),
+      asArrow(softClip(trap.question_text, 180)),
       ...options,
       `ben -> ${trap.chosen || "?"}    doğru => ${trap.correct || "?"}`,
     ],
     subject: trap.misconception_tag || (trap.subject_type === "sayisal" ? "Sayısal" : undefined),
     mnemonic: trap.shortcut_tactic
-      ? clip(trap.shortcut_tactic, 160)
+      ? softClip(trap.shortcut_tactic, 180)
       : trap.explanation
-        ? clip(trap.explanation, 160)
+        ? softClip(trap.explanation, 180)
         : undefined,
     teacherNote: trap.teacher_note || trap.distractor_analysis || undefined,
     warning:

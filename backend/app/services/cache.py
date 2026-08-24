@@ -51,7 +51,7 @@ def build_key(
         f"{video_id}|{subject or ''}|{question_count}|{exam_target or ''}"
         f"|{subject_type or ''}|{int(bool(is_yks_fen_question))}|r{style_revision}"
         f"|f{int(focus_bucket or 0)}"
-        f"|{settings.llm_provider}|{settings.active_model}|fullspan1|ndepth{MIN_NOTES_DEPTH}"
+        f"|{settings.llm_provider}|{settings.active_model}|examready1|ndepth{MIN_NOTES_DEPTH}"
     )
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
 
