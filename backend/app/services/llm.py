@@ -39,13 +39,13 @@ CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-# Gemini yavaşsa Groq'a çabuk düş (120 sn bekleyip "gecikti" basma).
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(55.0, connect=12.0)
-GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(50.0, connect=12.0)
+# Gemini yavaşsa Groq'a çabuk düş (2×50 sn bekleyip "gecikti" basma).
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(45.0, connect=12.0)
+GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(32.0, connect=10.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
-# flash-lite ≈ en ucuz; 2.0/2.5-flash yedek (daha pahalı).
+# flash-lite ≈ hızlı/ucuz; 2.0-flash yalnızca yedek (analiz zincirinde tek model deneriz).
 GEMINI_MODEL_FALLBACKS = (
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
@@ -73,6 +73,7 @@ _openrouter_free_only = False
 _skip_gemini = False
 _chain_index = 0
 _active_name = ""
+_last_chance_used = False
 RETRY_AFTER_RE = re.compile(
     r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<mins>\d+)m(?!s))?\s*(?P<num>[\d.]+)\s*(?P<unit>ms|s)",
     re.IGNORECASE,
@@ -670,8 +671,16 @@ def _gemini_model_id() -> str:
 
 
 def _gemini_models_to_try() -> list[str]:
-    """Maliyet: yalnızca birincil (+ gerekirse 1 yedek), uzun liste yok."""
+    """Analizde tek Gemini modeli; timeout olursa Groq'a düş (2× beklemeyi kes)."""
     primary = _gemini_model_id()
+    # Render hâlâ 2.0-flash gösterse bile analizde lite'ı tercih et (hız).
+    task = usage_task.get() or ""
+    if task in ANALYZE_TASKS:
+        # Önce lite, yoksa yapılandırılan.
+        for name in (GEMINI_CHAT_MODEL, primary):
+            if name and name not in GEMINI_UNAVAILABLE_MODELS:
+                return [name]
+        return [GEMINI_CHAT_MODEL]
     ordered: list[str] = []
     for name in (primary, *GEMINI_MODEL_FALLBACKS):
         if not name or name in GEMINI_UNAVAILABLE_MODELS:
@@ -750,12 +759,8 @@ def _gemini_native_completion(
             last = exc
             logger.warning("Gemini %s ağ hatası: %s", name, exc)
             if _is_timeout(exc):
-                # Türkçe RuntimeError YASAK — _chat Groq yedeğine geçsin.
-                last = TimeoutError(f"Gemini {name} timed out")
-                # Sonraki modele daha kısa kullanıcı metni dene.
-                if len(user) > 5500:
-                    user = user[:5500] + "\n...(kısaltıldı)"
-                continue
+                # Analizde ikinci Gemini modelini deneme — hemen Groq yedeğine çık.
+                raise TimeoutError(f"Gemini {name} timed out") from exc
             continue
         if response.status_code == 400 and "thinking" in (response.text or "").lower():
             generation.pop("thinkingConfig", None)
@@ -770,8 +775,7 @@ def _gemini_native_completion(
             except Exception as exc:  # noqa: BLE001
                 last = exc
                 if _is_timeout(exc):
-                    last = TimeoutError(f"Gemini {name} timed out")
-                    continue
+                    raise TimeoutError(f"Gemini {name} timed out") from exc
                 continue
         if response.status_code == 404:
             logger.warning("Gemini model yok, sıradaki: %s", name)
@@ -1050,10 +1054,12 @@ def _provider_chain() -> list[str]:
 
 def reset_analyze_provider_chain() -> None:
     """Her video işi temiz sırayla başlasın (önceki timeout zinciri kalmasın)."""
-    global _chain_index, _active_name
+    global _chain_index, _active_name, _last_chance_used, _skip_gemini
     with _provider_lock:
         _chain_index = 0
         _active_name = ""
+        _last_chance_used = False
+        _skip_gemini = False
 
 
 def _activate_next_analyze_provider(*, reason: str = "yedek") -> bool:
@@ -1075,6 +1081,29 @@ def _activate_next_analyze_provider(*, reason: str = "yedek") -> bool:
                 )
                 return True
             _chain_index += 1
+        return False
+
+
+def _force_fast_fallback_provider() -> bool:
+    """Zincir bittiğinde son şans: Groq/Cerebras/Nebius'tan ilkini zorla (bir kez)."""
+    global _chain_index, _active_name, _skip_gemini, _last_chance_used
+    with _provider_lock:
+        if _last_chance_used:
+            return False
+        _skip_gemini = True
+        for name in ("groq", "cerebras", "nebius"):
+            pair = _named_client(name)
+            if not pair:
+                continue
+            chain = _provider_chain()
+            try:
+                _chain_index = chain.index(name)
+            except ValueError:
+                _chain_index = max(_chain_index, 0)
+            _active_name = name
+            _last_chance_used = True
+            logger.warning("Son şans yedek: %s / %s", name, pair[1])
+            return True
         return False
 
 
@@ -1344,8 +1373,17 @@ def _chat(
                             "Timeout → yedek sağlayıcı: %s", _active_name or "?"
                         )
                         continue
+                    if task in ANALYZE_TASKS and _force_fast_fallback_provider():
+                        system_prompt, user_prompt = _shrink_prompts_for_provider(
+                            system_prompt[:2000], user_prompt[:3500]
+                        )
+                        logger.warning(
+                            "Timeout → son şans: %s", _active_name or "?"
+                        )
+                        continue
                     raise RuntimeError(
-                        "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
+                        "Model yavaş kaldı; yedekler de yetişmedi. "
+                        "20 sn bekle, Analiz et’e bir kez bas (üst üste basma)."
                     ) from exc
                 if "model_not_found" in str(exc).lower() or "error code: 404" in str(exc).lower():
                     if _activate_credit_fallback() or (
@@ -1426,9 +1464,10 @@ def _run_parallel(jobs: list) -> list[dict]:
         raise fatal_error[0]
     if results and failures and all(not item for item in results):
         first = failures[0]
-        if "timed out" in first.lower() or "timeout" in first.lower():
+        if "timed out" in first.lower() or "timeout" in first.lower() or "gecikti" in first.lower():
             raise RuntimeError(
-                "Model yanıtı gecikti. 20 sn bekle, Analiz et’e bir kez bas."
+                "Model yavaş kaldı; yedekler de yetişmedi. "
+                "20 sn bekle, Analiz et’e bir kez bas (üst üste basma)."
             )
         raise RuntimeError(first)
     return results
@@ -1795,6 +1834,9 @@ def _analyze_combined(
     questions = _ground_questions(questions, work)
     if not notes:
         logger.warning("Birleşik analiz boş not; kısa ama zorunlu not denemesi.")
+        # Önceki timeout zinciri kalmasın; kısa metinle yeniden dene.
+        reset_analyze_provider_chain()
+        short = work[:4500]
         result = _as_dict(
             _chat(
                 NOTES_SYSTEM_PROMPT
@@ -1802,7 +1844,7 @@ def _analyze_combined(
                 "Altyazıda yoksa uydurma. Her notta quote = altyazıdan birebir parça. "
                 "Her not en az 4 cümle. Tanıtım/PDF/abone YASAK.",
                 (
-                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{work[:6000]}\n\n"
+                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{short}\n\n"
                     "En az 5 detaylı not yaz. Şema: "
                     '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
@@ -1811,9 +1853,9 @@ def _analyze_combined(
                 task="analyze",
             )
         )
-        notes = _ground_notes(_coerce_notes(result), work)
+        notes = _ground_notes(_coerce_notes(result), short)
         _collect([result], questions, seen, count)
-        questions = _ground_questions(questions, work)
+        questions = _ground_questions(questions, short)
     if not notes:
         raw_notes = [
             note

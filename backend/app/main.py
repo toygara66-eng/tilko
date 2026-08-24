@@ -1797,10 +1797,10 @@ def _public_analyze_error(exc: BaseException) -> str:
     low = text.lower()
     if "api_key" in low or "bearer" in low:
         return "Altyazı veya analiz adımı başarısız. Biraz bekleyip tekrar dene."
-    if "timeout" in low or "timed out" in low or "time-out" in low:
+    if "timeout" in low or "timed out" in low or "time-out" in low or "gecikti" in low or "yavaş kaldı" in low:
         return (
-            "Model veya altyazı zaman aşımına uğradı. "
-            "20 saniye bekleyip Analiz et’e bir kez daha bas."
+            "Model yavaş kaldı. 20 sn bekle, Analiz et’e bir kez bas "
+            "(üst üste basma). Hâlâ olmazsa başka ders videosu dene."
         )
     if "request too large" in low or "reduce your message size" in low or "413" in low:
         return (
