@@ -1407,8 +1407,7 @@ def _chat(
                         )
                         continue
                     raise RuntimeError(
-                        "Model yavaş kaldı; yedekler de yetişmedi. "
-                        "20 sn bekle, Analiz et’e bir kez bas (üst üste basma)."
+                        "Tüm model sağlayıcıları yanıt vermedi."
                     ) from exc
                 if "model_not_found" in str(exc).lower() or "error code: 404" in str(exc).lower():
                     if _activate_credit_fallback() or (
@@ -1490,10 +1489,7 @@ def _run_parallel(jobs: list) -> list[dict]:
     if results and failures and all(not item for item in results):
         first = failures[0]
         if "timed out" in first.lower() or "timeout" in first.lower() or "gecikti" in first.lower():
-            raise RuntimeError(
-                "Model yavaş kaldı; yedekler de yetişmedi. "
-                "20 sn bekle, Analiz et’e bir kez bas (üst üste basma)."
-            )
+            raise RuntimeError("Tüm model sağlayıcıları yanıt vermedi.")
         raise RuntimeError(first)
     return results
 
@@ -1806,6 +1802,64 @@ def analyze_transcript(
                 settings.llm_provider = previous
 
 
+def _fallback_notes_from_transcript(chunk: str, subject: str | None) -> dict:
+    """LLM tamamen düşünce: altyazıdan çalışılabilir not üret (rakip gibi boş dönme)."""
+    raw = re.sub(r"\s+", " ", (chunk or "")).strip()
+    parts = [
+        p.strip()
+        for p in re.split(r"(?<=[.!?…])\s+|\n+", raw)
+        if len(p.strip()) >= 36 and not _PROMO_NOTE_RE.search(p)
+    ]
+    if len(parts) < 3:
+        # Cümle azsa sabit pencereler.
+        step = 180
+        parts = [
+            raw[i : i + step].strip()
+            for i in range(0, min(len(raw), step * 6), step)
+            if len(raw[i : i + step].strip()) >= 36
+        ]
+    notes: list[dict] = []
+    topic = (subject or "Ders").strip() or "Ders"
+    for index, para in enumerate(parts[:6]):
+        title = para[:52].rstrip(" .,;:")
+        if len(para) > 52:
+            title += "…"
+        detail = para
+        if len(detail) < 90:
+            detail = (
+                f"{para} Bu nokta videoda böyle geçiyor; kendi cümlelerinle "
+                f"tekrar et ve benzer soruda çeldiriciye dikkat et."
+            )
+        notes.append(
+            {
+                "title": title or f"{topic} notu {index + 1}",
+                "quote": para[:140],
+                "detail": detail[:700],
+                "key_points": [para[:100]],
+                "mnemonic": f"{topic}: bu cümleyi yüksek sesle 2 kez tekrarla.",
+                "exam_tip": "Soru kökünde aynı kavramın tersine çevrilmiş ifadesini ara.",
+                "timestamp": index * 40,
+            }
+        )
+    if not notes and raw:
+        notes.append(
+            {
+                "title": f"{topic} — video özeti",
+                "quote": raw[:120],
+                "detail": raw[:600],
+                "key_points": [raw[:80]],
+                "mnemonic": f"{topic} videosunu parçalara bölüp tekrar et.",
+                "exam_tip": "Altyazıdaki tanımları soru formatında yazarak pekiştir.",
+                "timestamp": 0,
+            }
+        )
+    return {
+        "notes": notes,
+        "questions": [],
+        "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
+    }
+
+
 def _analyze_combined(
     chunk: str,
     subject: str | None,
@@ -1836,83 +1890,88 @@ def _analyze_combined(
         )
     )
     logger.info("Dilim analiz: %s not/%s soru %s", notes_wanted, count, window_label or "")
-    result = _as_dict(
-        _chat(
-            system,
-            build_combined_analyze_prompt(
-                work,
-                subject,
-                count,
-                exam_target,
-                rag_block,
-                window_label,
-                notes_wanted,
-            ),
-            temperature=0.1,
-            task="analyze",
-        )
-    )
-    notes = _ground_notes(_coerce_notes(result), work)
+    result: dict = {}
+    notes: list[dict] = []
     questions: list[dict] = []
     seen: set[str] = set()
-    _collect([result], questions, seen, count)
-    questions = _ground_questions(questions, work)
-    if not notes:
-        logger.warning("Birleşik analiz boş not; kısa ama zorunlu not denemesi.")
-        # Önceki timeout zinciri kalmasın; kısa metinle yeniden dene.
-        reset_analyze_provider_chain()
-        short = work[:3200]
+    try:
         result = _as_dict(
             _chat(
-                "Türkçe KPSS notu yaz. Sadece JSON. notes boş olamaz. "
-                "Altyazıda yoksa uydurma. Her not en az 3 cümle. Tanıtım YASAK.",
-                (
-                    f"Ders: {subject or 'KPSS'}\nAltyazı:\n{short}\n\n"
-                    "En az 4 not yaz. Şema: "
-                    '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
-                    '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
+                system,
+                build_combined_analyze_prompt(
+                    work,
+                    subject,
+                    count,
+                    exam_target,
+                    rag_block,
+                    window_label,
+                    notes_wanted,
                 ),
                 temperature=0.1,
                 task="analyze",
             )
         )
-        notes = _ground_notes(_coerce_notes(result), short)
+        notes = _ground_notes(_coerce_notes(result), work)
         _collect([result], questions, seen, count)
-        questions = _ground_questions(questions, short)
-    if not notes:
-        raw_notes = [
-            note
-            for note in _coerce_notes(result)
-            if not _is_promo_note(note)
-            and (note.get("detail") or note.get("title"))
-        ]
-        if raw_notes:
-            logger.warning("Grounding boş; ham %s not kullanılıyor.", len(raw_notes))
-            notes = raw_notes[:10]
-        else:
-            raise RuntimeError(
-                "Model altyazıya bağlı not yazamadı. Videoyu tekrar dene veya başka ders dene."
+        questions = _ground_questions(questions, work)
+        if not notes:
+            logger.warning("Birleşik analiz boş not; kısa ama zorunlu not denemesi.")
+            reset_analyze_provider_chain()
+            short = work[:3200]
+            result = _as_dict(
+                _chat(
+                    "Türkçe KPSS notu yaz. Sadece JSON. notes boş olamaz. "
+                    "Altyazıda yoksa uydurma. Her not en az 3 cümle. Tanıtım YASAK.",
+                    (
+                        f"Ders: {subject or 'KPSS'}\nAltyazı:\n{short}\n\n"
+                        "En az 4 not yaz. Şema: "
+                        '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
+                        '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
+                    ),
+                    temperature=0.1,
+                    task="analyze",
+                )
             )
-    if len(questions) < max(2, count // 2):
-        try:
-            more = generate_questions(
-                notes,
-                subject,
-                count,
-                persona=None,
-                exam_target=exam_target,
-                subject_type=subject_type,
-                is_yks_fen_question=is_yks_fen_question,
-            )
-            _collect([{"questions": more}], questions, seen, count)
-        except Exception:
-            logger.exception("Dilim soru tamamlaması başarısız")
-    persona = merge_personas([result.get("teacher_persona")])
-    return {
-        "notes": notes,
-        "questions": questions,
-        "teacher_persona": persona.model_dump(),
-    }
+            notes = _ground_notes(_coerce_notes(result), short)
+            _collect([result], questions, seen, count)
+            questions = _ground_questions(questions, short)
+        if not notes:
+            raw_notes = [
+                note
+                for note in _coerce_notes(result)
+                if not _is_promo_note(note)
+                and (note.get("detail") or note.get("title"))
+            ]
+            if raw_notes:
+                logger.warning("Grounding boş; ham %s not kullanılıyor.", len(raw_notes))
+                notes = raw_notes[:10]
+        if len(questions) < max(2, count // 2) and notes:
+            try:
+                more = generate_questions(
+                    notes,
+                    subject,
+                    count,
+                    persona=None,
+                    exam_target=exam_target,
+                    subject_type=subject_type,
+                    is_yks_fen_question=is_yks_fen_question,
+                )
+                _collect([{"questions": more}], questions, seen, count)
+            except Exception:
+                logger.exception("Dilim soru tamamlaması başarısız")
+        if notes:
+            persona = merge_personas([result.get("teacher_persona")])
+            return {
+                "notes": notes,
+                "questions": questions,
+                "teacher_persona": persona.model_dump(),
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LLM analiz düştü, altyazı yedeğine geçiliyor: %s", exc)
+
+    # Rakip gibi: kullanıcıya "bekle/bas" demeden her zaman not dön.
+    logger.warning("Altyazı yedek notları kullanılıyor (%s).", window_label or "dilim")
+    return _fallback_notes_from_transcript(work, subject)
 
 
 def analyze_slice(

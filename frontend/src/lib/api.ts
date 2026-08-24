@@ -21,16 +21,15 @@ export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatas�
   if (
     name === "AbortError" ||
     name === "TimeoutError" ||
-    /abort|timeout|timed\s*out|zaman\s*aşım|request timed/i.test(blob)
+    /abort|timeout|timed\s*out|zaman\s*aşım|request timed|yavaş kaldı|gecikti/i.test(blob)
   ) {
-    return "Sunucu geç yanıt verdi (Render uyanıyor veya model yavaş). 20 sn bekle, bir kez daha dene; üst üste basma.";
+    return "Analiz şu an yoğun. Biraz sonra tekrar dene.";
   }
   if (/failed to fetch|networkerror|load failed/i.test(blob)) {
-    return "API'ye ulaşılamadı. İnterneti kontrol et veya 20 sn sonra dene.";
+    return "API'ye ulaşılamadı. İnterneti kontrol et veya biraz sonra dene.";
   }
-  // Sunucudan gelen ham İngilizce timeout'ları da çevir.
   if (/request timed out\.?/i.test(message.trim())) {
-    return "Sunucu geç yanıt verdi. 20 sn bekle, bir kez daha dene.";
+    return "Analiz şu an yoğun. Biraz sonra tekrar dene.";
   }
   return message.trim() || fallback;
 }

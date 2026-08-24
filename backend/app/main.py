@@ -1796,18 +1796,15 @@ def _public_analyze_error(exc: BaseException) -> str:
     text = str(exc).strip() or "Analiz başarısız."
     low = text.lower()
     if "api_key" in low or "bearer" in low:
-        return "Altyazı veya analiz adımı başarısız. Biraz bekleyip tekrar dene."
+        return "Analiz şu an tamamlanamadı. Biraz sonra tekrar dene."
     if "timeout" in low or "timed out" in low or "time-out" in low or "gecikti" in low or "yavaş kaldı" in low:
-        return (
-            "Model yavaş kaldı. 20 sn bekle, Analiz et’e bir kez bas "
-            "(üst üste basma). Hâlâ olmazsa başka ders videosu dene."
-        )
+        return "Analiz şu an yoğun. Biraz sonra tekrar dene."
     if "request too large" in low or "reduce your message size" in low or "413" in low:
-        return (
-            "İstek modele fazla geldi. 20 sn bekle, aynı videoyu bir kez daha dene."
-        )
+        return "Video dilimi modele sığmadı. Daha kısa bir bölümle tekrar dene."
     if "bu anahtarda yok" in low or "model yok" in low or "model_not_found" in low:
-        return "Model ayarı güncelleniyor. 20 sn bekle, Analiz et’e bir kez daha bas."
+        return "Analiz ayarı güncelleniyor. Biraz sonra tekrar dene."
+    if "altyazı" in low:
+        return text[:280]
     return text[:280]
 
 

@@ -101,8 +101,8 @@ export function Dashboard() {
           Ders analiz et
         </h1>
         <p className="max-w-xl text-zinc-600 dark:text-zinc-400">
-          YouTube linkini yapıştırıp Analiz et’e bas. Sayfa açılınca kendiliğinden
-          başlamaz; yanlış linkte Durdur’a basabilirsin.
+          YouTube linkini yapıştırıp Analiz et’e bas. Notlar hazır olunca burada
+          açılır; yanlış linkte Durdur’a basabilirsin.
           {profile.weakTopics.length
             ? ` Şimdi ${profile.weakTopics.join(", ")} tarafını hedefle.`
             : ""}
