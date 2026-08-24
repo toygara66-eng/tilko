@@ -356,6 +356,21 @@ class UserFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class PasswordReset(Base):
+    """Şifre sıfırlama kodu (e-posta / telefon)."""
+
+    __tablename__ = "password_resets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    code_hash: Mapped[str] = mapped_column(String(128), default="")
+    channel: Mapped[str] = mapped_column(String(16), default="email")
+    destination: Mapped[str] = mapped_column(String(256), default="")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class PlayPurchase(Base):
     """Google Play / sandbox abonelik fişi — token tekrarını engeller."""
 

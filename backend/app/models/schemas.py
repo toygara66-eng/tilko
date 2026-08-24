@@ -719,6 +719,44 @@ class AuthResponse(BaseModel):
     dashboard: str = "/"
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(default="", max_length=256)
+    phone: str = Field(default="", max_length=32)
+
+
+class ForgotPasswordResponse(BaseModel):
+    ok: bool = True
+    sent: bool = False
+    channel: str = "email"
+    destination_hint: str = ""
+    message: str = ""
+    debug_code: str = ""
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(default="", max_length=256)
+    phone: str = Field(default="", max_length=32)
+    code: str = Field(..., min_length=4, max_length=12)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class ResetPasswordResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    message: str = ""
+
+
+class AdminSetPasswordRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class AdminSetPasswordResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    message: str = ""
+
+
 class AdminUserRow(BaseModel):
     user_id: str
     display_name: str = ""

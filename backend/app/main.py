@@ -70,6 +70,12 @@ from app.models.schemas import (
     AuthRequest,
     AuthResponse,
     GoogleAuthRequest,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    AdminSetPasswordRequest,
+    AdminSetPasswordResponse,
     AdminUserListResponse,
     AdminUserRow,
     AdminGrantProRequest,
@@ -310,6 +316,42 @@ def auth_google(
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     return AuthResponse.model_validate(data)
+
+
+@app.post("/auth/forgot-password", response_model=ForgotPasswordResponse)
+@limiter.limit("8/minute")
+def auth_forgot_password(
+    request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)
+) -> ForgotPasswordResponse:
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.request_password_reset(
+            db, email=payload.email, phone=payload.phone
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ForgotPasswordResponse.model_validate(data)
+
+
+@app.post("/auth/reset-password", response_model=ResetPasswordResponse)
+@limiter.limit("8/minute")
+def auth_reset_password(
+    request: Request, payload: ResetPasswordRequest, db: Session = Depends(get_db)
+) -> ResetPasswordResponse:
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.reset_password_with_code(
+            db,
+            email=payload.email,
+            phone=payload.phone,
+            code=payload.code,
+            new_password=payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ResetPasswordResponse.model_validate(data)
 
 
 def _busy_http(exc: BaseException) -> HTTPException:
@@ -1041,6 +1083,21 @@ def admin_users_grant_pro(
         subscription_expires_at=_iso_dt(user.subscription_expires_at),
         message=f"Pro verildi ({payload.days} gün).",
     )
+
+
+@app.post("/admin/users/set-password", response_model=AdminSetPasswordResponse)
+def admin_users_set_password(
+    payload: AdminSetPasswordRequest, db: Session = Depends(get_db)
+) -> AdminSetPasswordResponse:
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.admin_set_password(
+            db, payload.user_id, payload.new_password
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminSetPasswordResponse.model_validate(data)
 
 
 @app.post("/admin/promo/create", response_model=PromoCreateResponse)

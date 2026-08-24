@@ -29,6 +29,8 @@ PUBLIC_PATHS = {
     "/auth/login",
     "/auth/register",
     "/auth/google",
+    "/auth/forgot-password",
+    "/auth/reset-password",
     "/login",
     "/subscription/webhook",
 }

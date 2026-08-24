@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in";
-import { loginAccount, loginWithGoogle, registerAccount } from "@/lib/api";
+import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPassword } from "@/lib/api";
 import { setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
 import { getUserId, setUserId } from "@/lib/user";
 import { EXAM_OPTIONS, type ExamTargetId } from "@/lib/exams";
 import { cn } from "@/lib/utils";
 
 type Mode = "student" | "teacher";
-type Screen = "login" | "register";
+type Screen = "login" | "register" | "forgot" | "reset";
 type Channel = "google" | "email" | "phone";
 
 const EXAM_FLAT: { id: ExamTargetId; label: string }[] = EXAM_OPTIONS.flatMap((group) =>
@@ -33,12 +33,28 @@ export default function GirisPage() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [examTarget, setExamTarget] = useState<ExamTargetId | "">("kpss_lisans");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const isRegister = screen === "register";
+  const isForgot = screen === "forgot";
+  const isReset = screen === "reset";
 
   const canSubmit = useMemo(() => {
+    if (isForgot) {
+      if (channel === "phone") return phone.replace(/\D/g, "").length >= 10;
+      return email.trim().includes("@");
+    }
+    if (isReset) {
+      const idOk =
+        channel === "phone"
+          ? phone.replace(/\D/g, "").length >= 10
+          : email.trim().includes("@");
+      return idOk && resetCode.trim().length >= 4 && newPassword.length >= 8;
+    }
     if (password.length < 8) return false;
     if (mode === "teacher") {
       return userId.trim().length >= 3 && (!isRegister || displayName.trim().length >= 2);
@@ -57,11 +73,15 @@ export default function GirisPage() {
     mode,
     userId,
     isRegister,
+    isForgot,
+    isReset,
     displayName,
     examTarget,
     channel,
     email,
     phone,
+    resetCode,
+    newPassword,
   ]);
 
   function finishSession(
@@ -84,7 +104,35 @@ export default function GirisPage() {
   async function submit() {
     setBusy(true);
     setError("");
+    setInfo("");
     try {
+      if (isForgot) {
+        const data = await forgotPassword({
+          email: channel === "phone" ? "" : email.trim(),
+          phone: channel === "phone" ? phone.trim() : "",
+        });
+        setInfo(
+          data.debug_code
+            ? `${data.message} Kod: ${data.debug_code}`
+            : data.message,
+        );
+        setScreen("reset");
+        return;
+      }
+      if (isReset) {
+        const data = await resetPassword({
+          email: channel === "phone" ? "" : email.trim(),
+          phone: channel === "phone" ? phone.trim() : "",
+          code: resetCode.trim(),
+          new_password: newPassword,
+        });
+        setInfo(data.message);
+        setPassword(newPassword);
+        setScreen("login");
+        setResetCode("");
+        setNewPassword("");
+        return;
+      }
       if (mode === "teacher") {
         const payload = {
           user_id: userId.trim(),
@@ -156,11 +204,18 @@ export default function GirisPage() {
             TİLKO
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">
-            {isRegister ? "Kayıt ol" : "Giriş"}
+            {isForgot
+              ? "Şifremi unuttum"
+              : isReset
+                ? "Yeni şifre"
+                : isRegister
+                  ? "Kayıt ol"
+                  : "Giriş"}
           </h1>
         </div>
       </div>
 
+      {!isForgot && !isReset ? (
       <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white/70 p-1 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
@@ -184,7 +239,9 @@ export default function GirisPage() {
           </button>
         ))}
       </div>
+      ) : null}
 
+      {!isForgot && !isReset ? (
       <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white/50 p-1 dark:border-zinc-800">
         {(
           [
@@ -198,6 +255,7 @@ export default function GirisPage() {
             onClick={() => {
               setScreen(id);
               setError("");
+              setInfo("");
             }}
             className={cn(
               "rounded-xl px-3 py-2.5 text-sm font-semibold transition",
@@ -210,8 +268,9 @@ export default function GirisPage() {
           </button>
         ))}
       </div>
+      ) : null}
 
-      {mode === "student" ? (
+      {mode === "student" || isForgot || isReset ? (
         <div className="mt-4 grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200 p-1 dark:border-zinc-800">
           {(
             [
@@ -219,7 +278,9 @@ export default function GirisPage() {
               ["email", "E-posta", Mail],
               ["phone", "Telefon", Phone],
             ] as const
-          ).map(([id, label, Icon]) => (
+          )
+            .filter(([id]) => !(isForgot || isReset) || id !== "google")
+            .map(([id, label, Icon]) => (
             <button
               key={id}
               type="button"
@@ -242,15 +303,19 @@ export default function GirisPage() {
       ) : null}
 
       <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-        {mode === "teacher"
-          ? "Sınıfını gör, hata röntgenini oku, kuponla öğrencileri otomatik ekle."
-          : isRegister
-            ? "Ad soyad, sınav hedefi ve e-posta / telefon / Google ile hesap aç."
-            : "E-posta, telefon veya Google ile gir."}
+        {isForgot
+          ? "Kayıtlı e-posta veya telefonuna 6 haneli kod gönderilir."
+          : isReset
+            ? "E-postadaki kodu ve yeni şifreni gir."
+            : mode === "teacher"
+              ? "Sınıfını gör, hata röntgenini oku, kuponla öğrencileri otomatik ekle."
+              : isRegister
+                ? "Ad soyad, sınav hedefi ve e-posta / telefon / Google ile hesap aç."
+                : "E-posta, telefon veya Google ile gir."}
       </p>
 
       <div className="mt-5 grid gap-3">
-        {(isRegister || mode === "teacher") && channel !== "google" ? (
+        {!isForgot && !isReset && (isRegister || mode === "teacher") && channel !== "google" ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Ad soyad
             <Input
@@ -293,7 +358,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "teacher" ? (
+        {mode === "teacher" && !isForgot && !isReset ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Kullanıcı adı
             <Input
@@ -305,7 +370,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "student" && channel === "email" ? (
+        {(mode === "student" || isForgot || isReset) && channel === "email" ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             E-posta
             <Input
@@ -318,7 +383,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "student" && channel === "phone" ? (
+        {(mode === "student" || isForgot || isReset) && channel === "phone" ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Telefon
             <Input
@@ -331,7 +396,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "student" && channel === "google" ? (
+        {mode === "student" && channel === "google" && !isForgot && !isReset ? (
           <div className="rounded-xl border border-dashed border-zinc-300 px-3 py-3 dark:border-zinc-700">
             <GoogleSignInButton onCredential={onGoogle} disabled={busy} />
             {isRegister ? (
@@ -342,7 +407,32 @@ export default function GirisPage() {
           </div>
         ) : null}
 
-        {channel !== "google" || mode === "teacher" ? (
+        {isReset ? (
+          <>
+            <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              6 haneli kod
+              <Input
+                value={resetCode}
+                onChange={(event) => setResetCode(event.target.value)}
+                placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Yeni şifre
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="En az 8 karakter"
+                autoComplete="new-password"
+              />
+            </label>
+          </>
+        ) : null}
+
+        {!isForgot && !isReset && (channel !== "google" || mode === "teacher") ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Şifre
             <Input
@@ -357,8 +447,9 @@ export default function GirisPage() {
       </div>
 
       {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
+      {info ? <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-300">{info}</p> : null}
 
-      {channel !== "google" || mode === "teacher" ? (
+      {(channel !== "google" || mode === "teacher" || isForgot || isReset) ? (
         <Button
           type="button"
           className="mt-5 h-12 w-full"
@@ -366,16 +457,47 @@ export default function GirisPage() {
           onClick={() => void submit()}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {isRegister
-            ? "Kayıt ol"
-            : mode === "teacher"
-              ? "Hoca paneline gir"
-              : "Giriş yap"}
+          {isForgot
+            ? "Kod gönder"
+            : isReset
+              ? "Şifreyi güncelle"
+              : isRegister
+                ? "Kayıt ol"
+                : mode === "teacher"
+                  ? "Hoca paneline gir"
+                  : "Giriş yap"}
         </Button>
       ) : null}
 
+      {!isForgot && !isReset && !isRegister && mode === "student" && channel !== "google" ? (
+        <button
+          type="button"
+          className="mt-3 text-center text-xs font-semibold text-orange-600 underline-offset-2 hover:underline"
+          onClick={() => {
+            setScreen("forgot");
+            setError("");
+            setInfo("");
+            if (channel === "google") setChannel("email");
+          }}
+        >
+          Şifremi unuttum
+        </button>
+      ) : null}
+
       <p className="mt-4 text-center text-xs text-zinc-500">
-        {isRegister ? (
+        {isForgot || isReset ? (
+          <button
+            type="button"
+            className="font-semibold text-orange-600 underline-offset-2 hover:underline"
+            onClick={() => {
+              setScreen("login");
+              setError("");
+              setInfo("");
+            }}
+          >
+            Girişe dön
+          </button>
+        ) : isRegister ? (
           <>
             Hesabın var mı?{" "}
             <button

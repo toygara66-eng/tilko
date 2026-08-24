@@ -11,6 +11,7 @@ import {
   getRagStatus,
   grantAdminCredits,
   grantAdminPro,
+  adminSetPassword,
   listAdminFeedback,
   listAdminUsers,
   listExamSchedules,
@@ -498,6 +499,45 @@ export default function AdminArchivePage() {
                             }}
                           >
                             Pro kaldır
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || !secret.trim()}
+                            onClick={() => {
+                              void (async () => {
+                                const next = window.prompt(
+                                  `${row.display_name || row.user_id} için yeni şifre (min 8):`,
+                                );
+                                if (!next || next.trim().length < 8) {
+                                  if (next != null) {
+                                    setError("Şifre en az 8 karakter olmalı.");
+                                  }
+                                  return;
+                                }
+                                setBusy(true);
+                                setError("");
+                                setCreditMsg("");
+                                try {
+                                  const data = await adminSetPassword(secret, {
+                                    user_id: row.user_id,
+                                    new_password: next.trim(),
+                                  });
+                                  setCreditMsg(data.message);
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Şifre güncellenemedi",
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Şifre sıfırla
                           </Button>
                         </div>
                       </td>

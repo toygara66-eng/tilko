@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     database_path: str = ""
     youtube_transcript_io_token: str = ""
+    resend_api_key: str = ""
+    resend_from_email: str = "Tilko <onboarding@resend.dev>"
+    public_app_url: str = "https://tilko.site"
 
     @property
     def chunk_chars(self) -> int:

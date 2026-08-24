@@ -1355,6 +1355,48 @@ export function registerAccount(payload: {
   });
 }
 
+export function forgotPassword(payload: { email?: string; phone?: string }) {
+  return request<{
+    ok: boolean;
+    sent: boolean;
+    channel: string;
+    destination_hint: string;
+    message: string;
+    debug_code?: string;
+  }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resetPassword(payload: {
+  email?: string;
+  phone?: string;
+  code: string;
+  new_password: string;
+}) {
+  return request<{ ok: boolean; user_id: string; message: string }>(
+    "/auth/reset-password",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function adminSetPassword(
+  secret: string,
+  payload: { user_id: string; new_password: string },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/users/set-password`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<{ ok: boolean; user_id: string; message: string }>(response);
+}
+
 export type TeacherStudentCard = {
   user_id: string;
   display_name: string;

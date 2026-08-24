@@ -56,5 +56,11 @@ services:
         sync: false
       - key: GOOGLE_ANDROID_CLIENT_ID
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: PUBLIC_APP_URL
+        value: https://tilko.site
       - key: CORS_ORIGINS
         value: "*"
