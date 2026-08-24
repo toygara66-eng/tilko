@@ -70,6 +70,15 @@ export function tokenValid(token: string): boolean {
   }
 }
 
+/** Gerçek kayıt/Google oturumu (misafir aday-* değil). */
+export function isSignedIn(): boolean {
+  if (typeof window === "undefined") return false;
+  if (!tokenValid(getToken())) return false;
+  const uid = window.localStorage.getItem("kpss_user_id") || "";
+  if (!uid || uid === "local" || uid.startsWith("aday-")) return false;
+  return true;
+}
+
 let inflight: Promise<string> | null = null;
 
 export async function ensureAuth(

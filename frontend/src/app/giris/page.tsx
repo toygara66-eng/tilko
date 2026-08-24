@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Loader2, GraduationCap, School, Mail, Phone, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in";
 import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPassword } from "@/lib/api";
-import { setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
+import { isSignedIn, logout, setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
 import { getUserId, setUserId } from "@/lib/user";
 import { EXAM_OPTIONS, type ExamTargetId } from "@/lib/exams";
 import { cn } from "@/lib/utils";
@@ -38,10 +39,15 @@ export default function GirisPage() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [alreadyIn, setAlreadyIn] = useState(false);
 
   const isRegister = screen === "register";
   const isForgot = screen === "forgot";
   const isReset = screen === "reset";
+
+  useEffect(() => {
+    setAlreadyIn(isSignedIn());
+  }, []);
 
   const canSubmit = useMemo(() => {
     if (isForgot) {
@@ -197,6 +203,37 @@ export default function GirisPage() {
 
   return (
     <div className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-center px-4 py-8">
+      {alreadyIn ? (
+        <div className="rounded-2xl border border-emerald-400/40 bg-emerald-50/80 p-6 text-center dark:bg-emerald-950/30">
+          <TilkoLogo size={40} className="mx-auto" />
+          <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-white">
+            Giriş yapıldı
+          </h1>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Hesabın açık. Ana sayfaya dönebilir veya çıkış yapabilirsin.
+          </p>
+          <div className="mt-5 flex flex-col gap-2">
+            <Button asChild className="h-12 w-full">
+              <Link href="/">Ana sayfaya git</Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 w-full"
+              onClick={() => {
+                logout();
+                setAlreadyIn(false);
+                setScreen("login");
+              }}
+            >
+              Çıkış yap
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {!alreadyIn ? (
+      <>
       <div className="mb-6 flex items-center gap-3">
         <TilkoLogo size={40} />
         <div>
@@ -521,6 +558,8 @@ export default function GirisPage() {
           </>
         )}
       </p>
+      </>
+      ) : null}
     </div>
   );
 }

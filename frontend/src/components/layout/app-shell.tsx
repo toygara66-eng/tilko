@@ -1,10 +1,19 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookMarked, Flame, LayoutDashboard, StickyNote, Trophy, UserRound, Youtube } from "lucide-react";
+import {
+  BookMarked,
+  Flame,
+  LayoutDashboard,
+  LogOut,
+  StickyNote,
+  Trophy,
+  UserRound,
+  Youtube,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { NoteModeProvider } from "@/components/notes/note-mode";
@@ -22,6 +31,7 @@ import { RoleGate } from "@/components/auth/role-gate";
 import { IntegrityGate } from "@/components/security/integrity-gate";
 import { AnalyzeProvider } from "@/components/analyze/analyze-context";
 import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
+import { isSignedIn, logout } from "@/lib/auth";
 
 const NAV = [
   { href: "/", label: "Av", icon: LayoutDashboard },
@@ -39,16 +49,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         <NoteModeProvider>
           <ProfileProvider>
             <AnalyzeProvider>
-            <PlayBillingBoot />
-            <PenaltyProvider>
-              <PomodoroProvider>
-                <ShellFrame>{children}</ShellFrame>
-                <ExamTargetGate />
-                <DiagnosticGate />
-                <RoleGate />
-                <PenaltyLock />
-              </PomodoroProvider>
-            </PenaltyProvider>
+              <PlayBillingBoot />
+              <PenaltyProvider>
+                <PomodoroProvider>
+                  <ShellFrame>{children}</ShellFrame>
+                  <ExamTargetGate />
+                  <DiagnosticGate />
+                  <RoleGate />
+                  <PenaltyLock />
+                </PomodoroProvider>
+              </PenaltyProvider>
             </AnalyzeProvider>
           </ProfileProvider>
         </NoteModeProvider>
@@ -66,9 +76,21 @@ function ShellFrame({ children }: { children: ReactNode }) {
   const hedef = path === "/hedef";
   const { profile } = useProfile();
   const [boardOpen, setBoardOpen] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const giris = path === "/giris";
   const hoca = path === "/hoca";
   const staff = giris || hoca;
+
+  useEffect(() => {
+    setSignedIn(isSignedIn());
+    const onFocus = () => setSignedIn(isSignedIn());
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onFocus);
+    };
+  }, [path]);
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
@@ -109,7 +131,31 @@ function ShellFrame({ children }: { children: ReactNode }) {
                 </>
               )}
               <div className="ml-auto flex items-center gap-1">
-                {hoca ? null : (
+                {hoca ? null : signedIn ? (
+                  <>
+                    <span className="hidden rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 sm:inline">
+                      Giriş yapıldı
+                    </span>
+                    <Link
+                      href="/profil"
+                      className="rounded-full px-3 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
+                    >
+                      Hesabım
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logout();
+                        window.location.assign("/giris");
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+                      title="Çıkış yap"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Çıkış</span>
+                    </button>
+                  </>
+                ) : (
                   <Link
                     href="/giris"
                     className="rounded-full px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -141,8 +187,8 @@ function ShellFrame({ children }: { children: ReactNode }) {
             : hoca
               ? "max-w-5xl px-4 pb-10 pt-6 md:px-8"
               : home || focused
-              ? "flex max-w-xl flex-col justify-center px-4 pb-24 pt-6 md:pt-10"
-              : "max-w-5xl px-4 pb-24 pt-6 md:px-8",
+                ? "flex max-w-xl flex-col justify-center px-4 pb-24 pt-6 md:pt-10"
+                : "max-w-5xl px-4 pb-24 pt-6 md:px-8",
         )}
       >
         {children}
