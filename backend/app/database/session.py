@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Generator
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -14,24 +15,59 @@ DB_PATH = Path(settings.database_path) if settings.database_path.strip() else _d
 DATA_DIR = DB_PATH.parent
 
 
+def _normalize_database_url(raw: str) -> str:
+    """Neon/Heroku postgres:// → SQLAlchemy+psycopg URL."""
+    url = (raw or "").strip()
+    if not url:
+        return ""
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://") and "+psycopg" not in url.split("://", 1)[0]:
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
+    # Neon: sslmode=require çoğu connection string'de var; yoksa ekle
+    if "postgresql" in url and "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+    return url
+
+
+DATABASE_URL = _normalize_database_url(settings.database_url)
+IS_SQLITE = not bool(DATABASE_URL)
+
+
 class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(
-    f"sqlite:///{DB_PATH}",
-    connect_args={"check_same_thread": False, "timeout": 30},
-)
+if DATABASE_URL:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=3,
+        max_overflow=5,
+    )
+    logger.info(
+        "Postgres veritabanı: %s",
+        urlparse(DATABASE_URL)._replace(netloc="***").geturl()
+        if "://" in DATABASE_URL
+        else "postgres",
+    )
+else:
+    engine = create_engine(
+        f"sqlite:///{DB_PATH}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_busy_wal(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-
-@event.listens_for(engine, "connect")
-def _sqlite_busy_wal(dbapi_connection, _connection_record) -> None:
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.close()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -46,19 +82,22 @@ def init_db() -> None:
     """Tablo yoksa oluşturur; SQLite'ta eksik sütunları ALTER TABLE ile ekler."""
     from app.database import models as _models  # noqa: F401
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if settings.is_production and "/var/data" not in str(DB_PATH).replace("\\", "/"):
-        logger.error(
-            "PRODUCTION uyarı: DATABASE_PATH=%s kalıcı diskte değil. "
-            "Render free/ephemeral filesystem her restart’ta kullanıcıları siler. "
-            "DATABASE_PATH=/var/data/kpss.db + persistent disk kullan.",
-            DB_PATH,
-        )
-    else:
-        logger.info("SQLite veritabanı: %s", DB_PATH)
+    if IS_SQLITE:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if settings.is_production:
+            logger.error(
+                "PRODUCTION uyarı: DATABASE_URL yok — yerel SQLite (%s) Render "
+                "free’de her uykuda silinir. Neon ücretsiz Postgres bağla "
+                "(DATABASE_URL).",
+                DB_PATH,
+            )
+        else:
+            logger.info("SQLite veritabanı: %s", DB_PATH)
+
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
-    _rebuild_daily_challenge_exam_unique()
+    if IS_SQLITE:
+        _rebuild_daily_challenge_exam_unique()
     try:
         from app.services.rag import seed_style_guides
 
@@ -79,6 +118,15 @@ def init_db() -> None:
             db.close()
     except Exception as exc:  # noqa: BLE001
         logger.warning("Sınav takvimi tohumlanamadı: %s", exc)
+
+
+def _adapt_column_ddl(ddl: str) -> str:
+    if IS_SQLITE:
+        return ddl
+    out = ddl.replace("DATETIME", "TIMESTAMPTZ")
+    out = out.replace("BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE")
+    out = out.replace("BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE")
+    return out
 
 
 def _add_missing_columns() -> None:
@@ -172,12 +220,13 @@ def _add_missing_columns() -> None:
             for name, ddl in wanted.items():
                 if name in existing:
                     continue
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+                adapted = _adapt_column_ddl(ddl)
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {adapted}"))
                 logger.info("%s sütunu eklendi: %s", table, name)
 
 
 def _rebuild_daily_challenge_exam_unique() -> None:
-    """Eski unique(date) kısıtını unique(date, exam_target) ile değiştirir."""
+    """Eski unique(date) kısıtını unique(date, exam_target) ile değiştirir (yalnız SQLite)."""
     inspector = inspect(engine)
     if "daily_challenges" not in inspector.get_table_names():
         return

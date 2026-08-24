@@ -390,11 +390,10 @@ export default function AdminArchivePage() {
               ile saklanır, okunamaz — yeni şifre ata veya “Sıfırlama kodu” ile 6
               haneli kod üret (mail gelmese de kullanıcıya iletebilirsin).
               <span className="mt-1 block text-amber-800 dark:text-amber-200/90">
-                aday-… satırları misafir (giriş yok). Kayıtlı hesaplar kayboluyorsa
-                Render’da kalıcı disk + DATABASE_PATH=/var/data/kpss.db olmalı —
-                free planda SQLite her uykuda silinir.
+                aday-… satırları misafir (giriş yok). Kayıtlı hesaplar kaybolmasın
+                diye Render’da ücretsiz Neon Postgres bağla: Environment →
+                DATABASE_URL (console.neon.tech).
               </span>
-              kalır.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

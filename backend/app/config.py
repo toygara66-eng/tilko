@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     admin_api_secret: str = "tilko-admin-dev"
     cors_origins: str = "*"
     database_path: str = ""
+    # Neon/Supabase vb. ücretsiz Postgres (Render free SQLite silinmesin)
+    database_url: str = ""
     youtube_transcript_io_token: str = ""
     resend_api_key: str = ""
     resend_from_email: str = "Tilko <onboarding@resend.dev>"

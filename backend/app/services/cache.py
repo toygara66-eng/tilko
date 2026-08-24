@@ -23,6 +23,7 @@ _index: dict[str, str] = {}
 
 
 def _cache_dir() -> Path:
+    # Postgres’te database_path boş; analiz önbelleği ephemeral olabilir (yeniden üretilir).
     raw = (settings.database_path or "").strip()
     if raw:
         return Path(raw).expanduser().resolve().parent / "analyze-cache"
