@@ -305,8 +305,7 @@ def admin_update_user(
             if clash is not None:
                 raise ValueError("Bu e-posta başka hesaba bağlı.")
             user.email = mail
-        else:
-            user.email = ""
+        # Boş string = değiştirme (yanlışlıkla e-postayı silme).
     if phone is not None:
         raw_phone = (phone or "").strip()
         if raw_phone:
@@ -317,8 +316,7 @@ def admin_update_user(
             if clash is not None:
                 raise ValueError("Bu telefon başka hesaba bağlı.")
             user.phone = tel
-        else:
-            user.phone = ""
+        # Boş string = değiştirme.
     if exam_target is not None:
         exam = (exam_target or "").strip().lower()
         if exam and exam not in VALID_EXAMS:

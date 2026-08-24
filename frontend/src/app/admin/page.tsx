@@ -586,11 +586,21 @@ export default function AdminArchivePage() {
                                   row.display_name || "",
                                 );
                                 if (name == null) return;
+                                if (name.trim().length < 2) {
+                                  setError("Ad soyad en az 2 karakter olmalı.");
+                                  return;
+                                }
                                 const mail = window.prompt(
-                                  "E-posta (giriş için):",
+                                  "E-posta ZORUNLU (giriş için, örn. ornek@gmail.com):",
                                   row.email || "",
                                 );
                                 if (mail == null) return;
+                                if (!mail.trim().includes("@")) {
+                                  setError(
+                                    "Geçerli e-posta gir. Boş bırakırsan giriş yapılamaz.",
+                                  );
+                                  return;
+                                }
                                 const pass = window.prompt(
                                   "Yeni şifre (min 8, boş = değiştirme):",
                                   "",
@@ -617,7 +627,7 @@ export default function AdminArchivePage() {
                                     }));
                                   }
                                   setCreditMsg(
-                                    `${data.message} Giriş: ${data.email || row.user_id}${
+                                    `${data.message} Giriş e-posta: ${data.email}${
                                       pass.trim() ? ` · şifre: ${pass.trim()}` : ""
                                     }`,
                                   );

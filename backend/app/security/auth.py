@@ -197,6 +197,8 @@ def _auth_view(db: Session, user) -> dict:
         "role": role,
         "display_name": display_name_of(db, user.user_id),
         "dashboard": dashboard_for(role),
+        "email": (getattr(user, "email", None) or "").strip(),
+        "phone": (getattr(user, "phone", None) or "").strip(),
     }
 
 
@@ -289,6 +291,9 @@ def register_user(
 
     if not mail and not tel and not uid_raw:
         raise ValueError("E-posta, telefon veya kullanıcı adı gerekli.")
+    # Öğrenci kaydı: misafir değilse e-posta veya telefon zorunlu (sonra giriş yapılsın).
+    if intended == "student" and not is_guest and not mail and not tel:
+        raise ValueError("Kayıt için e-posta veya telefon gerekli.")
 
     if mail:
         clash = db.scalars(select(User).where(User.email == mail)).first()
@@ -314,7 +319,11 @@ def register_user(
             raise ValueError("Bu kullanıcı zaten kayıtlı. Giriş yap.")
 
     hashed = hash_password(password)
-    user = existing or get_or_create_user(db, uid)
+    # get_or_create_user ara commit yapmasın — e-posta aynı transaction'da yazılsın.
+    user = existing
+    if user is None:
+        user = User(user_id=uid, is_penalized=False, penalty_clear_count=0)
+        db.add(user)
     user.password_hash = hashed
     if mail:
         user.email = mail
@@ -330,11 +339,19 @@ def register_user(
         if not is_guest and not (user.exam_target or "").strip():
             raise ValueError("KPSS / YKS / sınav hedefi seç.")
     db.add(user)
-    db.commit()
+    db.flush()
     if name:
         set_display_name(db, uid, name)
-        db.commit()
+    db.commit()
     db.refresh(user)
+    # Güvence: öğrenci e-posta ile kayıt olduysa sütun boş kalmasın.
+    if mail and not (user.email or "").strip():
+        user.email = mail
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    if mail and (user.email or "").strip() != mail:
+        raise ValueError("E-posta kaydı yazılamadı. Tekrar dene.")
     return _auth_view(db, user)
 
 
@@ -348,6 +365,7 @@ def login_user(
     email: str = "",
     phone: str = "",
 ) -> dict:
+    from app.database.models import User
     from app.services.teacher import normalize_role, set_display_name
 
     identifier = (
@@ -364,6 +382,30 @@ def login_user(
             "E-posta/telefon veya şifre hatalı. "
             "Şifreni unuttuysan 'Şifremi unuttum' ile kod al veya yeniden kayıt ol."
         )
+    # Eksik profil: girişte verilen e-posta/telefonu kalıcı yaz.
+    try:
+        mail = normalize_email(email) if (email or "").strip() and "@" in (email or "") else ""
+    except ValueError:
+        mail = ""
+    try:
+        tel = normalize_phone(phone) if (phone or "").strip() else ""
+    except ValueError:
+        tel = ""
+    dirty = False
+    if mail and not (user.email or "").strip():
+        clash = db.scalars(
+            select(User).where(User.email == mail).where(User.user_id != user.user_id)
+        ).first()
+        if clash is None:
+            user.email = mail
+            dirty = True
+    if tel and not (user.phone or "").strip():
+        clash = db.scalars(
+            select(User).where(User.phone == tel).where(User.user_id != user.user_id)
+        ).first()
+        if clash is None:
+            user.phone = tel
+            dirty = True
     intended = (role or "").strip().lower()
     actual = normalize_role(getattr(user, "role", "") or "student")
     if intended == "teacher" and actual not in {"teacher", "admin"}:
@@ -372,6 +414,9 @@ def login_user(
         raise ValueError("Bu bir hoca hesabı. Hoca Girişi ile devam et.")
     if intended == "teacher" and actual in {"teacher", "admin"} and (display_name or "").strip():
         set_display_name(db, user.user_id, display_name)
+        dirty = True
+    if dirty:
+        db.add(user)
         db.commit()
         db.refresh(user)
     return _auth_view(db, user)

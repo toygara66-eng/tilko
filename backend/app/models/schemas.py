@@ -719,6 +719,8 @@ class AuthResponse(BaseModel):
     role: str = "student"
     display_name: str = ""
     dashboard: str = "/"
+    email: str = ""
+    phone: str = ""
 
 
 class ForgotPasswordRequest(BaseModel):
