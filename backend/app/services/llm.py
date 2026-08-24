@@ -39,13 +39,13 @@ CHAT_RETRIES = 1
 RETRY_BACKOFF_SECONDS = (3,)
 RATE_LIMIT_MAX_WAIT = 20
 LLM_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-# Analiz: Groq hızlı bitsin; Gemini yedek ve kısa kapı.
-ANALYZE_HTTP_TIMEOUT = httpx.Timeout(28.0, connect=8.0)
-GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(16.0, connect=8.0)
+# Ücretli Gemini: detaylı not için yeterli süre; Groq yalnızca yedek.
+ANALYZE_HTTP_TIMEOUT = httpx.Timeout(55.0, connect=10.0)
+GEMINI_ANALYZE_TIMEOUT = httpx.Timeout(75.0, connect=12.0)
 ANALYZE_TASKS = frozenset({"analyze", "notes", "questions"})
 ANALYZE_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 GEMINI_CHAT_MODEL = "gemini-2.5-flash-lite"
-# flash-lite ≈ hızlı/ucuz; 2.0-flash yalnızca yedek (analiz zincirinde tek model deneriz).
+# Birincil = ayardaki model; lite/2.0 yedek.
 GEMINI_MODEL_FALLBACKS = (
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
@@ -671,16 +671,8 @@ def _gemini_model_id() -> str:
 
 
 def _gemini_models_to_try() -> list[str]:
-    """Analizde tek Gemini modeli; timeout olursa Groq'a düş (2× beklemeyi kes)."""
+    """Ücretli Gemini: yapılandırılan model önce; gerekirse 1 yedek."""
     primary = _gemini_model_id()
-    # Render hâlâ 2.0-flash gösterse bile analizde lite'ı tercih et (hız).
-    task = usage_task.get() or ""
-    if task in ANALYZE_TASKS:
-        # Önce lite, yoksa yapılandırılan.
-        for name in (GEMINI_CHAT_MODEL, primary):
-            if name and name not in GEMINI_UNAVAILABLE_MODELS:
-                return [name]
-        return [GEMINI_CHAT_MODEL]
     ordered: list[str] = []
     for name in (primary, *GEMINI_MODEL_FALLBACKS):
         if not name or name in GEMINI_UNAVAILABLE_MODELS:
@@ -729,10 +721,10 @@ def _gemini_native_completion(
     last: Exception | None = None
     models = _gemini_models_to_try()
     for index, name in enumerate(models):
-        # Analiz: kısa çıktı = daha az timeout.
         task = usage_task.get() or ""
+        # Ücretli Gemini: detaylı not için yeterli çıktı tavanı.
         if task in ANALYZE_TASKS:
-            out_tokens = 1600
+            out_tokens = 4096 if index == 0 else 2800
         else:
             out_tokens = 3200 if index == 0 else 2200
         generation = {
@@ -763,8 +755,11 @@ def _gemini_native_completion(
             last = exc
             logger.warning("Gemini %s ağ hatası: %s", name, exc)
             if _is_timeout(exc):
-                # Analizde ikinci Gemini modelini deneme — hemen Groq yedeğine çık.
-                raise TimeoutError(f"Gemini {name} timed out") from exc
+                # Türkçe RuntimeError YASAK — _chat Groq yedeğine geçsin.
+                last = TimeoutError(f"Gemini {name} timed out")
+                if len(user) > 6000:
+                    user = user[:6000] + "\n...(kısaltıldı)"
+                continue
             continue
         if response.status_code == 400 and "thinking" in (response.text or "").lower():
             generation.pop("thinkingConfig", None)
@@ -779,7 +774,8 @@ def _gemini_native_completion(
             except Exception as exc:  # noqa: BLE001
                 last = exc
                 if _is_timeout(exc):
-                    raise TimeoutError(f"Gemini {name} timed out") from exc
+                    last = TimeoutError(f"Gemini {name} timed out")
+                    continue
                 continue
         if response.status_code == 404:
             logger.warning("Gemini model yok, sıradaki: %s", name)
@@ -829,14 +825,20 @@ def _normalize_groq_model(raw: str | None) -> str:
 def _shrink_prompts_for_provider(
     system_prompt: str, user_prompt: str
 ) -> tuple[str, str]:
-    """Groq 8K TPM + genel analiz hızı: girdi tavanı."""
+    """Groq 8K TPM dar; ücretli Gemini'de promptu budama."""
     name = (_active_name or settings.llm_provider or "").strip().lower()
     task = usage_task.get() or ""
     system = system_prompt
     user = user_prompt
-    # Analizde her sağlayıcıda kısa tut — timeout'un ana nedeni uzun prompt.
-    if task in ANALYZE_TASKS:
-        sys_cap, user_cap = (1800, 3200) if name == "groq" else (2400, 4200)
+    if name == "gemini" or (task in ANALYZE_TASKS and name in {"", "gemini"}):
+        # Gemini: hafif tavan, kaliteyi bozma.
+        if len(system) > 4000:
+            system = system[:4000] + "\n...(kısaltıldı)"
+        if len(user) > 9000:
+            user = user[:9000] + "\n...(altyazı kısaltıldı)"
+        return system, user
+    if task in ANALYZE_TASKS and name in {"groq", "cerebras"}:
+        sys_cap, user_cap = (1800, 3000) if name == "groq" else (2200, 3800)
         if len(system) > sys_cap:
             system = system[:sys_cap] + "\n...(kısaltıldı)"
         if len(user) > user_cap:
@@ -1058,18 +1060,16 @@ def _rotate_openrouter(exc: Exception) -> bool:
 
 
 def _provider_chain() -> list[str]:
-    """Analiz: önce hızlı yedekler (Groq/Cerebras), Gemini kalite için sonra."""
+    """Analiz: ücretli Gemini önce (kalite), sonra hızlı yedekler."""
     preferred = (settings.llm_provider or "gemini").strip().lower()
-    # Hız öncelikli sıra — "yavaş kaldı"yı kesmek için.
-    speed_first = ["groq", "cerebras", "gemini", "nebius"]
+    quality_first = ["gemini", "groq", "cerebras", "nebius"]
     if preferred == "openrouter":
-        return ["openrouter", *speed_first]
+        return ["openrouter", *quality_first]
     if preferred == "ollama":
         return ["ollama"]
-    # Gemini seçili olsa bile analizde Groq önce (timeout / kota dayanıklılığı).
     if preferred in {"gemini", "groq", "cerebras", "nebius"}:
-        return list(speed_first)
-    return list(speed_first)
+        return [preferred] + [n for n in quality_first if n != preferred]
+    return list(quality_first)
 
 
 def reset_analyze_provider_chain() -> None:
@@ -1200,11 +1200,12 @@ def _openai_create_inner(messages: list[dict], temperature: float, json_mode: bo
         "timeout": ANALYZE_HTTP_TIMEOUT if fast else LLM_HTTP_TIMEOUT,
     }
     if fast:
-        # Groq free TPM ~8K; düşük max_tokens hem 413 hem süreyi keser.
         if (_active_name or settings.llm_provider or "").lower() == "groq":
             kwargs["max_tokens"] = 900
+        elif (_active_name or settings.llm_provider or "").lower() == "gemini":
+            kwargs["max_tokens"] = 4096
         else:
-            kwargs["max_tokens"] = 1800
+            kwargs["max_tokens"] = 2200
     model_id = str(model or "")
     if (
         json_mode
@@ -1873,16 +1874,16 @@ def _analyze_combined(
 ) -> dict:
     from app.services.exams import prompt_block
 
-    count = max(3, min(int(question_count or 5), 5))
-    notes_wanted = max(5, min(int(note_count or 6), 7))
-    # Kısa altyazı = hızlı bitiş; Groq/Gemini timeout'u keser.
-    hard_cap = max(3500, min(int(settings.analyze_prompt_chars), 5000))
+    count = max(4, min(int(question_count or 5), 6))
+    notes_wanted = max(6, min(int(note_count or 8), 8))
+    # Ücretli Gemini: daha zengin bağlam.
+    hard_cap = max(6000, min(int(settings.analyze_prompt_chars), 10000))
     work = (chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. Her not 4-6 cümle: tanım + istisna + "
-        "sınav tuzağı. Sadece JSON; markdown yok.\n\n"
+        "not, şık veya açıklamaya yazma. Kısa özet YASAK; her not 5-8 cümle: "
+        "tanım + istisna + sınav tuzağı + örnek. Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,

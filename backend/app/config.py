@@ -82,8 +82,9 @@ class Settings(BaseSettings):
 
     @property
     def is_tight_free_tier(self) -> bool:
-        """Ücretsiz / dar kota katmanlarında istek boyutu ve paralellik kısılır."""
-        if self.llm_provider in {"groq", "cerebras", "nebius", "gemini"}:
+        """Ücretsiz / dar kota katmanlarında istek boyutu ve paralellik kısılır.
+        Gemini ücretli kullanıldığı için dar kota sayılmaz."""
+        if self.llm_provider in {"groq", "cerebras", "nebius"}:
             return True
         if self.llm_provider == "openrouter":
             return self.openrouter_model.endswith(":free")
