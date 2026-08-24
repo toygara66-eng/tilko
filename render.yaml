@@ -2,16 +2,23 @@ services:
   - type: web
     name: tilko-api
     runtime: python
-    plan: free
+    # Free planda disk yok → SQLite her deploy/uykuda silinir (kullanıcılar “kaybolur”).
+    plan: starter
     region: frankfurt
     buildCommand: pip install -r backend/requirements.txt && (apt-get update && apt-get install -y fonts-dejavu-core || true)
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend --proxy-headers --forwarded-allow-ips '*'
     healthCheckPath: /health
+    disk:
+      name: tilko-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.8"
       - key: APP_ENV
         value: production
+      - key: DATABASE_PATH
+        value: /var/data/kpss.db
       - key: LLM_PROVIDER
         value: gemini
       - key: LLM_FALLBACK

@@ -47,6 +47,15 @@ def init_db() -> None:
     from app.database import models as _models  # noqa: F401
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if settings.is_production and "/var/data" not in str(DB_PATH).replace("\\", "/"):
+        logger.error(
+            "PRODUCTION uyarı: DATABASE_PATH=%s kalıcı diskte değil. "
+            "Render free/ephemeral filesystem her restart’ta kullanıcıları siler. "
+            "DATABASE_PATH=/var/data/kpss.db + persistent disk kullan.",
+            DB_PATH,
+        )
+    else:
+        logger.info("SQLite veritabanı: %s", DB_PATH)
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
     _rebuild_daily_challenge_exam_unique()

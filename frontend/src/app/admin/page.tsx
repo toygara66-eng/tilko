@@ -389,6 +389,11 @@ export default function AdminArchivePage() {
               E-posta ve telefon her satırda görünür (kopyala). Eski şifreler hash
               ile saklanır, okunamaz — yeni şifre ata veya “Sıfırlama kodu” ile 6
               haneli kod üret (mail gelmese de kullanıcıya iletebilirsin).
+              <span className="mt-1 block text-amber-800 dark:text-amber-200/90">
+                aday-… satırları misafir (giriş yok). Kayıtlı hesaplar kayboluyorsa
+                Render’da kalıcı disk + DATABASE_PATH=/var/data/kpss.db olmalı —
+                free planda SQLite her uykuda silinir.
+              </span>
               kalır.
             </p>
           </div>
