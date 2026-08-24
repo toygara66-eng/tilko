@@ -9,6 +9,7 @@ import {
   createPromo,
   feedOsymArchives,
   getRagStatus,
+  grantAdminCredits,
   listExamSchedules,
   listPromos,
   updateExamSchedule,
@@ -18,6 +19,7 @@ import {
   type PromoCoupon,
   type RagStatus,
 } from "@/lib/api";
+import { getUserId } from "@/lib/user";
 
 const SECRET_KEY = "tilko_admin_secret";
 
@@ -31,11 +33,16 @@ export default function AdminArchivePage() {
   const [result, setResult] = useState<ArchiveFeedResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"archive" | "promo" | "calendar">("calendar");
+  const [creditMsg, setCreditMsg] = useState("");
+  const [myUserId, setMyUserId] = useState("");
+  const [tab, setTab] = useState<"archive" | "promo" | "calendar" | "credits">(
+    "credits",
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SECRET_KEY) || "";
     if (stored) setSecret(stored);
+    setMyUserId(getUserId());
   }, []);
 
   async function loadStatus() {
@@ -89,16 +96,19 @@ export default function AdminArchivePage() {
               setSecret(value);
               window.localStorage.setItem(SECRET_KEY, value);
             }}
-            placeholder="tilko-admin-dev"
+            placeholder="Render ADMIN_API_SECRET"
           />
         </label>
         <p className="mt-2 text-[11px] text-zinc-500">
-          Yerelde varsayılan: <span className="font-mono">tilko-admin-dev</span>
+          Canlıda Render → Environment →{" "}
+          <span className="font-mono">ADMIN_API_SECRET</span> değerini yapıştır.
+          Anahtar kayıtlıysa YouTube analizi kredi düşürmez.
         </p>
       </section>
-      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 dark:border-zinc-800 dark:bg-zinc-950/50">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
+            ["credits", "Krediler"],
             ["calendar", "Sınav takvimi"],
             ["archive", "Arşiv"],
             ["promo", "Kupon"],
@@ -118,6 +128,111 @@ export default function AdminArchivePage() {
           </button>
         ))}
       </div>
+
+      {tab === "credits" ? (
+        <section className="rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+            Test kredisi
+          </h2>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Bu tarayıcıdaki hesabın kredisini doldur veya Pro (sınırsız) aç.
+            Admin anahtarı kayıtlıyken Analiz et zaten kredi yakmaz.
+          </p>
+          <p className="mt-2 font-mono text-[11px] text-zinc-500">
+            user: {myUserId || "…"}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={busy || !secret.trim()}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError("");
+                  setCreditMsg("");
+                  try {
+                    const data = await grantAdminCredits(secret, {
+                      user_id: getUserId(),
+                      credits: 7,
+                      premium: false,
+                    });
+                    setCreditMsg(data.message);
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Kredi doldurulamadı",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Krediyi 7 yap
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !secret.trim()}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError("");
+                  setCreditMsg("");
+                  try {
+                    const data = await grantAdminCredits(secret, {
+                      user_id: getUserId(),
+                      premium: true,
+                    });
+                    setCreditMsg(data.message);
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Pro açılamadı",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Sınırsız test (Pro)
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !secret.trim()}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError("");
+                  setCreditMsg("");
+                  try {
+                    const data = await grantAdminCredits(secret, {
+                      user_id: getUserId(),
+                      premium: false,
+                      credits: 7,
+                    });
+                    setCreditMsg(`Pro kapandı. ${data.message}`);
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Pro kapatılamadı",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Pro’yu kapat
+            </Button>
+          </div>
+          {creditMsg ? (
+            <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">
+              {creditMsg}
+            </p>
+          ) : null}
+          {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
+        </section>
+      ) : null}
 
       {tab === "archive" ? (
       <>

@@ -67,6 +67,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const token = await ensureAuth(API_BASE, getUserId());
       headers.Authorization = `Bearer ${token}`;
     }
+    // Admin anahtarı kayıtlıysa analiz kredi düşürmez.
+    if (typeof window !== "undefined" && path.startsWith("/analyze")) {
+      const adminSecret = window.localStorage.getItem("tilko_admin_secret") || "";
+      if (adminSecret.trim()) {
+        headers["X-Admin-Secret"] = adminSecret.trim();
+      }
+    }
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers,
@@ -1181,6 +1188,29 @@ export async function listPromos(secret: string) {
   const headers = await adminHeaders(secret);
   const response = await fetch(`${API_BASE}/admin/promo/list`, { headers });
   return readJson<{ coupons: PromoCoupon[]; count: number }>(response);
+}
+
+export type AdminCreditsGrant = {
+  ok: boolean;
+  user_id: string;
+  ai_credits_left: number;
+  ai_credit_limit: number;
+  is_premium: boolean;
+  is_in_trial_period: boolean;
+  message: string;
+};
+
+export async function grantAdminCredits(
+  secret: string,
+  payload: { user_id: string; credits?: number | null; premium?: boolean | null },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/credits/grant`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<AdminCreditsGrant>(response);
 }
 
 export type AuthSession = {

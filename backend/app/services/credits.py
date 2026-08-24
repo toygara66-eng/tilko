@@ -238,6 +238,29 @@ def _view_reservation(db: Session, user_id: str, **overrides) -> CreditReservati
     )
 
 
+def admin_bypass(db: Session, user_id: str) -> CreditReservation:
+    """Admin anahtarıyla analiz: kredi/reklam düşmez."""
+    get_or_create_user(db, user_id)
+    return _view_reservation(db, user_id, charged=False, charge_kind="none")
+
+
+def grant_credits(
+    db: Session,
+    user_id: str,
+    *,
+    credits: int | None = None,
+    premium: bool | None = None,
+) -> dict:
+    """Admin: deneme kredisini doldur veya Pro (sınırsız test) aç/kapa."""
+    user = reset_daily_ads(db, get_or_create_user(db, user_id))
+    if credits is not None:
+        user.ai_credits_left = max(0, min(int(credits), FREE_AI_CREDITS * 5))
+    if premium is not None:
+        user.is_premium = bool(premium)
+    db.commit()
+    return snapshot(db, user_id)
+
+
 def reserve(
     db: Session,
     user_id: str,

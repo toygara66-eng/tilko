@@ -820,6 +820,22 @@ class SubscriptionStatusResponse(BaseModel):
     message: str = ""
 
 
+class AdminCreditsGrantRequest(BaseModel):
+    user_id: str = Field(default="", max_length=128)
+    credits: int | None = Field(default=None, ge=0, le=35)
+    premium: bool | None = None
+
+
+class AdminCreditsGrantResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    ai_credits_left: int = 7
+    ai_credit_limit: int = 7
+    is_premium: bool = False
+    is_in_trial_period: bool = True
+    message: str = ""
+
+
 class PromoCreateRequest(BaseModel):
     code: str = Field(default="", max_length=32)
     discount_type: str = Field(default="percentage", max_length=16)

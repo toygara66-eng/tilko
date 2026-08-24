@@ -90,6 +90,8 @@ from app.models.schemas import (
     DynamicExamCatalogResponse,
     DynamicExamSubmitRequest,
     DynamicExamReport,
+    AdminCreditsGrantRequest,
+    AdminCreditsGrantResponse,
 )
 from app.services import ai_engine
 from app.services import bulletin as bulletin_service
@@ -127,6 +129,7 @@ from app.services.scale import (
 )
 from app.security.auth import (
     actor,
+    admin_ok,
     jwt_guard,
     login_user,
     login_with_google,
@@ -410,8 +413,11 @@ def analyze_video(
 
     exam_target = exam_of(db, user_id)
     credit_service.reset_daily_ads(db, user)
-    if credit_service.is_ad_tier(user) and not credit_service.already_converted(
-        db, user_id, video_id
+    free_admin = admin_ok(request)
+    if (
+        not free_admin
+        and credit_service.is_ad_tier(user)
+        and not credit_service.already_converted(db, user_id, video_id)
     ):
         if not payload.ad_watched and not credit_service.ad_unlocked(user):
             raise HTTPException(
@@ -427,11 +433,15 @@ def analyze_video(
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        reservation = credit_service.reserve(
-            db,
-            user_id,
-            video_id,
-            ad_watched=bool(payload.ad_watched),
+        reservation = (
+            credit_service.admin_bypass(db, user_id)
+            if free_admin
+            else credit_service.reserve(
+                db,
+                user_id,
+                video_id,
+                ad_watched=bool(payload.ad_watched),
+            )
         )
     except CreditQuotaExceededError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
@@ -886,6 +896,34 @@ def subscription_webhook(
         return billing_service.handle_rtdn(db, payload or {})
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/credits/grant", response_model=AdminCreditsGrantResponse)
+def admin_credits_grant(
+    payload: AdminCreditsGrantRequest, db: Session = Depends(get_db)
+) -> AdminCreditsGrantResponse:
+    uid = (payload.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="user_id gerekli.")
+    view = credit_service.grant_credits(
+        db,
+        uid,
+        credits=payload.credits,
+        premium=payload.premium,
+    )
+    return AdminCreditsGrantResponse(
+        ok=True,
+        user_id=uid,
+        ai_credits_left=int(view["ai_credits_left"]),
+        ai_credit_limit=int(view["ai_credit_limit"]),
+        is_premium=bool(view["is_premium"]),
+        is_in_trial_period=bool(view["is_in_trial_period"]),
+        message=(
+            "Pro (sınırsız test) açık."
+            if view["is_premium"]
+            else f"Kredi: {view['ai_credits_left']}/{view['ai_credit_limit']}"
+        ),
+    )
 
 
 @app.post("/admin/promo/create", response_model=PromoCreateResponse)
