@@ -23,6 +23,7 @@ EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 PUBLIC_PATHS = {
     "/",
     "/health",
+    "/health/gemini",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -34,7 +35,7 @@ PUBLIC_PATHS = {
     "/login",
     "/subscription/webhook",
 }
-PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi", "/captions")
+PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi", "/captions", "/health/")
 ALGORITHM = "HS256"
 VALID_EXAMS = {
     "kpss_lisans",

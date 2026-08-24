@@ -1040,14 +1040,12 @@ export type ArchiveFeedResult = {
 };
 
 function adminHeaders(secret: string, json = true): Promise<Record<string, string>> {
-  return ensureAuth(API_BASE, getUserId()).then((token) => {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      "X-Admin-Secret": secret,
-    };
-    if (json) headers["Content-Type"] = "application/json";
-    return headers;
-  });
+  // Admin uçları yalnızca X-Admin-Secret ister; giriş zorunlu değil.
+  const headers: Record<string, string> = {
+    "X-Admin-Secret": secret,
+  };
+  if (json) headers["Content-Type"] = "application/json";
+  return Promise.resolve(headers);
 }
 
 export type ExamScheduleItem = {
