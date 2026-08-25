@@ -1021,12 +1021,23 @@ export default function AdminArchivePage() {
               Yenile
             </Button>
           </div>
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+          {creditMsg && !privacyBody && !privacyTitle ? (
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">
+              {creditMsg}
+            </p>
+          ) : null}
           {!privacyBody && !privacyTitle ? (
             <p className="text-sm text-zinc-500">
               Metni görmek için admin anahtarını girip Yenile’ye bas.
             </p>
           ) : (
             <div className="space-y-3">
+              {creditMsg ? (
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                  {creditMsg}
+                </p>
+              ) : null}
               <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Başlık
                 <Input

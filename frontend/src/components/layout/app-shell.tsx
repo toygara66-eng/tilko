@@ -15,6 +15,7 @@ import {
   Youtube,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeAppPath } from "@/lib/path";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { NoteModeProvider, NoteModeToggle } from "@/components/notes/note-mode";
 import { ThemeProvider, ThemeToggle } from "@/components/theme/theme";
@@ -70,7 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function ShellFrame({ children }: { children: ReactNode }) {
-  const path = usePathname();
+  const path = normalizeAppPath(usePathname());
   const home = path === "/";
   const teshis = path === "/teshis";
   const deneme = path === "/deneme";

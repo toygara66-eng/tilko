@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useProfile } from "@/components/profile/profile-context";
 import { getStoredRole } from "@/lib/auth";
+import { normalizeAppPath } from "@/lib/path";
 
 const TEACHER_OPEN = new Set(["/hoca", "/giris", "/admin"]);
 
 export function RoleGate() {
   const { profile, ready } = useProfile();
-  const path = usePathname();
+  const path = normalizeAppPath(usePathname());
   const router = useRouter();
   const role = (() => {
     const stored = getStoredRole();

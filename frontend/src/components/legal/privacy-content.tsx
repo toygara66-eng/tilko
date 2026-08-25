@@ -62,6 +62,20 @@ function PrivacyBody({ body }: { body: string }) {
       );
       continue;
     }
+    // Admin metinlerinde sık: **1. Başlık** tek satır
+    const boldOnly = trimmed.match(/^\*\*(.+)\*\*$/);
+    if (boldOnly) {
+      flushList();
+      blocks.push(
+        <h2
+          key={`h-${key++}`}
+          className="pt-2 text-base font-semibold text-zinc-900 dark:text-white"
+        >
+          {boldOnly[1].trim()}
+        </h2>,
+      );
+      continue;
+    }
     if (trimmed.startsWith("- ")) {
       listItems.push(trimmed.slice(2).trim());
       continue;

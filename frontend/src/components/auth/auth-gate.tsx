@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isSignedIn } from "@/lib/auth";
 import { clearUserId } from "@/lib/user";
+import { normalizeAppPath } from "@/lib/path";
 
 /** Giriş/kayıt olmadan uygulama kullanılmaz. */
 const PUBLIC = new Set(["/giris", "/admin", "/gizlilik"]);
 
 export function AuthGate() {
-  const path = usePathname();
+  const path = normalizeAppPath(usePathname());
   const router = useRouter();
 
   useEffect(() => {
