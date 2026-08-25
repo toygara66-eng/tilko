@@ -115,10 +115,17 @@ def play_webhook_ok(request: Request) -> bool:
 def admin_ok(request: Request) -> bool:
     from hmac import compare_digest
 
-    expected = (settings.admin_api_secret or "").strip()
+    def _clean(raw: str) -> str:
+        value = (raw or "").strip()
+        # Render / kopyala-yapıştır tırnak veya BOM bırakabiliyor
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1].strip()
+        return value.lstrip("\ufeff")
+
+    expected = _clean(settings.admin_api_secret or "")
     if not expected:
         return False
-    got = (request.headers.get("X-Admin-Secret") or "").strip()
+    got = _clean(request.headers.get("X-Admin-Secret") or "")
     if not got or len(got) != len(expected):
         return False
     return compare_digest(got, expected)

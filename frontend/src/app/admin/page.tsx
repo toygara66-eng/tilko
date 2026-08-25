@@ -204,18 +204,37 @@ export default function AdminArchivePage() {
             type="password"
             value={secret}
             onChange={(event) => {
-              const value = event.target.value;
+              const value = event.target.value.trim();
               setSecret(value);
               window.localStorage.setItem(SECRET_KEY, value);
             }}
-            placeholder="Render ADMIN_API_SECRET"
+            onPaste={(event) => {
+              event.preventDefault();
+              const value = event.clipboardData.getData("text").trim();
+              setSecret(value);
+              window.localStorage.setItem(SECRET_KEY, value);
+            }}
+            placeholder="Render ADMIN_API_SECRET (yeni değeri buraya yapıştır)"
+            autoComplete="off"
           />
         </label>
         <p className="mt-2 text-[11px] text-zinc-500">
-          Canlıda Render → Environment →{" "}
-          <span className="font-mono">ADMIN_API_SECRET</span> değerini yapıştır.
-          Anahtar kayıtlıysa YouTube analizi kredi düşürmez.
+          Render’da anahtarı değiştirmek siteye otomatik yazılmaz. Environment’taki{" "}
+          <span className="font-mono">ADMIN_API_SECRET</span> değerini kopyalayıp{" "}
+          <strong>bu alana yapıştır</strong>. Eski kayıtlı anahtar tarayıcıda kalır.
         </p>
+        <button
+          type="button"
+          className="mt-2 text-[11px] font-medium text-orange-700 underline dark:text-orange-300"
+          onClick={() => {
+            setSecret("");
+            window.localStorage.removeItem(SECRET_KEY);
+            setError("");
+            setCreditMsg("Eski admin anahtarı temizlendi. Yenisini yapıştır.");
+          }}
+        >
+          Kayıtlı anahtarı temizle
+        </button>
       </section>
       <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-3 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
