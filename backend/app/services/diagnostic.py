@@ -665,6 +665,318 @@ VIDEO_RECS = {
     ],
 }
 
+# Ek soru havuzu — baseline’da kullanıcıya göre farklı seçim için
+QUESTION_BANK.extend(
+    [
+        {
+            "id": "d-tarih-misak",
+            "topic": "Tarih",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "Misak-ı Milli hangi mecliste kabul edilmiştir?",
+            "options": {
+                "A": "TBMM",
+                "B": "Son Osmanlı Mebusan Meclisi",
+                "C": "Ayan Meclisi",
+                "D": "İstanbul hükümeti",
+                "E": "Heyet-i Temsiliye",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-tarih-halifelik",
+            "topic": "Tarih",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "Halifelik hangi tarihte kaldırılmıştır?",
+            "options": {
+                "A": "1 Kasım 1922",
+                "B": "29 Ekim 1923",
+                "C": "3 Mart 1924",
+                "D": "23 Nisan 1920",
+                "E": "20 Ocak 1921",
+            },
+            "correct": "C",
+        },
+        {
+            "id": "d-tarih-sevr",
+            "topic": "Tarih",
+            "exams": ["kpss", "yks", "other"],
+            "question_text": "Sevr Antlaşması hangi yılda imzalanmıştır?",
+            "options": {"A": "1918", "B": "1919", "C": "1920", "D": "1921", "E": "1923"},
+            "correct": "C",
+        },
+        {
+            "id": "d-vat-yurutme",
+            "topic": "Vatandaşlık",
+            "exams": ["kpss"],
+            "question_text": "Türkiye’de yürütme yetkisi kimdedir?",
+            "options": {
+                "A": "TBMM",
+                "B": "Cumhurbaşkanı",
+                "C": "Anayasa Mahkemesi",
+                "D": "Yargıtay",
+                "E": "Danıştay",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-vat-secmen",
+            "topic": "Vatandaşlık",
+            "exams": ["kpss"],
+            "question_text": "Milletvekili seçilme yaşı Anayasa’ya göre kaçtır?",
+            "options": {"A": "18", "B": "21", "C": "25", "D": "30", "E": "35"},
+            "correct": "A",
+        },
+        {
+            "id": "d-vat-hakimler",
+            "topic": "Vatandaşlık",
+            "exams": ["kpss"],
+            "question_text": "Hakimler ve savcılarla ilgili üst kurul hangisidir?",
+            "options": {
+                "A": "HSK",
+                "B": "YSK",
+                "C": "RTÜK",
+                "D": "KİK",
+                "E": "SPK",
+            },
+            "correct": "A",
+        },
+        {
+            "id": "d-cog-marmara",
+            "topic": "Coğrafya",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "Türkiye’nin en küçük yüzölçümlü coğrafi bölgesi hangisidir?",
+            "options": {
+                "A": "Ege",
+                "B": "Marmara",
+                "C": "Karadeniz",
+                "D": "İç Anadolu",
+                "E": "Doğu Anadolu",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-cog-fay",
+            "topic": "Coğrafya",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "Kuzey Anadolu Fay Hattı hangi yönde uzanır?",
+            "options": {
+                "A": "Kuzey–güney",
+                "B": "Doğu–batı",
+                "C": "Kuzeybatı–güneydoğu",
+                "D": "Kuzeydoğu–güneybatı",
+                "E": "Dairesel",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-cog-nufus",
+            "topic": "Coğrafya",
+            "exams": ["kpss", "yks", "other"],
+            "question_text": "Türkiye’de nüfusun en yoğun olduğu bölge hangisidir?",
+            "options": {
+                "A": "Doğu Anadolu",
+                "B": "Güneydoğu Anadolu",
+                "C": "Marmara",
+                "D": "Karadeniz",
+                "E": "Akdeniz",
+            },
+            "correct": "C",
+        },
+        {
+            "id": "d-tur-yazim",
+            "topic": "Türkçe",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "Aşağıdakilerden hangisi doğru yazılmıştır?",
+            "options": {
+                "A": "herşey",
+                "B": "hiç bir",
+                "C": "birçok",
+                "D": "bir kaç",
+                "E": "hiçbirşey",
+            },
+            "correct": "C",
+        },
+        {
+            "id": "d-tur-ozne",
+            "topic": "Türkçe",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "“Kitabı dün okudum.” cümlesinde özne hangisidir?",
+            "options": {
+                "A": "Kitabı",
+                "B": "dün",
+                "C": "okudum",
+                "D": "(Ben)",
+                "E": "yok",
+            },
+            "correct": "D",
+        },
+        {
+            "id": "d-tur-anlam",
+            "topic": "Türkçe",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "“Açık” sözcüğünün zıt anlamlısı hangisidir?",
+            "options": {
+                "A": "Net",
+                "B": "Kapalı",
+                "C": "Geniş",
+                "D": "Parlak",
+                "E": "Sade",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-tur-noktalama",
+            "topic": "Türkçe",
+            "exams": ["kpss", "yks", "lgs", "other"],
+            "question_text": "Sıralı cümleleri ayırmak için hangi noktalama kullanılır?",
+            "options": {
+                "A": "Nokta",
+                "B": "Virgül",
+                "C": "Noktalı virgül",
+                "D": "İki nokta",
+                "E": "Üç nokta",
+            },
+            "correct": "C",
+        },
+        {
+            "id": "d-mat-yuzde",
+            "topic": "Matematik",
+            "exams": ["yks", "lgs", "other"],
+            "question_text": "80’in %15’i kaçtır?",
+            "options": {"A": "8", "B": "10", "C": "12", "D": "15", "E": "16"},
+            "correct": "C",
+        },
+        {
+            "id": "d-mat-ortalama",
+            "topic": "Matematik",
+            "exams": ["yks", "lgs", "other"],
+            "question_text": "4, 6, 8, 10 sayılarının aritmetik ortalaması kaçtır?",
+            "options": {"A": "6", "B": "7", "C": "8", "D": "9", "E": "10"},
+            "correct": "B",
+        },
+        {
+            "id": "d-fiz-enerji",
+            "topic": "Fizik",
+            "exams": ["yks"],
+            "question_text": "Kinetik enerji formülü hangisidir?",
+            "options": {
+                "A": "mgh",
+                "B": "½ mv²",
+                "C": "F · x",
+                "D": "q · V",
+                "E": "I² · R",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-kim-periyot",
+            "topic": "Kimya",
+            "exams": ["yks"],
+            "question_text": "Periyodik tabloda yatay sıralara ne denir?",
+            "options": {
+                "A": "Grup",
+                "B": "Periyot",
+                "C": "Blok",
+                "D": "Orbital",
+                "E": "İyon",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-bio-dna",
+            "topic": "Biyoloji",
+            "exams": ["yks"],
+            "question_text": "DNA’nın yapı birimi hangisidir?",
+            "options": {
+                "A": "Amino asit",
+                "B": "Nükleotid",
+                "C": "Yağ asidi",
+                "D": "Glikoz",
+                "E": "Vitamin",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-fen-kuvvet",
+            "topic": "Fen",
+            "exams": ["lgs"],
+            "question_text": "Kuvvet birimi hangisidir?",
+            "options": {
+                "A": "Joule",
+                "B": "Watt",
+                "C": "Newton",
+                "D": "Pascal",
+                "E": "Volt",
+            },
+            "correct": "C",
+        },
+        {
+            "id": "d-ink-lozan-lgs",
+            "topic": "İnkılap",
+            "exams": ["lgs"],
+            "question_text": "Lozan Antlaşması hangi yılda imzalanmıştır?",
+            "options": {"A": "1920", "B": "1921", "C": "1922", "D": "1923", "E": "1924"},
+            "correct": "D",
+        },
+        {
+            "id": "d-oabt-guvenirlik",
+            "topic": "Ölçme-değerlendirme",
+            "exams": ["oabt"],
+            "question_text": "Ölçme aracının tutarlı sonuç vermesi hangi kavramdır?",
+            "options": {
+                "A": "Geçerlik",
+                "B": "Güvenirlik",
+                "C": "Objektiflik",
+                "D": "Norm",
+                "E": "Standart hata",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-oabt-skinner",
+            "topic": "Öğrenme kuramı",
+            "exams": ["oabt"],
+            "question_text": "Edimsel koşullanma kimle özdeşleşir?",
+            "options": {
+                "A": "Pavlov",
+                "B": "Skinner",
+                "C": "Watson",
+                "D": "Thorndike",
+                "E": "Gestalt",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-oabt-hedef",
+            "topic": "Alan bilgisi",
+            "exams": ["oabt"],
+            "question_text": "Öğretim programında davranış değişikliğini ifade eden kavram hangisidir?",
+            "options": {
+                "A": "İçerik",
+                "B": "Kazanım / hedef",
+                "C": "Materyal",
+                "D": "Süre",
+                "E": "Ortam",
+            },
+            "correct": "B",
+        },
+        {
+            "id": "d-gen-baskent",
+            "topic": "Genel kültür",
+            "exams": ["other"],
+            "question_text": "Türkiye Cumhuriyeti’nin başkenti neresidir?",
+            "options": {
+                "A": "İstanbul",
+                "B": "Ankara",
+                "C": "İzmir",
+                "D": "Bursa",
+                "E": "Antalya",
+            },
+            "correct": "B",
+        },
+    ]
+)
+
 BANK_BY_ID = {item["id"]: item for item in QUESTION_BANK}
 
 
@@ -727,20 +1039,45 @@ def exam_for(
     if kind == "checkup":
         picked = _seeded_order(user_id, str(today_istanbul()), pool)[:CHECKUP_COUNT]
     else:
+        # İlk teşhis: her dersten aynı sayıda, kullanıcıya özel seçim
+        # (sabit sıradaki ilk 2 soru değil).
         by_topic: dict[str, list[dict]] = {}
         for item in pool:
             by_topic.setdefault(item["topic"], []).append(item)
-        picked = []
-        topics = subjects_for(exam_target) or ("Tarih", "Vatandaşlık", "Coğrafya", "Türkçe")
+        picked: list[dict] = []
+        picked_ids: set[str] = set()
+        topics = subjects_for(exam_target) or (
+            "Tarih",
+            "Vatandaşlık",
+            "Coğrafya",
+            "Türkçe",
+        )
+        target_key = (exam_target or "kpss").strip() or "kpss"
         for topic in topics:
             topic_pool = by_topic.get(topic) or []
-            picked.extend(topic_pool[:2])
+            if not topic_pool:
+                continue
+            chosen = _seeded_order(
+                user_id, f"baseline:{target_key}:{topic}", topic_pool
+            )[:2]
+            for item in chosen:
+                qid = str(item.get("id") or "")
+                if not qid or qid in picked_ids:
+                    continue
+                picked.append(item)
+                picked_ids.add(qid)
             if len(picked) >= BASELINE_COUNT:
                 break
         if len(picked) < BASELINE_COUNT:
-            leftover = [item for item in pool if item not in picked]
-            picked.extend(leftover[: BASELINE_COUNT - len(picked)])
+            leftover = [item for item in pool if str(item.get("id") or "") not in picked_ids]
+            extra = _seeded_order(
+                user_id, f"baseline:{target_key}:fill", leftover
+            )[: BASELINE_COUNT - len(picked)]
+            picked.extend(extra)
         picked = picked[:BASELINE_COUNT]
+        picked = _seeded_order(
+            user_id, f"baseline:{target_key}:order", picked
+        )
     return [public_question(item) for item in picked]
 
 
