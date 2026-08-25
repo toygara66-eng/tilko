@@ -6,7 +6,7 @@ import { useProfile } from "@/components/profile/profile-context";
 import { isSignedIn } from "@/lib/auth";
 import { normalizeAppPath } from "@/lib/path";
 
-const OPEN = new Set(["/hedef", "/admin", "/giris", "/hoca", "/gizlilik"]);
+const OPEN = new Set(["/hedef", "/admin", "/giris", "/hoca", "/gizlilik", "/hakkinda"]);
 
 export function ExamTargetGate() {
   const { profile, ready } = useProfile();

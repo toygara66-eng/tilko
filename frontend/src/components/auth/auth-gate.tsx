@@ -7,7 +7,7 @@ import { clearUserId } from "@/lib/user";
 import { normalizeAppPath } from "@/lib/path";
 
 /** Giriş/kayıt olmadan uygulama kullanılmaz. */
-const PUBLIC = new Set(["/giris", "/admin", "/gizlilik"]);
+const PUBLIC = new Set(["/giris", "/admin", "/gizlilik", "/hakkinda"]);
 
 export function AuthGate() {
   const path = normalizeAppPath(usePathname());

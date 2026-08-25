@@ -1,0 +1,31 @@
+# Tilko
+
+> Tilko (tilko.site), KPSS / YKS / LGS / ÖABT hazırlığı için YouTube ders analizi, akıllı not, tuzak defteri, seviye teşhisi ve Tilko Pro abonelik sunan Türkçe bir sınav koçu uygulamasıdır.
+
+Tilko, adayların YouTube ders videolarını yapıştırarak özet not, soru ve ÖSYM tarzı tuzak üreten bir öğrenme platformudur. Web: https://tilko.site · Android paket: com.tilko.site · İletişim: developer@tilko.site
+
+## Ana sayfalar
+
+- [Tilko nedir?](https://tilko.site/hakkinda/): Ürün özeti, özellikler, kimler için
+- [Giriş / kayıt](https://tilko.site/giris/): Öğrenci ve hoca hesabı
+- [Gizlilik politikası](https://tilko.site/gizlilik/): KVKK ve veri işleme
+- [Tilko Pro](https://tilko.site/pro/): Abonelik planları
+
+## Özellikler
+
+- YouTube ders linkinden analiz ve not üretimi
+- Tuzak defteri (yanlış / kolay kaçan noktalar)
+- İlk giriş seviye teşhisi ve haftalık check-up
+- Görevler, XP ve tekrar hatırlatmaları
+- Hoca paneli (sınıf / öğrenci takibi)
+- Google Play üzerinden Tilko Pro (haftalık / aylık / yıllık)
+
+## Anahtar kelimeler
+
+Tilko, tilko.site, KPSS, KPSS lisans, ÖSYM, YouTube ders analizi, tuzak defteri, YKS, LGS, ÖABT, sınav hazırlık uygulaması, Tilko Pro
+
+## İletişim
+
+- Web: https://tilko.site
+- E-posta: developer@tilko.site
+- Play paket adı: com.tilko.site

@@ -23,8 +23,56 @@ const kalam = Kalam({
 });
 
 export const metadata: Metadata = {
-  title: "TİLKO",
-  description: "YouTube ders analizi, tuzak defteri ve Ebbinghaus tekrarları",
+  metadataBase: new URL("https://tilko.site"),
+  title: {
+    default: "Tilko — KPSS YouTube ders analizi ve tuzak defteri",
+    template: "%s · Tilko",
+  },
+  description:
+    "Tilko (tilko.site): KPSS, YKS, LGS ve ÖABT için YouTube ders analizi, akıllı not, tuzak defteri, seviye teşhisi ve Tilko Pro. Türkçe sınav koçu.",
+  applicationName: "Tilko",
+  keywords: [
+    "Tilko",
+    "tilko.site",
+    "KPSS",
+    "YouTube ders analizi",
+    "tuzak defteri",
+    "ÖSYM",
+    "YKS",
+    "LGS",
+    "ÖABT",
+    "Tilko Pro",
+    "sınav hazırlık",
+  ],
+  authors: [{ name: "Tilko", url: "https://tilko.site" }],
+  creator: "Tilko",
+  publisher: "Tilko",
+  alternates: {
+    canonical: "https://tilko.site/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    url: "https://tilko.site/",
+    siteName: "Tilko",
+    title: "Tilko — KPSS YouTube ders analizi",
+    description:
+      "YouTube dersini not ve ÖSYM tuzağına çevir. Tilko ile KPSS / YKS hazırlığı.",
+    images: [{ url: "/logo.png", width: 512, height: 512, alt: "Tilko" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Tilko — KPSS YouTube ders analizi",
+    description:
+      "YouTube ders analizi, tuzak defteri ve Tilko Pro. tilko.site",
+    images: ["/logo.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  category: "education",
 };
 
 export const viewport = {
