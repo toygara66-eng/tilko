@@ -4,6 +4,22 @@ import { getUserId } from "@/lib/user";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || "https://tilko-api.onrender.com";
 
+/** HTTP header Latin-1 dışı karakterleri (Türkçe vb.) taşıyamaz → base64. */
+function encodeAdminSecretHeader(secret: string): string {
+  const raw = (secret || "").trim();
+  if (!raw) return "";
+  try {
+    const bytes = new TextEncoder().encode(raw);
+    let binary = "";
+    bytes.forEach((b) => {
+      binary += String.fromCharCode(b);
+    });
+    return `b64:${btoa(binary)}`;
+  } catch {
+    return raw;
+  }
+}
+
 export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatası"): string {
   const message =
     err instanceof Error
@@ -76,7 +92,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (typeof window !== "undefined" && path.startsWith("/analyze")) {
       const adminSecret = window.localStorage.getItem("tilko_admin_secret") || "";
       if (adminSecret.trim()) {
-        headers["X-Admin-Secret"] = adminSecret.trim();
+        headers["X-Admin-Secret"] = encodeAdminSecretHeader(adminSecret.trim());
       }
     }
     const response = await fetch(`${API_BASE}${path}`, {
@@ -1201,7 +1217,7 @@ export type ArchiveFeedResult = {
 function adminHeaders(secret: string, json = true): Promise<Record<string, string>> {
   // Admin uçları yalnızca X-Admin-Secret ister; giriş zorunlu değil.
   const headers: Record<string, string> = {
-    "X-Admin-Secret": secret,
+    "X-Admin-Secret": encodeAdminSecretHeader(secret),
   };
   if (json) headers["Content-Type"] = "application/json";
   return Promise.resolve(headers);

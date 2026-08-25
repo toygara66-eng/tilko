@@ -113,6 +113,7 @@ def play_webhook_ok(request: Request) -> bool:
 
 
 def admin_ok(request: Request) -> bool:
+    from base64 import b64decode
     from hmac import compare_digest
 
     def _clean(raw: str) -> str:
@@ -120,13 +121,28 @@ def admin_ok(request: Request) -> bool:
         # Render / kopyala-yapıştır tırnak veya BOM bırakabiliyor
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
             value = value[1:-1].strip()
-        return value.lstrip("\ufeff")
+        value = value.lstrip("\ufeff")
+        # Frontend Unicode anahtarları b64:... olarak gönderir (HTTP Latin-1 sınırı)
+        if value.startswith("b64:"):
+            try:
+                value = b64decode(value[4:], validate=False).decode("utf-8")
+            except Exception:  # noqa: BLE001
+                return ""
+        return value.strip()
 
     expected = _clean(settings.admin_api_secret or "")
+    # Env düz metin; b64: prefix env’de olmamalı — tekrar temizle
+    if expected.startswith("b64:"):
+        try:
+            expected = b64decode(expected[4:], validate=False).decode("utf-8").strip()
+        except Exception:  # noqa: BLE001
+            expected = expected[4:]
     if not expected:
         return False
     got = _clean(request.headers.get("X-Admin-Secret") or "")
-    if not got or len(got) != len(expected):
+    if not got:
+        return False
+    if len(got) != len(expected):
         return False
     return compare_digest(got, expected)
 
