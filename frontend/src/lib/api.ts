@@ -439,7 +439,7 @@ export function renameNotebookSession(input: {
   video_url?: string;
 }) {
   return request<{ ok: boolean; session: NotebookSessionItem }>("/notebook/session", {
-    method: "PATCH",
+    method: "POST",
     body: JSON.stringify(input),
   });
 }

@@ -80,6 +80,7 @@ def ensure_session(
             cleaned = (label or "").strip()[:160]
             if cleaned:
                 row.label = cleaned
+        db.add(row)
         return row
     from datetime import datetime
 

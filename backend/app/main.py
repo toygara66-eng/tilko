@@ -894,6 +894,7 @@ def list_notebook(
 
 
 @app.patch("/notebook/session")
+@app.post("/notebook/session")
 @limiter.limit("30/minute")
 def rename_notebook_session(
     request: Request,

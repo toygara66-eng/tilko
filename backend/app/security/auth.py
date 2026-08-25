@@ -537,6 +537,9 @@ def auth_error(status: int, detail: str) -> JSONResponse:
 def _path_claimed_user(path: str) -> str | None:
     parts = [item for item in path.split("/") if item]
     if len(parts) >= 2 and parts[0] in {"progress", "traps", "daily_missions", "notebook"}:
+        # /notebook/session gibi sabit yollar user_id değildir.
+        if parts[0] == "notebook" and parts[1] in {"session", "sessions"}:
+            return None
         return parts[1]
     if len(parts) >= 3 and parts[0] == "api" and parts[1] == "penalty":
         if parts[2] in {"answer"}:

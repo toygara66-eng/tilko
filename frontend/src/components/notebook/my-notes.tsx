@@ -256,6 +256,13 @@ export function MyNotes() {
                   key={`${session.subject}-${session.video_id}`}
                   session={session}
                   onOpen={() => setVideoId(session.video_id)}
+                  onRename={() => {
+                    setVideoId(session.video_id);
+                    setRenameValue(
+                      session.label === "İsimsiz not seti" ? "" : session.label || "",
+                    );
+                    setRenameOpen(true);
+                  }}
                 />
               ))}
             </div>
@@ -409,23 +416,36 @@ export function MyNotes() {
 function SessionCard({
   session,
   onOpen,
+  onRename,
 }: {
   session: NotebookSessionItem;
   onOpen: () => void;
+  onRename: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex flex-col rounded-xl border border-zinc-300 bg-white/50 px-4 py-3 text-left transition hover:border-orange-400/70 dark:border-zinc-700 dark:bg-zinc-900/40"
-    >
-      <span className="line-clamp-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-        {session.label || "İsimsiz not seti"}
-      </span>
-      <span className="mt-1 text-xs text-zinc-500">
-        {session.note_count} not · {session.question_count} soru
-      </span>
-    </button>
+    <div className="flex items-stretch gap-1 rounded-xl border border-zinc-300 bg-white/50 dark:border-zinc-700 dark:bg-zinc-900/40">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 flex-col px-4 py-3 text-left transition hover:bg-orange-50/60 dark:hover:bg-zinc-800/60"
+      >
+        <span className="line-clamp-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          {session.label || "İsimsiz not seti"}
+        </span>
+        <span className="mt-1 text-xs text-zinc-500">
+          {session.note_count} not · {session.question_count} soru
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onRename}
+        className="shrink-0 self-center rounded-lg p-3 text-orange-600 hover:bg-orange-100 dark:text-orange-300 dark:hover:bg-zinc-800"
+        title="İsim ver"
+        aria-label="İsim ver"
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
