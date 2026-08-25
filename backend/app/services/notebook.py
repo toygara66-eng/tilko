@@ -376,7 +376,7 @@ def build_notes_pdf_bytes(
             options = item.get("options") or {}
             if isinstance(options, dict):
                 for letter, text in options.items():
-                    mark = " ✓" if str(letter) == str(item.get("correct") or "") else ""
+                    mark = " (dogru)" if str(letter) == str(item.get("correct") or "") else ""
                     write(f"  {letter}) {text}{mark}", size=10)
             expl = str(item.get("explanation") or "").strip()
             if expl:

@@ -461,18 +461,89 @@ export async function downloadNotebookPdf(input: {
   }
   const res = await fetch(`${API_BASE}${path}`, { headers });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || "PDF indirilemedi");
+    let detail = "";
+    try {
+      const raw = await res.text();
+      try {
+        const parsed = JSON.parse(raw) as { detail?: unknown };
+        detail =
+          typeof parsed.detail === "string"
+            ? parsed.detail
+            : Array.isArray(parsed.detail)
+              ? "PDF isteği reddedildi."
+              : raw;
+      } catch {
+        detail = raw;
+      }
+    } catch {
+      detail = "";
+    }
+    throw new Error(detail.trim() || "PDF indirilemedi");
   }
   const blob = await res.blob();
+  if (!blob.size || !(blob.type || "").includes("pdf")) {
+    // Bazı proxy’ler hata HTML’i blob diye döner
+    const probe = await blob.slice(0, 5).text().catch(() => "");
+    if (probe !== "%PDF-") {
+      throw new Error("Sunucu PDF döndürmedi. Tekrar dene.");
+    }
+  }
+  const filename = `${
+    (input.filename || "tilko-notlar")
+      .replace(/[^\w\-ğüşıöçĞÜŞİÖÇ ]+/gi, "")
+      .trim() || "tilko-notlar"
+  }.pdf`;
+  await savePdfBlob(blob, filename);
+}
+
+async function savePdfBlob(blob: Blob, filename: string) {
+  const file = new File([blob], filename, { type: "application/pdf" });
+  const native =
+    typeof window !== "undefined" &&
+    (window.Capacitor?.getPlatform?.() === "android" ||
+      Boolean(window.TilkoIntegrity) ||
+      /Android/i.test(navigator.userAgent || ""));
+
+  // Android WebView çoğu zaman <a download>’ı yok sayar — paylaş / aç.
+  if (native && typeof navigator.canShare === "function") {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: filename,
+          text: "Tilko ders notları",
+        });
+        return;
+      }
+    } catch (err) {
+      // Kullanıcı iptal ettiyse sessiz çık
+      if (err instanceof Error && /Abort|cancel|iptal/i.test(err.name + err.message)) {
+        return;
+      }
+    }
+  }
+
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${(input.filename || "tilko-notlar").replace(/[^\w\-ğüşıöçĞÜŞİÖÇ ]+/gi, "").trim() || "tilko-notlar"}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  try {
+    if (native) {
+      const opened = window.open(url, "_blank");
+      if (!opened) {
+        window.location.assign(url);
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
+  } catch {
+    window.location.assign(url);
+  }
 }
 
 export function unlockAd(userId: string) {
