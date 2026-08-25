@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useProfile } from "@/components/profile/profile-context";
 import { isSignedIn } from "@/lib/auth";
 
-const OPEN = new Set(["/hedef", "/admin", "/giris", "/hoca"]);
+const OPEN = new Set(["/hedef", "/admin", "/giris", "/hoca", "/gizlilik"]);
 
 export function ExamTargetGate() {
   const { profile, ready } = useProfile();

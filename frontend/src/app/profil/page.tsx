@@ -143,12 +143,20 @@ export default function ProfilePage() {
 
       <FeedbackCard />
 
-      <Link
-        href="/"
-        className="inline-block text-sm text-orange-600 dark:text-orange-300"
-      >
-        Av’a dön
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <Link
+          href="/"
+          className="inline-block text-sm text-orange-600 dark:text-orange-300"
+        >
+          Av’a dön
+        </Link>
+        <Link
+          href="/gizlilik"
+          className="text-[10px] text-zinc-400 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          Gizlilik
+        </Link>
+      </div>
     </div>
   );
 }

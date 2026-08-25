@@ -6,7 +6,7 @@ import { isSignedIn } from "@/lib/auth";
 import { clearUserId } from "@/lib/user";
 
 /** Giriş/kayıt olmadan uygulama kullanılmaz. */
-const PUBLIC = new Set(["/giris", "/admin"]);
+const PUBLIC = new Set(["/giris", "/admin", "/gizlilik"]);
 
 export function AuthGate() {
   const path = usePathname();

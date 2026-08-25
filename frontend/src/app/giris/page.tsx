@@ -556,6 +556,11 @@ export default function GirisPage() {
           </>
         )}
       </p>
+      <p className="mt-8 text-center text-[10px] text-zinc-400 dark:text-zinc-600">
+        <Link href="/gizlilik" className="hover:text-zinc-500 dark:hover:text-zinc-400">
+          Gizlilik
+        </Link>
+      </p>
       </>
       ) : null}
     </div>
