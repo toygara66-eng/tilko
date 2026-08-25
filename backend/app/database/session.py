@@ -119,6 +119,16 @@ def init_db() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("Abonelik planları tohumlanamadı: %s", exc)
     try:
+        from app.services.legal import ensure_privacy_doc
+
+        db = SessionLocal()
+        try:
+            ensure_privacy_doc(db)
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Gizlilik metni tohumlanamadı: %s", exc)
+    try:
         from app.services.exams import seed_exam_schedules
 
         db = SessionLocal()

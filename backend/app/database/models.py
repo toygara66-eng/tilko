@@ -684,3 +684,16 @@ class SubscriptionPlanConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+
+
+class SiteDocument(Base):
+    """Gizlilik politikası vb. site metinleri — admin panelden düzenlenir."""
+
+    __tablename__ = "site_documents"
+
+    doc_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )

@@ -84,6 +84,8 @@ from app.models.schemas import (
     AdminDeleteUserResponse,
     AdminPlansUpdateRequest,
     AdminPlansResponse,
+    PrivacyDocumentResponse,
+    PrivacyDocumentUpdateRequest,
     AdminUserUpdateRequest,
     AdminUserUpdateResponse,
     AdminUserListResponse,
@@ -1304,6 +1306,38 @@ def admin_plans_update(
         plans=billing_service.list_plans(db),
         message="Fiyatlar güncellendi. Play Console’daki abonelik fiyatlarını da eşitle.",
     )
+
+
+@app.get("/legal/privacy", response_model=PrivacyDocumentResponse)
+def legal_privacy(db: Session = Depends(get_db)) -> PrivacyDocumentResponse:
+    from app.services import legal as legal_service
+
+    return PrivacyDocumentResponse.model_validate(legal_service.get_privacy(db))
+
+
+@app.get("/admin/legal/privacy", response_model=PrivacyDocumentResponse)
+def admin_privacy_get(db: Session = Depends(get_db)) -> PrivacyDocumentResponse:
+    from app.services import legal as legal_service
+
+    return PrivacyDocumentResponse.model_validate(legal_service.get_privacy(db))
+
+
+@app.post("/admin/legal/privacy", response_model=PrivacyDocumentResponse)
+def admin_privacy_update(
+    payload: PrivacyDocumentUpdateRequest, db: Session = Depends(get_db)
+) -> PrivacyDocumentResponse:
+    from app.services import legal as legal_service
+
+    if payload.title is None and payload.body is None:
+        raise HTTPException(status_code=400, detail="title veya body gerekli.")
+    try:
+        data = legal_service.update_privacy(
+            db, title=payload.title, body=payload.body
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    data["message"] = "Gizlilik metni kaydedildi."
+    return PrivacyDocumentResponse.model_validate(data)
 
 
 @app.post("/admin/users/update", response_model=AdminUserUpdateResponse)

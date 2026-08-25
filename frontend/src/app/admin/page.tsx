@@ -22,6 +22,8 @@ import {
   listProLogs,
   listAdminPlans,
   updateAdminPlans,
+  getAdminPrivacy,
+  updateAdminPrivacy,
   setAdminFeedbackStatus,
   updateExamSchedule,
   updateExamToday,
@@ -93,11 +95,15 @@ export default function AdminArchivePage() {
     | "feedback"
     | "prologs"
     | "prices"
+    | "privacy"
   >("users");
   const [proLogs, setProLogs] = useState<ProEntitlementEvent[]>([]);
   const [proLogQuery, setProLogQuery] = useState("");
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [planDrafts, setPlanDrafts] = useState<Record<string, string>>({});
+  const [privacyTitle, setPrivacyTitle] = useState("");
+  const [privacyBody, setPrivacyBody] = useState("");
+  const [privacyUpdatedAt, setPrivacyUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SECRET_KEY) || "";
@@ -118,6 +124,19 @@ export default function AdminArchivePage() {
       setPlanDrafts(drafts);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fiyatlar alınamadı");
+    }
+  }
+
+  async function loadPrivacy() {
+    setError("");
+    try {
+      window.localStorage.setItem(SECRET_KEY, secret);
+      const data = await getAdminPrivacy(secret);
+      setPrivacyTitle(data.title || "");
+      setPrivacyBody(data.body || "");
+      setPrivacyUpdatedAt(data.updated_at);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gizlilik metni alınamadı");
     }
   }
 
@@ -242,6 +261,7 @@ export default function AdminArchivePage() {
             ["feedback", "Geri bildirim"],
             ["users", "Kullanıcılar"],
             ["prices", "Fiyatlar"],
+            ["privacy", "Gizlilik"],
             ["prologs", "Pro log"],
             ["credits", "Krediler"],
             ["calendar", "Sınav takvimi"],
@@ -258,6 +278,7 @@ export default function AdminArchivePage() {
               if (id === "feedback" && secret.trim()) void loadFeedback();
               if (id === "prologs" && secret.trim()) void loadProLogs();
               if (id === "prices" && secret.trim()) void loadPlans();
+              if (id === "privacy" && secret.trim()) void loadPrivacy();
             }}
             className={
               tab === id
@@ -966,6 +987,107 @@ export default function AdminArchivePage() {
                 {busy ? <Loader2 className="animate-spin" /> : null}
                 Fiyatları kaydet
               </Button>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "privacy" ? (
+        <section className="space-y-4 rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+                Gizlilik politikası
+              </h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                tilko.site/gizlilik sayfasında görünen metin. Basit markdown:
+                satır başı <span className="font-mono">##</span> başlık,{" "}
+                <span className="font-mono">-</span> madde,{" "}
+                <span className="font-mono">**kalın**</span>.
+              </p>
+              {privacyUpdatedAt ? (
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  Son kayıt:{" "}
+                  {new Date(privacyUpdatedAt).toLocaleString("tr-TR")}
+                </p>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !secret.trim()}
+              onClick={() => void loadPrivacy()}
+            >
+              Yenile
+            </Button>
+          </div>
+          {!privacyBody && !privacyTitle ? (
+            <p className="text-sm text-zinc-500">
+              Metni görmek için admin anahtarını girip Yenile’ye bas.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Başlık
+                <Input
+                  value={privacyTitle}
+                  onChange={(event) => setPrivacyTitle(event.target.value)}
+                  maxLength={200}
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Metin
+                <textarea
+                  value={privacyBody}
+                  onChange={(event) => setPrivacyBody(event.target.value)}
+                  rows={22}
+                  className="min-h-[280px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono text-xs leading-relaxed text-zinc-900 outline-none focus:border-orange-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  disabled={busy || !secret.trim()}
+                  onClick={() => {
+                    void (async () => {
+                      setBusy(true);
+                      setError("");
+                      setCreditMsg("");
+                      try {
+                        const data = await updateAdminPrivacy(secret, {
+                          title: privacyTitle,
+                          body: privacyBody,
+                        });
+                        setPrivacyTitle(data.title);
+                        setPrivacyBody(data.body);
+                        setPrivacyUpdatedAt(data.updated_at);
+                        setCreditMsg(
+                          data.message || "Gizlilik metni kaydedildi.",
+                        );
+                      } catch (err) {
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "Gizlilik metni kaydedilemedi",
+                        );
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : null}
+                  Kaydet
+                </Button>
+                <a
+                  href="/gizlilik"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-medium text-orange-700 underline dark:text-orange-300"
+                >
+                  Sayfayı aç
+                </a>
+              </div>
             </div>
           )}
         </section>

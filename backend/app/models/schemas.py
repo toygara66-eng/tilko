@@ -891,6 +891,20 @@ class AdminPlansResponse(BaseModel):
     message: str = ""
 
 
+class PrivacyDocumentResponse(BaseModel):
+    ok: bool = True
+    key: str = "privacy"
+    title: str = ""
+    body: str = ""
+    updated_at: str | None = None
+    message: str = ""
+
+
+class PrivacyDocumentUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    body: str | None = Field(default=None, max_length=100_000)
+
+
 class SubscriptionVerifyRequest(BaseModel):
     model_config = {"extra": "allow"}
     user_id: str = ""

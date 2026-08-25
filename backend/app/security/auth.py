@@ -34,6 +34,7 @@ PUBLIC_PATHS = {
     "/auth/reset-password",
     "/login",
     "/subscription/webhook",
+    "/legal/privacy",
 }
 PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi", "/captions", "/health/")
 ALGORITHM = "HS256"

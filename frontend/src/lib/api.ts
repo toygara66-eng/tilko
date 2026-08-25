@@ -1171,6 +1171,41 @@ export async function updateAdminPlans(
   }>(response);
 }
 
+export type PrivacyDocument = {
+  ok: boolean;
+  key: string;
+  title: string;
+  body: string;
+  updated_at: string | null;
+  message?: string;
+};
+
+export async function getPrivacyDocument() {
+  const response = await fetch(`${API_BASE}/legal/privacy`, {
+    cache: "no-store",
+  });
+  return readJson<PrivacyDocument>(response);
+}
+
+export async function getAdminPrivacy(secret: string) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/legal/privacy`, { headers });
+  return readJson<PrivacyDocument>(response);
+}
+
+export async function updateAdminPrivacy(
+  secret: string,
+  payload: { title?: string; body?: string },
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/legal/privacy`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return readJson<PrivacyDocument>(response);
+}
+
 export function verifySubscription(payload: {
   user_id: string;
   product_id: string;
