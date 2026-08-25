@@ -325,62 +325,102 @@ def build_notes_pdf_bytes(
     notes: list[dict],
     questions: list[dict] | None = None,
 ) -> bytes:
-    """Türkçe destekli basit PDF (fpdf2)."""
+    """Türkçe destekli düzenli PDF (fpdf2)."""
     from fpdf import FPDF
 
+    try:
+        from fpdf.enums import XPos, YPos
+    except ImportError:  # eski fpdf2
+        XPos = YPos = None  # type: ignore[misc, assignment]
+
     regular, bold = _pdf_font_paths()
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=14)
-    pdf.set_margins(14, 14, 14)
+    pdf = FPDF(unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=16)
+    pdf.set_margins(16, 16, 16)
     pdf.add_page()
     pdf.add_font("TilkoSans", "", regular)
     pdf.add_font("TilkoSans", "B", bold)
-    usable = pdf.w - pdf.l_margin - pdf.r_margin
+    usable = float(pdf.epw)  # etkili yazı genişliği
 
-    def write(text: str, *, weight: str = "", size: int = 11) -> None:
+    def _clean(text: object) -> str:
+        raw = str(text or "")
+        # Kontrol karakterleri / garip boşluklar satırı bozmasın
+        raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+        raw = "".join(ch if (ch == "\n" or ord(ch) >= 32) else " " for ch in raw)
+        # Çok uzun tek kelime taşmasın
+        parts: list[str] = []
+        for word in raw.split(" "):
+            if len(word) <= 48:
+                parts.append(word)
+                continue
+            for i in range(0, len(word), 48):
+                parts.append(word[i : i + 48])
+        return " ".join(parts).strip()
+
+    def write(text: object, *, weight: str = "", size: int = 11, gap: float = 1.5) -> None:
+        body = _clean(text)
+        if not body:
+            return
         pdf.set_font("TilkoSans", weight, size)
-        pdf.multi_cell(usable, 6, text or " ")
+        pdf.set_x(pdf.l_margin)
+        line_h = max(5.0, size * 0.55)
+        kwargs: dict = {}
+        if XPos is not None and YPos is not None:
+            kwargs["new_x"] = XPos.LMARGIN
+            kwargs["new_y"] = YPos.NEXT
+        pdf.multi_cell(usable, line_h, body, **kwargs)
+        if gap:
+            pdf.ln(gap)
 
-    write("TİLKO — Ders Notları", weight="B", size=16)
-    pdf.ln(2)
-    write(f"{subject} · {label}", weight="B", size=13)
-    pdf.ln(4)
+    write("TİLKO — Ders Notları", weight="B", size=16, gap=2)
+    write(f"{_clean(subject)} · {_clean(label)}", weight="B", size=12, gap=4)
 
     if not notes:
         write("Bu sette henüz not yok.")
     for index, note in enumerate(notes, start=1):
-        title = str(note.get("title") or f"Not {index}")
-        write(f"{index}. {title}", weight="B", size=12)
-        detail = str(note.get("text") or note.get("detail") or "").strip()
+        title = _clean(note.get("title") or f"Not {index}")
+        write(f"{index}. {title}", weight="B", size=12, gap=1)
+        detail = _clean(
+            note.get("text")
+            or note.get("detail")
+            or note.get("body")
+            or note.get("content")
+            or ""
+        )
         if detail:
-            write(detail, size=10)
-        for point in note.get("key_points") or []:
-            line = str(point).strip()
-            if line:
-                write(f"• {line}", size=10)
-        tip = str(note.get("exam_tip") or "").strip()
+            write(detail, size=10, gap=1)
+        points = note.get("key_points") or note.get("bullets") or []
+        if isinstance(points, list):
+            for point in points:
+                line = _clean(point)
+                if line:
+                    write(f"- {line}", size=10, gap=0.5)
+        tip = _clean(note.get("exam_tip") or "")
         if tip:
-            write(f"Tuzak: {tip}", size=10)
-        mnemonic = str(note.get("mnemonic") or "").strip()
+            write(f"Tuzak: {tip}", size=10, gap=0.5)
+        mnemonic = _clean(note.get("mnemonic") or "")
         if mnemonic:
-            write(f"Hafıza: {mnemonic}", size=10)
+            write(f"Hafıza: {mnemonic}", size=10, gap=0.5)
         pdf.ln(3)
 
     extra_q = questions or []
     if extra_q:
         pdf.add_page()
-        write("Soru bankası", weight="B", size=14)
-        pdf.ln(2)
+        write("Soru bankası", weight="B", size=14, gap=2)
         for index, item in enumerate(extra_q, start=1):
-            write(f"S{index}. {item.get('text') or ''}", weight="B", size=11)
+            write(f"S{index}. {_clean(item.get('text') or '')}", weight="B", size=11, gap=1)
             options = item.get("options") or {}
             if isinstance(options, dict):
-                for letter, text in options.items():
-                    mark = " (dogru)" if str(letter) == str(item.get("correct") or "") else ""
-                    write(f"  {letter}) {text}{mark}", size=10)
-            expl = str(item.get("explanation") or "").strip()
+                for letter, opt in options.items():
+                    mark = (
+                        " (doğru)"
+                        if str(letter) == str(item.get("correct") or "")
+                        else ""
+                    )
+                    write(f"{letter}) {_clean(opt)}{mark}", size=10, gap=0.4)
+            expl = _clean(item.get("explanation") or "")
             if expl:
-                write(f"Açıklama: {expl}", size=9)
+                write(f"Açıklama: {expl}", size=9, gap=0.5)
             pdf.ln(2)
 
     out = pdf.output()
