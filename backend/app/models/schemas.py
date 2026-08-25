@@ -810,6 +810,16 @@ class AdminDeleteUserResponse(BaseModel):
     message: str = ""
 
 
+class AdminPlanPriceUpdate(BaseModel):
+    product_id: str = Field(..., min_length=1, max_length=64)
+    price_try: int | None = Field(default=None, ge=1, le=100_000)
+    label: str | None = Field(default=None, max_length=128)
+
+
+class AdminPlansUpdateRequest(BaseModel):
+    plans: list[AdminPlanPriceUpdate] = Field(default_factory=list, max_length=12)
+
+
 class AdminUserUpdateRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     display_name: str | None = Field(default=None, max_length=64)
@@ -873,6 +883,12 @@ class SubscriptionPlan(BaseModel):
     days: int = 31
     price_try: int = 0
     price_label: str = ""
+
+
+class AdminPlansResponse(BaseModel):
+    ok: bool = True
+    plans: list[SubscriptionPlan] = Field(default_factory=list)
+    message: str = ""
 
 
 class SubscriptionVerifyRequest(BaseModel):

@@ -667,3 +667,20 @@ class AnalyzeCache(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+
+
+class SubscriptionPlanConfig(Base):
+    """Tilko Pro paketleri — fiyat admin panelden güncellenir (Play SKU sabit)."""
+
+    __tablename__ = "subscription_plan_configs"
+
+    product_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    label: Mapped[str] = mapped_column(String(128), default="")
+    period: Mapped[str] = mapped_column(String(16), default="monthly")
+    days: Mapped[int] = mapped_column(Integer, default=31)
+    price_try: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )

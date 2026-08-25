@@ -21,24 +21,185 @@ from app.services.penalty import get_or_create_user
 logger = logging.getLogger(__name__)
 
 SANDBOX_PREFIX = "gp_sandbox."
-PRODUCTS = {
+
+# Play Console ürün kimlikleri sabit; fiyatlar DB’den (admin) güncellenir.
+DEFAULT_PRODUCTS: dict[str, dict] = {
+    "tilko_pro_weekly": {
+        "id": "tilko_pro_weekly",
+        "label": "Haftalık Tilko Pro",
+        "period": "weekly",
+        "days": 7,
+        "price_try": 100,
+        "sort_order": 1,
+    },
     "tilko_pro_monthly": {
         "id": "tilko_pro_monthly",
         "label": "Aylık Tilko Pro",
         "period": "monthly",
         "days": 31,
-        "price_try": 149,
-        "price_label": "149 TL / ay",
+        "price_try": 299,
+        "sort_order": 2,
     },
     "tilko_pro_yearly": {
         "id": "tilko_pro_yearly",
         "label": "Yıllık Tilko Pro",
         "period": "yearly",
         "days": 366,
-        "price_try": 990,
-        "price_label": "990 TL / yıl",
+        "price_try": 2500,
+        "sort_order": 3,
     },
 }
+
+PERIOD_SUFFIX = {
+    "weekly": "hafta",
+    "monthly": "ay",
+    "yearly": "yıl",
+}
+
+
+def _format_price_label(period: str, price_try: int) -> str:
+    suffix = PERIOD_SUFFIX.get((period or "").strip().lower(), "dönem")
+    return f"{int(price_try)} TL / {suffix}"
+
+
+def _plan_view(row_or_dict: dict) -> dict:
+    period = str(row_or_dict.get("period") or "monthly")
+    price = int(row_or_dict.get("price_try") or 0)
+    return {
+        "id": str(row_or_dict.get("id") or row_or_dict.get("product_id") or ""),
+        "label": str(row_or_dict.get("label") or ""),
+        "period": period,
+        "days": int(row_or_dict.get("days") or 31),
+        "price_try": price,
+        "price_label": _format_price_label(period, price),
+    }
+
+
+def ensure_subscription_plans(db: Session) -> None:
+    """Varsayılan paketleri DB’ye yazar; eksik SKU ekler, mevcut fiyatı ezmez."""
+    from app.database.models import SubscriptionPlanConfig
+
+    dirty = False
+    for product_id, base in DEFAULT_PRODUCTS.items():
+        row = db.get(SubscriptionPlanConfig, product_id)
+        if row is None:
+            db.add(
+                SubscriptionPlanConfig(
+                    product_id=product_id,
+                    label=str(base["label"]),
+                    period=str(base["period"]),
+                    days=int(base["days"]),
+                    price_try=int(base["price_try"]),
+                    sort_order=int(base.get("sort_order") or 0),
+                    active=True,
+                )
+            )
+            dirty = True
+        else:
+            # SKU meta (gün/period/etiket şablonu) senkron; fiyat admin’e bırakılır.
+            if not (row.label or "").strip():
+                row.label = str(base["label"])
+                dirty = True
+            if (row.period or "") != base["period"]:
+                row.period = str(base["period"])
+                dirty = True
+            if int(row.days or 0) != int(base["days"]):
+                row.days = int(base["days"])
+                dirty = True
+            if int(row.sort_order or 0) != int(base.get("sort_order") or 0):
+                row.sort_order = int(base.get("sort_order") or 0)
+                dirty = True
+            db.add(row)
+    if dirty:
+        db.commit()
+
+
+def get_products(db: Session | None = None) -> dict[str, dict]:
+    """Aktif plan haritası (id → plan). db yoksa varsayılanlar."""
+    if db is None:
+        return {
+            pid: _plan_view({**base, "id": pid})
+            for pid, base in DEFAULT_PRODUCTS.items()
+        }
+    from app.database.models import SubscriptionPlanConfig
+
+    ensure_subscription_plans(db)
+    rows = db.scalars(
+        select(SubscriptionPlanConfig).order_by(
+            SubscriptionPlanConfig.sort_order, SubscriptionPlanConfig.product_id
+        )
+    ).all()
+    out: dict[str, dict] = {}
+    for row in rows:
+        if not bool(getattr(row, "active", True)):
+            continue
+        out[row.product_id] = _plan_view(
+            {
+                "id": row.product_id,
+                "label": row.label,
+                "period": row.period,
+                "days": row.days,
+                "price_try": row.price_try,
+            }
+        )
+    return out or {
+        pid: _plan_view({**base, "id": pid})
+        for pid, base in DEFAULT_PRODUCTS.items()
+    }
+
+
+# Geriye dönük uyumluluk (promo vb. import)
+PRODUCTS = get_products(None)
+
+
+def list_plans(db: Session | None = None) -> list[dict]:
+    return list(get_products(db).values())
+
+
+def update_plan_price(
+    db: Session,
+    product_id: str,
+    *,
+    price_try: int | None = None,
+    label: str | None = None,
+) -> dict:
+    from app.database.models import SubscriptionPlanConfig
+
+    ensure_subscription_plans(db)
+    pid = (product_id or "").strip()
+    row = db.get(SubscriptionPlanConfig, pid)
+    if row is None:
+        raise ValueError("Bilinmeyen ürün kimliği.")
+    if price_try is not None:
+        value = int(price_try)
+        if value < 1 or value > 100_000:
+            raise ValueError("Fiyat 1–100000 TL arasında olmalı.")
+        row.price_try = value
+    if label is not None:
+        name = (label or "").strip()[:128]
+        if len(name) < 2:
+            raise ValueError("Etiket en az 2 karakter.")
+        row.label = name
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _plan_view(
+        {
+            "id": row.product_id,
+            "label": row.label,
+            "period": row.period,
+            "days": row.days,
+            "price_try": row.price_try,
+        }
+    )
+
+
+def catalog(db: Session | None = None) -> dict:
+    return {
+        "package_name": settings.play_package_name,
+        "sandbox": bool(settings.play_billing_sandbox),
+        "plans": list_plans(db),
+    }
 
 
 def utcnow() -> datetime:
@@ -55,14 +216,6 @@ def _aware(value: datetime | None) -> datetime | None:
 
 def token_hash(token: str) -> str:
     return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
-
-
-def catalog() -> dict:
-    return {
-        "package_name": settings.play_package_name,
-        "sandbox": bool(settings.play_billing_sandbox),
-        "plans": list(PRODUCTS.values()),
-    }
 
 
 def refresh_entitlement(db: Session, user: User) -> User:
@@ -96,7 +249,7 @@ def refresh_entitlement(db: Session, user: User) -> User:
     return user
 
 
-def public_status(user: User) -> dict:
+def public_status(user: User, db: Session | None = None) -> dict:
     expires = _aware(getattr(user, "subscription_expires_at", None))
     return {
         "is_premium": bool(user.is_premium),
@@ -105,7 +258,7 @@ def public_status(user: User) -> dict:
         "expires_at": expires.isoformat() if expires else None,
         "sandbox": bool(settings.play_billing_sandbox),
         "package_name": settings.play_package_name,
-        "plans": list(PRODUCTS.values()),
+        "plans": list_plans(db),
     }
 
 
@@ -264,14 +417,18 @@ def _revoke(user: User, status: str = "expired") -> None:
     user.subscription_status = status
 
 
-def _product_or_raise(product_id: str) -> dict:
-    item = PRODUCTS.get((product_id or "").strip())
+def _product_or_raise(product_id: str, db: Session | None = None) -> dict:
+    item = get_products(db).get((product_id or "").strip())
     if item is None:
-        raise ValueError("Bilinmeyen ürün. tilko_pro_monthly veya tilko_pro_yearly.")
+        raise ValueError(
+            "Bilinmeyen ürün. tilko_pro_weekly, tilko_pro_monthly veya tilko_pro_yearly."
+        )
     return item
 
 
-def _sandbox_payload(user_id: str, product_id: str, token: str) -> dict:
+def _sandbox_payload(
+    user_id: str, product_id: str, token: str, db: Session | None = None
+) -> dict:
     if not settings.play_billing_sandbox:
         raise PermissionError("Sandbox satın alma kapalı. Google Play token gerekli.")
     if not token.startswith(SANDBOX_PREFIX):
@@ -286,7 +443,7 @@ def _sandbox_payload(user_id: str, product_id: str, token: str) -> dict:
         raise PermissionError("Token bu hesaba ait değil.")
     if claimed_product != product_id:
         raise ValueError("Ürün ile token uyuşmuyor.")
-    product = _product_or_raise(product_id)
+    product = _product_or_raise(product_id, db)
     return {
         "acknowledged": True,
         "expiryTimeMillis": str(int((utcnow() + timedelta(days=product["days"])).timestamp() * 1000)),
@@ -384,7 +541,7 @@ def _apply_receipt(
     *,
     activate: bool,
 ) -> PlayPurchase:
-    product = _product_or_raise(product_id)
+    product = _product_or_raise(product_id, db)
     digest = token_hash(purchase_token)
     row = db.scalars(
         select(PlayPurchase).where(PlayPurchase.purchase_token_hash == digest)
@@ -452,9 +609,9 @@ def verify_purchase(
     sku = (product_id or "").strip()
     if not token or not sku:
         raise ValueError("purchase_token ve product_id gerekli.")
-    _product_or_raise(sku)
+    _product_or_raise(sku, db)
     if token.startswith(SANDBOX_PREFIX):
-        receipt = _sandbox_payload(user_id, sku, token)
+        receipt = _sandbox_payload(user_id, sku, token, db)
         plat = "sandbox"
     else:
         if settings.play_billing_sandbox and not (settings.play_service_account_file or "").strip():
@@ -483,7 +640,7 @@ def verify_purchase(
         "ok": True,
         "is_premium": True,
         "message": "Tilko Pro açıldı. Kota kalktı.",
-        **public_status(user),
+        **public_status(user, db),
     }
 
 

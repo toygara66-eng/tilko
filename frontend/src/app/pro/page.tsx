@@ -22,13 +22,13 @@ export default function ProPage() {
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
           Deneme 7 gün. Bitince silme — reklamlı ücretsiz modda günde 1 kısa
-          video kalır. Pro’da süre yok, kota yok. Ödeme Google Play Billing ile
-          (veya test ortamında) doğrulanır.
+          video kalır. Pro’da süre yok, kota yok. Haftalık / aylık / yıllık
+          abonelik Google Play Billing ile doğrulanır.
         </p>
         <ul className="mt-4 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
           <li>Sınırsız YouTube → not + ÖSYM sorusu</li>
           <li>Kota yok, bekleme yok</li>
-          <li>Aylık Sazan Avı indirimleri Pro’ya eklenir</li>
+          <li>Haftalık / aylık / yıllık Pro — güncel fiyat ödeme ekranında</li>
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
           {profile.isPremium ? (

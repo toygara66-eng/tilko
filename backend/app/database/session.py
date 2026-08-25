@@ -109,6 +109,16 @@ def init_db() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("ÖSYM stil rehberi tohumlanamadı: %s", exc)
     try:
+        from app.services.billing import ensure_subscription_plans
+
+        db = SessionLocal()
+        try:
+            ensure_subscription_plans(db)
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Abonelik planları tohumlanamadı: %s", exc)
+    try:
         from app.services.exams import seed_exam_schedules
 
         db = SessionLocal()

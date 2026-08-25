@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database.models import PromoCode, PromoRedemption
-from app.services.billing import PRODUCTS, utcnow
+from app.services.billing import get_products, utcnow
 from app.services.penalty import get_or_create_user
 
 CODE_RE = re.compile(r"^[A-Z0-9][A-Z0-9\-_]{2,31}$")
@@ -314,9 +314,9 @@ def apply_promo(db: Session, user_id: str, code: str, product_id: str = "") -> d
     if not label:
         raise ValueError("İndirim kodu gir.")
     sku = (product_id or "").strip() or "tilko_pro_monthly"
-    product = PRODUCTS.get(sku)
+    product = get_products(db).get(sku)
     if product is None:
-        raise ValueError("Bilinmeyen ürün. Aylık veya yıllık plan seç.")
+        raise ValueError("Bilinmeyen ürün. Haftalık, aylık veya yıllık plan seç.")
 
     row = db.scalar(select(PromoCode).where(PromoCode.code == label))
     if row is None:

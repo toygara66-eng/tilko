@@ -82,6 +82,8 @@ from app.models.schemas import (
     AdminResetCodeResponse,
     AdminDeleteUserRequest,
     AdminDeleteUserResponse,
+    AdminPlansUpdateRequest,
+    AdminPlansResponse,
     AdminUserUpdateRequest,
     AdminUserUpdateResponse,
     AdminUserListResponse,
@@ -980,7 +982,7 @@ def subscription_status(user_id: str, db: Session = Depends(get_db)) -> Subscrip
     user = penalty_service.get_or_create_user(db, user_id)
     billing_service.refresh_entitlement(db, user)
     db.commit()
-    data = billing_service.public_status(user)
+    data = billing_service.public_status(user, db)
     return SubscriptionStatusResponse(
         ok=True,
         is_premium=bool(data["is_premium"]),
@@ -1265,6 +1267,42 @@ def admin_users_delete(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AdminDeleteUserResponse.model_validate(data)
+
+
+@app.get("/admin/plans", response_model=AdminPlansResponse)
+def admin_plans_list(db: Session = Depends(get_db)) -> AdminPlansResponse:
+    from app.services import billing as billing_service
+
+    return AdminPlansResponse(
+        ok=True,
+        plans=billing_service.list_plans(db),
+        message="",
+    )
+
+
+@app.post("/admin/plans", response_model=AdminPlansResponse)
+def admin_plans_update(
+    payload: AdminPlansUpdateRequest, db: Session = Depends(get_db)
+) -> AdminPlansResponse:
+    from app.services import billing as billing_service
+
+    if not payload.plans:
+        raise HTTPException(status_code=400, detail="Güncellenecek plan yok.")
+    try:
+        for item in payload.plans:
+            billing_service.update_plan_price(
+                db,
+                item.product_id,
+                price_try=item.price_try,
+                label=item.label,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminPlansResponse(
+        ok=True,
+        plans=billing_service.list_plans(db),
+        message="Fiyatlar güncellendi. Play Console’daki abonelik fiyatlarını da eşitle.",
+    )
 
 
 @app.post("/admin/users/update", response_model=AdminUserUpdateResponse)

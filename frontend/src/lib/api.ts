@@ -1057,6 +1057,33 @@ export function getSubscriptionStatus(userId: string) {
   );
 }
 
+export async function listAdminPlans(secret: string) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/plans`, { headers });
+  return readJson<{
+    ok: boolean;
+    plans: SubscriptionPlan[];
+    message: string;
+  }>(response);
+}
+
+export async function updateAdminPlans(
+  secret: string,
+  plans: { product_id: string; price_try?: number; label?: string }[],
+) {
+  const headers = await adminHeaders(secret);
+  const response = await fetch(`${API_BASE}/admin/plans`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ plans }),
+  });
+  return readJson<{
+    ok: boolean;
+    plans: SubscriptionPlan[];
+    message: string;
+  }>(response);
+}
+
 export function verifySubscription(payload: {
   user_id: string;
   product_id: string;

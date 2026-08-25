@@ -20,6 +20,8 @@ import {
   listExamSchedules,
   listPromos,
   listProLogs,
+  listAdminPlans,
+  updateAdminPlans,
   setAdminFeedbackStatus,
   updateExamSchedule,
   updateExamToday,
@@ -30,6 +32,7 @@ import {
   type PromoCoupon,
   type ProEntitlementEvent,
   type RagStatus,
+  type SubscriptionPlan,
 } from "@/lib/api";
 import { getUserId } from "@/lib/user";
 import { isSignedIn } from "@/lib/auth";
@@ -89,15 +92,34 @@ export default function AdminArchivePage() {
     | "users"
     | "feedback"
     | "prologs"
+    | "prices"
   >("users");
   const [proLogs, setProLogs] = useState<ProEntitlementEvent[]>([]);
   const [proLogQuery, setProLogQuery] = useState("");
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [planDrafts, setPlanDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SECRET_KEY) || "";
     if (stored) setSecret(stored);
     setMyUserId(getUserId());
   }, []);
+
+  async function loadPlans() {
+    setError("");
+    try {
+      window.localStorage.setItem(SECRET_KEY, secret);
+      const data = await listAdminPlans(secret);
+      setPlans(data.plans);
+      const drafts: Record<string, string> = {};
+      for (const plan of data.plans) {
+        drafts[plan.id] = String(plan.price_try);
+      }
+      setPlanDrafts(drafts);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fiyatlar alınamadı");
+    }
+  }
 
   async function loadProLogs(query = proLogQuery) {
     setError("");
@@ -195,11 +217,12 @@ export default function AdminArchivePage() {
           Anahtar kayıtlıysa YouTube analizi kredi düşürmez.
         </p>
       </section>
-      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-3 lg:grid-cols-7 dark:border-zinc-800 dark:bg-zinc-950/50">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white/70 p-1 sm:grid-cols-3 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
             ["feedback", "Geri bildirim"],
             ["users", "Kullanıcılar"],
+            ["prices", "Fiyatlar"],
             ["prologs", "Pro log"],
             ["credits", "Krediler"],
             ["calendar", "Sınav takvimi"],
@@ -215,6 +238,7 @@ export default function AdminArchivePage() {
               if (id === "users" && secret.trim()) void loadUsers();
               if (id === "feedback" && secret.trim()) void loadFeedback();
               if (id === "prologs" && secret.trim()) void loadProLogs();
+              if (id === "prices" && secret.trim()) void loadPlans();
             }}
             className={
               tab === id
@@ -814,6 +838,117 @@ export default function AdminArchivePage() {
               </tbody>
             </table>
           </div>
+        </section>
+      ) : null}
+
+      {tab === "prices" ? (
+        <section className="space-y-4 rounded-2xl border border-orange-400/40 bg-white/70 p-5 dark:bg-zinc-950/50">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+                Tilko Pro fiyatları
+              </h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                Uygulama içi etiketler buradan güncellenir. Google Play’deki
+                abonelik fiyatlarını da aynı TL değerleriyle Console’dan
+                eşitlemen gerekir (SKU’lar sabit).
+              </p>
+              <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-zinc-500">
+                <li>tilko_pro_weekly</li>
+                <li>tilko_pro_monthly</li>
+                <li>tilko_pro_yearly</li>
+              </ul>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !secret.trim()}
+              onClick={() => void loadPlans()}
+            >
+              Yenile
+            </Button>
+          </div>
+          {plans.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              Fiyatları görmek için admin anahtarını girip Yenile’ye bas.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {plans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className="grid gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 sm:grid-cols-[1fr_120px] dark:border-zinc-800 dark:bg-zinc-900/40"
+                >
+                  <div>
+                    <p className="font-medium text-zinc-900 dark:text-white">
+                      {plan.label}
+                    </p>
+                    <p className="font-mono text-[11px] text-zinc-500">
+                      {plan.id} · {plan.days} gün · {plan.price_label}
+                    </p>
+                  </div>
+                  <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    Fiyat (TL)
+                    <Input
+                      type="number"
+                      min={1}
+                      value={planDrafts[plan.id] ?? String(plan.price_try)}
+                      onChange={(event) =>
+                        setPlanDrafts((prev) => ({
+                          ...prev,
+                          [plan.id]: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ))}
+              <Button
+                type="button"
+                disabled={busy || !secret.trim()}
+                onClick={() => {
+                  void (async () => {
+                    setBusy(true);
+                    setError("");
+                    setCreditMsg("");
+                    try {
+                      const payload = plans.map((plan) => {
+                        const raw = Number(
+                          planDrafts[plan.id] ?? plan.price_try,
+                        );
+                        if (!Number.isFinite(raw) || raw < 1) {
+                          throw new Error(`${plan.label}: geçerli fiyat gir`);
+                        }
+                        return {
+                          product_id: plan.id,
+                          price_try: Math.round(raw),
+                        };
+                      });
+                      const data = await updateAdminPlans(secret, payload);
+                      setPlans(data.plans);
+                      const drafts: Record<string, string> = {};
+                      for (const plan of data.plans) {
+                        drafts[plan.id] = String(plan.price_try);
+                      }
+                      setPlanDrafts(drafts);
+                      setCreditMsg(data.message || "Fiyatlar kaydedildi.");
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Fiyatlar kaydedilemedi",
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                {busy ? <Loader2 className="animate-spin" /> : null}
+                Fiyatları kaydet
+              </Button>
+            </div>
+          )}
         </section>
       ) : null}
 

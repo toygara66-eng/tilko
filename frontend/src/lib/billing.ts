@@ -2,20 +2,28 @@ import type { SubscriptionPlan } from "@/lib/api";
 
 export const FALLBACK_PLANS: SubscriptionPlan[] = [
   {
+    id: "tilko_pro_weekly",
+    label: "Haftalık Tilko Pro",
+    period: "weekly",
+    days: 7,
+    price_try: 100,
+    price_label: "100 TL / hafta",
+  },
+  {
     id: "tilko_pro_monthly",
     label: "Aylık Tilko Pro",
     period: "monthly",
     days: 31,
-    price_try: 149,
-    price_label: "149 TL / ay",
+    price_try: 299,
+    price_label: "299 TL / ay",
   },
   {
     id: "tilko_pro_yearly",
     label: "Yıllık Tilko Pro",
     period: "yearly",
     days: 366,
-    price_try: 990,
-    price_label: "990 TL / yıl",
+    price_try: 2500,
+    price_label: "2500 TL / yıl",
   },
 ];
 
