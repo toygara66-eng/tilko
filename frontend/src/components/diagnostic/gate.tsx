@@ -6,7 +6,7 @@ import { useProfile } from "@/components/profile/profile-context";
 import { isSignedIn } from "@/lib/auth";
 import { normalizeAppPath } from "@/lib/path";
 
-const OPEN = new Set(["/teshis", "/hedef", "/admin", "/giris", "/hoca", "/gizlilik", "/hakkinda"]);
+const OPEN = new Set(["/teshis", "/hedef", "/admin", "/giris", "/hoca", "/gizlilik", "/hakkinda", "/hesap-sil"]);
 
 export function DiagnosticGate() {
   const { profile, ready } = useProfile();

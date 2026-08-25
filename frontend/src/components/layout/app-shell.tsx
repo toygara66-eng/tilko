@@ -83,8 +83,9 @@ function ShellFrame({ children }: { children: ReactNode }) {
   const giris = path === "/giris";
   const gizlilik = path === "/gizlilik";
   const hakkinda = path === "/hakkinda";
+  const hesapSil = path === "/hesap-sil";
   const hoca = path === "/hoca";
-  const staff = giris || hoca || gizlilik || hakkinda;
+  const staff = giris || hoca || gizlilik || hakkinda || hesapSil;
 
   useEffect(() => {
     setSignedIn(isSignedIn());
@@ -99,7 +100,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen w-full max-w-[100vw] flex-col overflow-x-hidden bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      {!hedef && !giris && !gizlilik && !hakkinda ? (
+      {!hedef && !giris && !gizlilik && !hakkinda && !hesapSil ? (
         <>
           <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(234,88,12,0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(34,211,238,0.07),transparent_55%)]" />
           {hoca ? null : <VictoryStrip />}
@@ -176,7 +177,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
       <main
         className={cn(
           "relative mx-auto w-full min-w-0 max-w-full flex-1 overflow-x-hidden",
-          hedef || giris || gizlilik || hakkinda
+          hedef || giris || gizlilik || hakkinda || hesapSil
             ? "max-w-none p-0"
             : hoca
               ? "max-w-5xl px-3 pb-10 pt-6 sm:px-4 md:px-8"

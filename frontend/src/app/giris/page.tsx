@@ -564,6 +564,10 @@ export default function GirisPage() {
         <Link href="/gizlilik" className="hover:text-zinc-500 dark:hover:text-zinc-400">
           Gizlilik
         </Link>
+        <span className="mx-2">·</span>
+        <Link href="/hesap-sil" className="hover:text-zinc-500 dark:hover:text-zinc-400">
+          Hesap sil
+        </Link>
       </p>
       </>
       ) : null}
