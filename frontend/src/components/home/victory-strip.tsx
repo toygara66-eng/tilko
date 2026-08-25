@@ -17,7 +17,7 @@ export function VictoryStrip() {
   return (
     <div className="relative h-6 overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-r from-orange-600 via-amber-300 to-orange-500" />
-      <p className="relative flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.28em] text-zinc-950">
+      <p className="relative flex h-full items-center justify-center truncate px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-950 sm:tracking-[0.28em]">
         {label}
       </p>
     </div>

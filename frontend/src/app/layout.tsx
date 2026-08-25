@@ -27,6 +27,13 @@ export const metadata: Metadata = {
   description: "YouTube ders analizi, tuzak defteri ve Ebbinghaus tekrarları",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {

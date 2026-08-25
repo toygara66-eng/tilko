@@ -13,6 +13,8 @@ html.dark {
 html,
 body {
   background: #f4f4f5;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 html.dark,
@@ -22,6 +24,21 @@ html.dark body {
 
 body {
   @apply min-h-screen bg-zinc-100 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+}
+
+/* Android WebView: yatay taşmayı kes */
+#__next,
+body > div {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
 }
 
 .note-paper {

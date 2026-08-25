@@ -36,7 +36,7 @@ export function ExamCountdown() {
       <p className="relative mt-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-orange-600 dark:text-orange-300">
         {profile.examLabel || "Hedef sınav"}
       </p>
-      <h1 className="relative mt-2 text-3xl font-semibold tracking-tight text-orange-500 drop-shadow-[0_0_22px_rgba(249,115,22,0.55)] md:text-4xl">
+      <h1 className="relative mt-2 break-words text-2xl font-semibold tracking-tight text-orange-500 drop-shadow-[0_0_22px_rgba(249,115,22,0.55)] sm:text-3xl md:text-4xl">
         {headline}
       </h1>
       {examLabel ? (

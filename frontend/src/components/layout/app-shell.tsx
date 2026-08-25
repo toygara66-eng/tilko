@@ -95,52 +95,40 @@ function ShellFrame({ children }: { children: ReactNode }) {
   }, [path]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <div className="flex min-h-screen w-full max-w-[100vw] flex-col overflow-x-hidden bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       {!hedef && !giris ? (
         <>
           <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(234,88,12,0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(34,211,238,0.07),transparent_55%)]" />
           {hoca ? null : <VictoryStrip />}
-          <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-white/65 px-4 py-3 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/65">
-            <div className="mx-auto flex max-w-5xl items-center gap-3">
-              <Link href={hoca ? "/hoca" : "/"} className="flex shrink-0 items-center gap-2">
-                <TilkoLogo size={32} />
-                <span className="text-sm font-semibold tracking-tight">TİLKO 🦊</span>
+          <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-white/65 px-2 py-2 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/65 sm:px-4 sm:py-3">
+            <div className="mx-auto flex w-full min-w-0 max-w-5xl items-center gap-1.5 sm:gap-3">
+              <Link
+                href={hoca ? "/hoca" : "/"}
+                className="flex min-w-0 shrink items-center gap-1.5 sm:gap-2"
+              >
+                <TilkoLogo size={28} className="shrink-0" />
+                <span className="truncate text-sm font-semibold tracking-tight">
+                  TİLKO
+                </span>
               </Link>
               {hoca ? (
                 <span className="hidden text-xs font-medium text-zinc-500 sm:inline">
                   Hoca paneli
                 </span>
               ) : (
-                <>
-                  <Link
-                    href="/profil"
-                    className="hidden rounded-full border border-orange-400/40 bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-800 backdrop-blur-md sm:inline-flex dark:text-orange-200"
-                  >
-                    {profile.title} • {profile.xp} XP
-                  </Link>
-                  <Link
-                    href="/profil"
-                    className="inline-flex rounded-full border border-orange-400/40 bg-orange-500/10 px-2.5 py-1 text-[11px] font-medium text-orange-800 sm:hidden dark:text-orange-200"
-                  >
-                    {profile.xp} XP
-                  </Link>
-                  <Link
-                    href="/pro"
-                    className="hidden rounded-full border border-orange-400/50 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-800 sm:inline-flex dark:text-orange-200"
-                  >
-                    {profile.isPremium ? "Pro" : "Pro'ya geç"}
-                  </Link>
-                </>
+                <Link
+                  href="/profil"
+                  className="hidden min-w-0 truncate rounded-full border border-orange-400/40 bg-orange-500/10 px-2.5 py-1 text-[11px] font-medium text-orange-800 sm:inline-flex dark:text-orange-200"
+                >
+                  {profile.xp} XP
+                </Link>
               )}
-              <div className="ml-auto flex items-center gap-1">
+              <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
                 {hoca ? null : signedIn ? (
                   <>
-                    <span className="hidden rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 sm:inline">
-                      Giriş yapıldı
-                    </span>
                     <Link
                       href="/profil"
-                      className="rounded-full px-3 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
+                      className="hidden rounded-full px-2 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 sm:inline dark:text-zinc-300 dark:hover:text-white"
                     >
                       Hesabım
                     </Link>
@@ -150,7 +138,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                         logout();
                         window.location.assign("/giris");
                       }}
-                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+                      className="inline-flex items-center gap-1 rounded-full p-2 text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 sm:px-2.5 sm:py-1.5"
                       title="Çıkış yap"
                     >
                       <LogOut className="h-3.5 w-3.5" />
@@ -160,19 +148,19 @@ function ShellFrame({ children }: { children: ReactNode }) {
                 ) : (
                   <Link
                     href="/giris"
-                    className="rounded-full px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                    className="rounded-full px-2 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
                   >
                     Giriş
                   </Link>
                 )}
                 {hoca ? null : <NoteModeToggle compact />}
-                <ThemeToggle className="h-10 w-10 px-0 shadow-none" />
+                <ThemeToggle className="h-9 w-9 shrink-0 px-0 shadow-none sm:h-10 sm:w-10" />
                 {hoca ? null : <FeedbackHeaderButton />}
                 <button
                   type="button"
                   onClick={() => setBoardOpen(true)}
                   aria-label="Kurnazlar Listesi"
-                  className="rounded-full p-2 text-orange-500 transition hover:bg-orange-500/10 hover:text-orange-400"
+                  className="shrink-0 rounded-full p-2 text-orange-500 transition hover:bg-orange-500/10 hover:text-orange-400"
                   hidden={hoca}
                 >
                   <Trophy className="h-5 w-5" />
@@ -184,14 +172,14 @@ function ShellFrame({ children }: { children: ReactNode }) {
       ) : null}
       <main
         className={cn(
-          "relative mx-auto w-full flex-1",
+          "relative mx-auto w-full min-w-0 max-w-full flex-1 overflow-x-hidden",
           hedef || giris
             ? "max-w-none p-0"
             : hoca
-              ? "max-w-5xl px-4 pb-10 pt-6 md:px-8"
+              ? "max-w-5xl px-3 pb-10 pt-6 sm:px-4 md:px-8"
               : home || focused
-                ? "flex max-w-xl flex-col justify-center px-4 pb-24 pt-6 md:pt-10"
-                : "max-w-5xl px-4 pb-24 pt-6 md:px-8",
+                ? "flex max-w-xl flex-col justify-center px-3 pb-24 pt-6 sm:px-4 md:pt-10"
+                : "max-w-5xl px-3 pb-24 pt-6 sm:px-4 md:px-8",
         )}
       >
         {children}
@@ -200,7 +188,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
         <>
           <nav
             className={cn(
-              "fixed bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-0.5 rounded-full border border-zinc-200/80 bg-white/80 p-1 shadow-lg backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/80",
+              "fixed bottom-4 left-1/2 z-20 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 gap-0.5 overflow-x-auto rounded-full border border-zinc-200/80 bg-white/80 p-1 shadow-lg backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/80",
               focused && "hidden",
             )}
           >
@@ -212,7 +200,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                   href={item.href}
                   aria-label={item.label}
                   className={cn(
-                    "rounded-full p-2 transition sm:p-2.5",
+                    "shrink-0 rounded-full p-2 transition sm:p-2.5",
                     active
                       ? "bg-orange-500 text-zinc-950"
                       : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-100",

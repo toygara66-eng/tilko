@@ -115,14 +115,14 @@ export function NoteModeToggle({
         toggleNoteMode();
       }}
       className={cn(
-        "inline-flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs font-medium shadow-md backdrop-blur-md transition active:scale-[0.98] sm:gap-3 sm:px-3 sm:text-sm",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1.5 text-xs font-medium shadow-md backdrop-blur-md transition active:scale-[0.98] sm:gap-3 sm:px-3 sm:text-sm",
         isHandwrittenMode
           ? "border-amber-400/60 bg-amber-100 text-amber-950 hover:bg-amber-200 dark:border-amber-500/50 dark:bg-amber-950/70 dark:text-amber-100"
           : "border-cyan-400/60 bg-cyan-100 text-cyan-950 hover:bg-cyan-200 dark:border-cyan-500/50 dark:bg-cyan-950/70 dark:text-cyan-100",
         className,
       )}
     >
-      <span className="whitespace-nowrap">
+      <span className={cn("whitespace-nowrap", compact && "hidden sm:inline")}>
         {isHandwrittenMode ? "📝 Defter" : "📖 Odak"}
         {compact ? null : <span className="hidden sm:inline"> Modu</span>}
       </span>
@@ -131,6 +131,7 @@ export function NoteModeToggle({
           "relative h-5 w-9 rounded-full transition-colors sm:h-6 sm:w-11",
           isHandwrittenMode ? "bg-amber-500" : "bg-cyan-500",
         )}
+        aria-hidden
       >
         <span
           className={cn(
