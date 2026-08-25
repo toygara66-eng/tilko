@@ -12,18 +12,18 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.tilko.app"
+    namespace "com.tilko.site"
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.tilko.app"
+        applicationId "com.tilko.site"
         minSdk 24
         targetSdk 35
-        versionCode 4
-        versionName "1.0.3"
+        versionCode 5
+        versionName "1.0.4"
         buildConfigField "String", "TILKO_PLAY_CERT_SHA256", "\"${playCerts}\""
         buildConfigField "String", "TILKO_WEB_URL", "\"${webUrl}\""
-        buildConfigField "String", "TILKO_PLAY_PACKAGE", "\"com.tilko.app\""
+        buildConfigField "String", "TILKO_PLAY_PACKAGE", "\"com.tilko.site\""
     }
 
     signingConfigs {

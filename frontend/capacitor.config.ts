@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.tilko.app",
+  appId: "com.tilko.site",
   appName: "TILKO",
   webDir: "out",
   android: {

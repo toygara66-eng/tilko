@@ -1,4 +1,4 @@
-package com.tilko.app.integrity;
+package com.tilko.site.integrity;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -8,7 +8,7 @@ import android.content.pm.Signature;
 import android.content.pm.SigningInfo;
 import android.os.Build;
 
-import com.tilko.app.BuildConfig;
+import com.tilko.site.BuildConfig;
 
 import java.security.MessageDigest;
 import java.util.ArrayList;

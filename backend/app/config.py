@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "tilko-dev-jwt-change-me"
     jwt_expire_hours: int = 168
     app_env: str = "development"
-    play_package_name: str = "com.tilko.app"
+    play_package_name: str = "com.tilko.site"
     play_billing_sandbox: bool = True
     play_webhook_secret: str = ""
     play_service_account_file: str = ""

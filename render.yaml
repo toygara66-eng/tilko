@@ -50,7 +50,7 @@ services:
       - key: PLAY_BILLING_SANDBOX
         value: "false"
       - key: PLAY_PACKAGE_NAME
-        value: com.tilko.app
+        value: com.tilko.site
       - key: PLAY_WEBHOOK_SECRET
         sync: false
       - key: PLAY_SERVICE_ACCOUNT_FILE

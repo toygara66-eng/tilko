@@ -1,4 +1,4 @@
-export const PLAY_PACKAGE = "com.tilko.app";
+export const PLAY_PACKAGE = "com.tilko.site";
 export const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
 
 function sleep(ms: number) {

@@ -1,4 +1,4 @@
-package com.tilko.app.billing;
+package com.tilko.site.billing;
 
 import android.app.Activity;
 import android.webkit.JavascriptInterface;

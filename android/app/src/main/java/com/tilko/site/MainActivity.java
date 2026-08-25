@@ -1,11 +1,11 @@
-package com.tilko.app;
+package com.tilko.site;
 
 import android.os.Bundle;
 
 import com.getcapacitor.BridgeActivity;
-import com.tilko.app.billing.BillingBridge;
-import com.tilko.app.integrity.IntegrityBridge;
-import com.tilko.app.integrity.SignatureGuard;
+import com.tilko.site.billing.BillingBridge;
+import com.tilko.site.integrity.IntegrityBridge;
+import com.tilko.site.integrity.SignatureGuard;
 
 /**
  * Capacitor kabuğu. TilkoIntegrity + TilkoPlayBillingNative JS köprüleri.

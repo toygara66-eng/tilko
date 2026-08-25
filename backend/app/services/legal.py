@@ -13,7 +13,7 @@ PRIVACY_KEY = "privacy"
 DEFAULT_PRIVACY_TITLE = "Gizlilik Politikası"
 
 DEFAULT_PRIVACY_BODY = """## 1. Kimiz?
-Tilko (“uygulama”, “biz”), KPSS ve benzeri sınav hazırlığı için YouTube ders analizi, not, soru ve abonelik (Tilko Pro) hizmeti sunar. Web: tilko.site · Android paket: com.tilko.app. İletişim: developer@tilko.site.
+Tilko (“uygulama”, “biz”), KPSS ve benzeri sınav hazırlığı için YouTube ders analizi, not, soru ve abonelik (Tilko Pro) hizmeti sunar. Web: tilko.site · Android paket: com.tilko.site. İletişim: developer@tilko.site.
 
 ## 2. Hangi verileri işleriz?
 - **Hesap:** e-posta ve/veya telefon, ad soyad, şifre (hash’li), Google ile girişte Google kullanıcı kimliği ve e-posta.

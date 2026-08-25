@@ -1,11 +1,11 @@
-package com.tilko.app.integrity;
+package com.tilko.site.integrity;
 
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.webkit.JavascriptInterface;
 
-import com.tilko.app.BuildConfig;
+import com.tilko.site.BuildConfig;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
