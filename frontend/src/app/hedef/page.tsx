@@ -1,13 +1,14 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProfile } from "@/components/profile/profile-context";
 import { setExamTarget } from "@/lib/api";
 import { EXAM_OPTIONS, familyOf, type ExamTargetId } from "@/lib/exams";
 import { getUserId } from "@/lib/user";
+import { hardNavigate } from "@/lib/path";
 import { cn } from "@/lib/utils";
 
 export default function HedefPage() {
@@ -25,7 +26,6 @@ export default function HedefPage() {
 }
 
 function HedefForm() {
-  const router = useRouter();
   const search = useSearchParams();
   const changing = search.get("degistir") === "1";
   const { profile, ready, apply, refresh } = useProfile();
@@ -36,11 +36,19 @@ function HedefForm() {
   const [welcome, setWelcome] = useState("");
 
   useEffect(() => {
-    if (!ready) return;
-    if (profile.isOnboarded && !welcome && !changing) {
-      router.replace(profile.isTested ? "/" : "/teshis");
-    }
-  }, [ready, profile.isOnboarded, profile.isTested, welcome, changing, router]);
+    if (!ready || welcome || changing) return;
+    // Yerel cache ile sunucu yarışını önle: hem bayrak hem hedef dolu olsun.
+    const done = profile.isOnboarded && Boolean(profile.examTarget?.trim());
+    if (!done) return;
+    hardNavigate(profile.isTested ? "/" : "/teshis");
+  }, [
+    ready,
+    profile.isOnboarded,
+    profile.examTarget,
+    profile.isTested,
+    welcome,
+    changing,
+  ]);
 
   function chooseFamily(id: string) {
     setFamily(id);
@@ -86,7 +94,7 @@ function HedefForm() {
       setWelcome(data.message);
       void refresh();
       window.setTimeout(() => {
-        router.replace(data.reset || !data.is_tested ? "/teshis" : "/");
+        hardNavigate(data.reset || !data.is_tested ? "/teshis" : "/");
       }, 1600);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hedef kaydedilemedi");

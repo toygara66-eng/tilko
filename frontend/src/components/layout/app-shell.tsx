@@ -8,6 +8,7 @@ import {
   BookMarked,
   Flame,
   LayoutDashboard,
+  Loader2,
   LogOut,
   StickyNote,
   Trophy,
@@ -15,7 +16,7 @@ import {
   Youtube,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { normalizeAppPath } from "@/lib/path";
+import { hardNavigate, normalizeAppPath } from "@/lib/path";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { NoteModeProvider, NoteModeToggle } from "@/components/notes/note-mode";
 import { ThemeProvider, ThemeToggle } from "@/components/theme/theme";
@@ -29,7 +30,7 @@ import { DiagnosticGate } from "@/components/diagnostic/gate";
 import { ExamTargetGate } from "@/components/exam-target/gate";
 import { FeedbackHeaderButton } from "@/components/feedback/feedback-form";
 import { RoleGate } from "@/components/auth/role-gate";
-import { AuthGate } from "@/components/auth/auth-gate";
+import { AuthGate, isAuthPublicPath } from "@/components/auth/auth-gate";
 import { IntegrityGate } from "@/components/security/integrity-gate";
 import { AnalyzeProvider } from "@/components/analyze/analyze-context";
 import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
@@ -80,38 +81,64 @@ function ShellFrame({ children }: { children: ReactNode }) {
   const { profile } = useProfile();
   const [boardOpen, setBoardOpen] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  const [authOk, setAuthOk] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return isAuthPublicPath(path) || isSignedIn();
+  });
   const giris = path === "/giris";
   const gizlilik = path === "/gizlilik";
   const hakkinda = path === "/hakkinda";
   const hesapSil = path === "/hesap-sil";
   const hoca = path === "/hoca";
   const staff = giris || hoca || gizlilik || hakkinda || hesapSil;
+  const hideChrome = hedef || giris || gizlilik || hakkinda || hesapSil;
 
   useEffect(() => {
+    const ok = isAuthPublicPath(path) || isSignedIn();
+    setAuthOk(ok);
     setSignedIn(isSignedIn());
-    const onFocus = () => setSignedIn(isSignedIn());
+    const onFocus = () => {
+      setSignedIn(isSignedIn());
+      setAuthOk(isAuthPublicPath(path) || isSignedIn());
+    };
+    const onGate = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ allowed?: boolean }>).detail;
+      if (typeof detail?.allowed === "boolean") setAuthOk(detail.allowed);
+    };
     window.addEventListener("focus", onFocus);
     window.addEventListener("storage", onFocus);
+    window.addEventListener("tilko-auth-gate", onGate as EventListener);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("storage", onFocus);
+      window.removeEventListener("tilko-auth-gate", onGate as EventListener);
     };
   }, [path]);
 
+  // Girişsiz kullanıcıya ana uygulama içeriğini (Laboratuvar vb.) gösterme.
+  if (!authOk && !isAuthPublicPath(path)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-100 dark:bg-zinc-950">
+        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen w-full max-w-[100vw] flex-col overflow-x-hidden bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      {!hedef && !giris && !gizlilik && !hakkinda && !hesapSil ? (
+    <div className="flex min-h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-hidden bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      {!hideChrome ? (
         <>
           <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(234,88,12,0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(34,211,238,0.07),transparent_55%)]" />
           {hoca ? null : <VictoryStrip />}
-          <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-white/65 px-2 py-2 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/65 sm:px-4 sm:py-3">
+          {/* Android WebView: backdrop-blur + yarı saydam bg bazen tamamen görünmez yapıyor */}
+          <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] dark:border-zinc-800 dark:bg-zinc-950 sm:px-4 sm:py-3">
             <div className="mx-auto flex w-full min-w-0 max-w-5xl items-center gap-1.5 sm:gap-3">
               <Link
                 href={hoca ? "/hoca" : "/"}
                 className="flex min-w-0 shrink items-center gap-1.5 sm:gap-2"
               >
                 <TilkoLogo size={28} className="shrink-0" />
-                <span className="truncate text-sm font-semibold tracking-tight">
+                <span className="truncate text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
                   TİLKO
                 </span>
               </Link>
@@ -140,7 +167,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                       type="button"
                       onClick={() => {
                         logout();
-                        window.location.assign("/giris");
+                        hardNavigate("/giris");
                       }}
                       className="inline-flex items-center gap-1 rounded-full p-2 text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 sm:px-2.5 sm:py-1.5"
                       title="Çıkış yap"
@@ -176,14 +203,14 @@ function ShellFrame({ children }: { children: ReactNode }) {
       ) : null}
       <main
         className={cn(
-          "relative mx-auto w-full min-w-0 max-w-full flex-1 overflow-x-hidden",
-          hedef || giris || gizlilik || hakkinda || hesapSil
+          "relative mx-auto w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto",
+          hideChrome
             ? "max-w-none p-0"
             : hoca
               ? "max-w-5xl px-3 pb-10 pt-6 sm:px-4 md:px-8"
               : home || focused
-                ? "flex max-w-xl flex-col justify-center px-3 pb-24 pt-6 sm:px-4 md:pt-10"
-                : "max-w-5xl px-3 pb-24 pt-6 sm:px-4 md:px-8",
+                ? "flex max-w-xl flex-col justify-start px-3 pb-28 pt-4 sm:px-4 md:pt-6"
+                : "max-w-5xl px-3 pb-28 pt-6 sm:px-4 md:px-8",
         )}
       >
         {children}
@@ -192,7 +219,8 @@ function ShellFrame({ children }: { children: ReactNode }) {
         <>
           <nav
             className={cn(
-              "fixed bottom-4 left-1/2 z-20 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 gap-0.5 overflow-x-auto rounded-full border border-zinc-200/80 bg-white/80 p-1 shadow-lg backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/80",
+              "fixed bottom-0 left-1/2 z-40 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 gap-0.5 overflow-x-auto rounded-full border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950",
+              "mb-[max(0.75rem,env(safe-area-inset-bottom))]",
               focused && "hidden",
             )}
           >

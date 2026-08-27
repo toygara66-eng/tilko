@@ -1,21 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { isSignedIn } from "@/lib/auth";
 import { clearUserId } from "@/lib/user";
-import { normalizeAppPath } from "@/lib/path";
+import { hardNavigate, normalizeAppPath } from "@/lib/path";
 
 /** Giriş/kayıt olmadan uygulama kullanılmaz. */
 const PUBLIC = new Set(["/giris", "/admin", "/gizlilik", "/hakkinda", "/hesap-sil"]);
 
 export function AuthGate() {
   const path = normalizeAppPath(usePathname());
-  const router = useRouter();
+  const [allowed, setAllowed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return PUBLIC.has(path) || isSignedIn();
+  });
 
   useEffect(() => {
-    if (PUBLIC.has(path)) return;
-    if (isSignedIn()) return;
+    if (PUBLIC.has(path)) {
+      setAllowed(true);
+      return;
+    }
+    if (isSignedIn()) {
+      setAllowed(true);
+      return;
+    }
     // Eski misafir (aday-*) kimliğini temizle
     try {
       const uid = window.localStorage.getItem("kpss_user_id") || "";
@@ -30,8 +39,31 @@ export function AuthGate() {
     } catch {
       /* ignore */
     }
-    router.replace("/giris");
-  }, [path, router]);
+    setAllowed(false);
+    hardNavigate("/giris");
+  }, [path]);
+
+  // Ana içeriği girişsiz göstermemek için shell bu bayrağı okur
+  useEffect(() => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("tilko-auth-gate", { detail: { allowed } }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [allowed]);
 
   return null;
+}
+
+export function useAuthAllowed(path: string): boolean {
+  const normalized = normalizeAppPath(path);
+  if (PUBLIC.has(normalized)) return true;
+  if (typeof window === "undefined") return true;
+  return isSignedIn();
+}
+
+export function isAuthPublicPath(path: string): boolean {
+  return PUBLIC.has(normalizeAppPath(path));
 }
