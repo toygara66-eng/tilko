@@ -12,6 +12,7 @@ import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingClientStateListener;
 import com.android.billingclient.api.BillingFlowParams;
 import com.android.billingclient.api.BillingResult;
+import com.android.billingclient.api.PendingPurchasesParams;
 import com.android.billingclient.api.ProductDetails;
 import com.android.billingclient.api.Purchase;
 import com.android.billingclient.api.PurchasesUpdatedListener;
@@ -39,7 +40,11 @@ public final class BillingBridge implements PurchasesUpdatedListener {
         this.webViewRef = new WeakReference<>(webView);
         this.client = BillingClient.newBuilder(activity)
                 .setListener(this)
-                .enablePendingPurchases()
+                .enablePendingPurchases(
+                        PendingPurchasesParams.newBuilder()
+                                .enableOneTimeProducts()
+                                .build())
+                .enableAutoServiceReconnection()
                 .build();
         this.client.startConnection(new BillingClientStateListener() {
             @Override
@@ -49,7 +54,7 @@ public final class BillingBridge implements PurchasesUpdatedListener {
 
             @Override
             public void onBillingServiceDisconnected() {
-                // next launch reconnects
+                // next launch reconnects (auto reconnect also enabled)
             }
         });
     }
@@ -169,10 +174,14 @@ public final class BillingBridge implements PurchasesUpdatedListener {
         QueryProductDetailsParams params = QueryProductDetailsParams.newBuilder()
                 .setProductList(Collections.singletonList(product))
                 .build();
-        client.queryProductDetailsAsync(params, (billingResult, productDetailsList) -> {
+        client.queryProductDetailsAsync(params, (billingResult, productDetailsResult) -> {
             if (billingResult.getResponseCode() != BillingClient.BillingResponseCode.OK
-                    || productDetailsList == null
-                    || productDetailsList.isEmpty()) {
+                    || productDetailsResult == null) {
+                deliverError("Abonelik ürünü bulunamadı. Play Console’da " + sku + " tanımlı mı?");
+                return;
+            }
+            List<ProductDetails> productDetailsList = productDetailsResult.getProductDetailsList();
+            if (productDetailsList == null || productDetailsList.isEmpty()) {
                 deliverError("Abonelik ürünü bulunamadı. Play Console’da " + sku + " tanımlı mı?");
                 return;
             }
