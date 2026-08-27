@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { hardNavigate, normalizeAppPath } from "@/lib/path";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { NoteModeProvider, NoteModeToggle } from "@/components/notes/note-mode";
-import { ThemeProvider, ThemeToggle } from "@/components/theme/theme";
+import { ThemeProvider, ThemeToggle, useTheme } from "@/components/theme/theme";
 import { ProfileProvider, useProfile } from "@/components/profile/profile-context";
 import { PenaltyProvider } from "@/components/pomodoro/penalty-context";
 import { PenaltyLock } from "@/components/pomodoro/penalty-lock";
@@ -46,45 +46,13 @@ const NAV = [
   { href: "/profil", label: "Profil", icon: UserRound },
 ];
 
-const shellStyle: CSSProperties = {
+const flexShell: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   height: "100dvh",
   maxHeight: "100dvh",
   width: "100%",
   overflow: "hidden",
-  background: "#09090b",
-  color: "#fafafa",
-};
-
-const headerStyle: CSSProperties = {
-  flexShrink: 0,
-  zIndex: 20,
-  borderBottom: "3px solid #f97316",
-  background: "#18181b",
-  paddingTop: "env(safe-area-inset-top, 0px)",
-};
-
-const navWrapStyle: CSSProperties = {
-  flexShrink: 0,
-  zIndex: 20,
-  display: "flex",
-  justifyContent: "center",
-  padding: "8px 12px",
-  paddingBottom: "max(8px, env(safe-area-inset-bottom, 0px))",
-  background: "#09090b",
-  borderTop: "1px solid #3f3f46",
-};
-
-const navBarStyle: CSSProperties = {
-  display: "flex",
-  gap: 2,
-  maxWidth: "100%",
-  overflowX: "auto",
-  borderRadius: 9999,
-  border: "2px solid #f97316",
-  background: "#18181b",
-  padding: 4,
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -115,6 +83,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function ShellFrame({ children }: { children: ReactNode }) {
   const path = normalizeAppPath(usePathname());
+  const { theme } = useTheme();
+  const dark = theme === "dark";
   const home = path === "/";
   const teshis = path === "/teshis";
   const deneme = path === "/deneme";
@@ -135,6 +105,34 @@ function ShellFrame({ children }: { children: ReactNode }) {
   const staff = giris || hoca || gizlilik || hakkinda || hesapSil;
   const hideChrome = hedef || giris || gizlilik || hakkinda || hesapSil;
   const showNav = !hedef && !staff && !focused;
+
+  const colors = useMemo(
+    () =>
+      dark
+        ? {
+            shell: "#09090b",
+            shellFg: "#fafafa",
+            header: "#ffffff",
+            headerDark: "#18181b",
+            navBg: "#09090b",
+            navBar: "#18181b",
+            border: "#3f3f46",
+            muted: "#a1a1aa",
+            link: "#3f3f46",
+          }
+        : {
+            shell: "#f4f4f5",
+            shellFg: "#18181b",
+            header: "#ffffff",
+            headerDark: "#ffffff",
+            navBg: "#f4f4f5",
+            navBar: "#ffffff",
+            border: "#e4e4e7",
+            muted: "#71717a",
+            link: "#52525b",
+          },
+    [dark],
+  );
 
   useEffect(() => {
     const ok = isAuthPublicPath(path) || isSignedIn();
@@ -159,9 +157,25 @@ function ShellFrame({ children }: { children: ReactNode }) {
   }, [path]);
 
   if (!authOk && !isAuthPublicPath(path)) {
-    // Navigasyon Cap'te kırılabiliyor → giriş formunu burada çiz.
     return (
-      <div style={shellStyle}>
+      <div
+        style={{
+          ...flexShell,
+          background: colors.shell,
+          color: colors.shellFg,
+        }}
+      >
+        <div
+          style={{
+            flexShrink: 0,
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "8px 12px",
+            paddingTop: "max(8px, env(safe-area-inset-top, 0px))",
+          }}
+        >
+          <ThemeToggle className="h-9 w-9 shrink-0 px-0 shadow-none" />
+        </div>
         <main
           style={{
             flex: 1,
@@ -176,7 +190,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
             style={{
               textAlign: "center",
               fontSize: 11,
-              color: "#71717a",
+              color: colors.muted,
               paddingBottom: 16,
             }}
           >
@@ -188,9 +202,23 @@ function ShellFrame({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div style={shellStyle}>
+    <div
+      style={{
+        ...flexShell,
+        background: colors.shell,
+        color: colors.shellFg,
+      }}
+    >
       {!hideChrome ? (
-        <header style={headerStyle}>
+        <header
+          style={{
+            flexShrink: 0,
+            zIndex: 20,
+            borderBottom: "3px solid #f97316",
+            background: dark ? colors.headerDark : colors.header,
+            paddingTop: "env(safe-area-inset-top, 0px)",
+          }}
+        >
           {hoca ? null : <VictoryStrip />}
           <div
             style={{
@@ -220,7 +248,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                   fontSize: 14,
                   fontWeight: 800,
                   letterSpacing: "-0.02em",
-                  color: "#fb923c",
+                  color: "#ea580c",
                 }}
               >
                 TİLKO
@@ -229,7 +257,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                 style={{
                   fontSize: 10,
                   fontWeight: 600,
-                  color: "#a1a1aa",
+                  color: colors.muted,
                   marginLeft: 2,
                 }}
               >
@@ -243,7 +271,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
             ) : (
               <Link
                 href="/profil"
-                className="hidden min-w-0 truncate rounded-full border border-orange-400/40 bg-orange-500/10 px-2.5 py-1 text-[11px] font-medium text-orange-200 sm:inline-flex"
+                className="hidden min-w-0 truncate rounded-full border border-orange-400/40 bg-orange-500/10 px-2.5 py-1 text-[11px] font-medium text-orange-800 sm:inline-flex dark:text-orange-200"
               >
                 {profile.xp} XP
               </Link>
@@ -262,20 +290,20 @@ function ShellFrame({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => {
                     logout();
-                    hardNavigate("/giris");
+                    hardNavigate("/");
                   }}
-                  className="inline-flex items-center gap-1 rounded-full p-2 text-xs font-medium text-zinc-400"
+                  className="inline-flex items-center gap-1 rounded-full p-2 text-xs font-medium text-zinc-500 dark:text-zinc-400"
                   title="Çıkış yap"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                 </button>
               ) : (
                 <Link
-                  href="/giris"
+                  href="/giris/"
                   style={{
                     padding: "6px 10px",
                     fontSize: 12,
-                    color: "#d4d4d8",
+                    color: colors.link,
                     textDecoration: "none",
                   }}
                 >
@@ -306,7 +334,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
           overflowX: "hidden",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
-          background: hideChrome ? undefined : "#09090b",
+          background: hideChrome ? undefined : colors.shell,
         }}
         className={cn(
           "relative mx-auto w-full min-w-0 max-w-full",
@@ -323,8 +351,31 @@ function ShellFrame({ children }: { children: ReactNode }) {
       </main>
 
       {showNav ? (
-        <nav style={navWrapStyle} aria-label="Ana menü">
-          <div style={navBarStyle}>
+        <nav
+          style={{
+            flexShrink: 0,
+            zIndex: 20,
+            display: "flex",
+            justifyContent: "center",
+            padding: "8px 12px",
+            paddingBottom: "max(8px, env(safe-area-inset-bottom, 0px))",
+            background: colors.navBg,
+            borderTop: `1px solid ${colors.border}`,
+          }}
+          aria-label="Ana menü"
+        >
+          <div
+            style={{
+              display: "flex",
+              gap: 2,
+              maxWidth: "100%",
+              overflowX: "auto",
+              borderRadius: 9999,
+              border: "2px solid #f97316",
+              background: colors.navBar,
+              padding: 4,
+            }}
+          >
             {NAV.map((item) => {
               const active = path === item.href;
               return (
@@ -338,7 +389,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
                     borderRadius: 9999,
                     padding: 10,
                     background: active ? "#f97316" : "transparent",
-                    color: active ? "#09090b" : "#a1a1aa",
+                    color: active ? "#09090b" : colors.muted,
                     display: "inline-flex",
                   }}
                 >

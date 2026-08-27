@@ -97,7 +97,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="tr" className={`dark ${inter.variable} ${caveat.variable} ${kalam.variable}`} suppressHydrationWarning>
+    <html lang="tr" className={`${inter.variable} ${caveat.variable} ${kalam.variable}`} suppressHydrationWarning>
       <body className={`${inter.className} font-sans`}>
         <Script
           id="tilko-theme"
