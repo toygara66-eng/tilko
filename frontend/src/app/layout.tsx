@@ -110,7 +110,7 @@ export default function RootLayout({
           id="tilko-auth-boot"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=(location.pathname||"/").replace(/\\/index\\.html$/i,"").replace(/\\/$/,"")||"/";var open={"/giris":1,"/gizlilik":1,"/hakkinda":1,"/hesap-sil":1,"/admin":1};if(open[p])return;var tok=localStorage.getItem("tilko_jwt")||"";var uid=localStorage.getItem("kpss_user_id")||"";var parts=tok.split(".");if(parts.length<2||!uid||uid==="local"||uid.indexOf("aday-")===0){location.replace("/giris/");return;}try{var payload=JSON.parse(atob(parts[1].replace(/-/g,"+").replace(/_/g,"/")));if(!payload.exp||payload.exp*1000<=Date.now()+15000){location.replace("/giris/");}}catch(e){location.replace("/giris/");}}catch(e){}})();`,
+            __html: `(function(){try{var p=(location.pathname||"/").replace(/\\/index\\.html$/i,"").replace(/\\/$/,"")||"/";var open={"/giris":1,"/gizlilik":1,"/hakkinda":1,"/hesap-sil":1,"/admin":1};if(open[p])return;var tok=localStorage.getItem("tilko_jwt")||"";var uid=localStorage.getItem("kpss_user_id")||"";var parts=tok.split(".");var bad=!tok||parts.length<2||!uid||uid==="local"||uid.indexOf("aday-")===0;if(!bad){try{var payload=JSON.parse(atob(parts[1].replace(/-/g,"+").replace(/_/g,"/")));bad=!payload.exp||payload.exp*1000<=Date.now()+15000;}catch(e){bad=true;}}if(!bad)return;/* Cap'te /giris/ takılabiliyor; formu ana sayfada göstereceğiz — zorla navigasyon yok */}catch(e){}})();`,
           }}
         />
         <ErrorBoundary>

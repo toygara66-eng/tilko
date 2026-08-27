@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { isSignedIn } from "@/lib/auth";
 import { clearUserId } from "@/lib/user";
-import { hardNavigate, normalizeAppPath } from "@/lib/path";
+import { normalizeAppPath } from "@/lib/path";
 
 /** Giriş/kayıt olmadan uygulama kullanılmaz. */
 const PUBLIC = new Set(["/giris", "/admin", "/gizlilik", "/hakkinda", "/hesap-sil"]);
@@ -40,7 +40,7 @@ export function AuthGate() {
       /* ignore */
     }
     setAllowed(false);
-    hardNavigate("/giris");
+    // Cap'te /giris/ navigasyonu kırık → shell GirisPage çiziyor; zorla gitme.
   }, [path]);
 
   // Ana içeriği girişsiz göstermemek için shell bu bayrağı okur

@@ -2,49 +2,39 @@
 
 import { useEffect, useState } from "react";
 import { HomeStage } from "@/components/home/home-stage";
+import GirisPage from "@/app/giris/page";
 import { isSignedIn } from "@/lib/auth";
-import { hardNavigate } from "@/lib/path";
-import { Loader2 } from "lucide-react";
 
 export default function HomePage() {
-  const [ok, setOk] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    if (isSignedIn()) {
-      setOk(true);
-      return;
-    }
-    hardNavigate("/giris");
+    setSignedIn(isSignedIn());
+    setReady(true);
   }, []);
 
-  if (!ok) {
+  if (!ready) {
     return (
       <div
         style={{
-          minHeight: "60vh",
+          minHeight: "50vh",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 12,
-          padding: 24,
+          color: "#fb923c",
+          fontSize: 14,
+          fontWeight: 700,
         }}
       >
-        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
-        <p style={{ color: "#a1a1aa", fontSize: 13 }}>Giriş ekranına yönlendiriliyor…</p>
-        <a
-          href="/giris/"
-          style={{
-            marginTop: 8,
-            color: "#fb923c",
-            fontWeight: 700,
-            fontSize: 14,
-          }}
-        >
-          Giriş / Kayıt
-        </a>
+        TİLKO
       </div>
     );
+  }
+
+  // Capacitor'da /giris/ navigasyonu kırık olabiliyor → aynı ekranda giriş formu.
+  if (!signedIn) {
+    return <GirisPage />;
   }
 
   return <HomeStage />;

@@ -11,6 +11,7 @@ import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPa
 import { isSignedIn, logout, setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
 import { setUserId } from "@/lib/user";
 import { EXAM_OPTIONS, type ExamTargetId } from "@/lib/exams";
+import { hardNavigate } from "@/lib/path";
 import { cn } from "@/lib/utils";
 
 type Mode = "student" | "teacher";
@@ -104,7 +105,9 @@ export default function GirisPage() {
     else setAuthMode("google");
     setStoredRole(data.role);
     setUserId(data.user_id);
-    window.location.assign(data.dashboard || (data.role === "teacher" ? "/hoca" : "/"));
+    hardNavigate(
+      data.dashboard || (data.role === "teacher" ? "/hoca" : "/"),
+    );
   }
 
   async function submit() {

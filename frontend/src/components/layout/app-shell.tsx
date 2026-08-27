@@ -8,7 +8,6 @@ import {
   BookMarked,
   Flame,
   LayoutDashboard,
-  Loader2,
   LogOut,
   StickyNote,
   Trophy,
@@ -35,9 +34,8 @@ import { IntegrityGate } from "@/components/security/integrity-gate";
 import { AnalyzeProvider } from "@/components/analyze/analyze-context";
 import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
 import { isSignedIn, logout } from "@/lib/auth";
-
-/** Play / APK sürüm damgası — telefonda hangi build olduğunu görmek için. */
-export const APP_BUILD_LABEL = "1.0.13";
+import GirisPage from "@/app/giris/page";
+import { APP_BUILD_LABEL } from "@/components/layout/build-label";
 
 const NAV = [
   { href: "/", label: "Av", icon: LayoutDashboard },
@@ -161,18 +159,30 @@ function ShellFrame({ children }: { children: ReactNode }) {
   }, [path]);
 
   if (!authOk && !isAuthPublicPath(path)) {
+    // Navigasyon Cap'te kırılabiliyor → giriş formunu burada çiz.
     return (
-      <div
-        style={{
-          ...shellStyle,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
-        <p style={{ marginTop: 12, fontSize: 12, color: "#a1a1aa" }}>
-          TİLKO {APP_BUILD_LABEL}
-        </p>
+      <div style={shellStyle}>
+        <main
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowX: "hidden",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          <GirisPage />
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: 11,
+              color: "#71717a",
+              paddingBottom: 16,
+            }}
+          >
+            TİLKO {APP_BUILD_LABEL}
+          </p>
+        </main>
       </div>
     );
   }
