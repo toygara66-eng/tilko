@@ -1,8 +1,10 @@
 import { ensureAuth, isAuthPublic, setToken } from "@/lib/auth";
 import { getUserId } from "@/lib/user";
+import { resolveApiBase } from "@/lib/api-base";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "https://tilko-api.onrender.com";
+function API_BASE() {
+  return resolveApiBase();
+}
 
 /** HTTP header Latin-1 dışı karakterleri (Türkçe vb.) taşıyamaz → base64. */
 function encodeAdminSecretHeader(secret: string): string {
@@ -44,6 +46,9 @@ export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatas�
   if (/failed to fetch|networkerror|load failed/i.test(blob)) {
     return "API'ye ulaşılamadı. İnterneti kontrol et veya biraz sonra dene.";
   }
+  if (/cleartext|not permitted|127\.0\.0\.1|localhost:\d+/i.test(blob)) {
+    return "Eski uygulama sürümü (yerel API). Tilko'yu silip yeni APK'yı kur (1.0.17+).";
+  }
   if (
     /\b429\b|rate\s*limit|too\s*many\s*requests|çok\s*fazla\s*istek/i.test(blob)
   ) {
@@ -67,7 +72,7 @@ export async function wakeApi(): Promise<void> {
   }
   try {
     await Promise.race([
-      fetch(`${API_BASE}/health`, { method: "GET", cache: "no-store" }),
+      fetch(`${API_BASE()}/health`, { method: "GET", cache: "no-store" }),
       new Promise((resolve) => setTimeout(resolve, 8_000)),
     ]);
     if (typeof window !== "undefined") {
@@ -85,7 +90,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...((init?.headers as Record<string, string>) || {}),
     };
     if (!isAuthPublic(path)) {
-      const token = await ensureAuth(API_BASE, getUserId());
+      const token = await ensureAuth(API_BASE(), getUserId());
       headers.Authorization = `Bearer ${token}`;
     }
     // Admin anahtarı kayıtlıysa analiz kredi düşürmez.
@@ -95,15 +100,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         headers["X-Admin-Secret"] = encodeAdminSecretHeader(adminSecret.trim());
       }
     }
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${API_BASE()}${path}`, {
       ...init,
       headers,
     });
     if (response.status === 401 && !isAuthPublic(path)) {
       setToken("");
-      const token = await ensureAuth(API_BASE, getUserId());
+      const token = await ensureAuth(API_BASE(), getUserId());
       headers.Authorization = `Bearer ${token}`;
-      const retry = await fetch(`${API_BASE}${path}`, { ...init, headers });
+      const retry = await fetch(`${API_BASE()}${path}`, { ...init, headers });
       return await readJson<T>(retry);
     }
     return await readJson<T>(response);
@@ -472,10 +477,10 @@ export async function downloadNotebookPdf(input: {
     `&video_id=${encodeURIComponent(input.videoId)}`;
   const headers: Record<string, string> = {};
   if (!isAuthPublic(path)) {
-    const token = await ensureAuth(API_BASE, getUserId());
+    const token = await ensureAuth(API_BASE(), getUserId());
     headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, { headers });
+  const res = await fetch(`${API_BASE()}${path}`, { headers });
   if (!res.ok) {
     let detail = "";
     try {
@@ -1096,7 +1101,7 @@ export async function listAdminFeedback(secret: string, status = "") {
   const headers = await adminHeaders(secret);
   const params = new URLSearchParams({ limit: "150" });
   if (status.trim()) params.set("status", status.trim());
-  const response = await fetch(`${API_BASE}/admin/feedback?${params}`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/feedback?${params}`, { headers });
   return readJson<{ items: AdminFeedbackItem[]; count: number }>(response);
 }
 
@@ -1107,7 +1112,7 @@ export async function setAdminFeedbackStatus(
 ) {
   const headers = await adminHeaders(secret);
   const response = await fetch(
-    `${API_BASE}/admin/feedback/${encodeURIComponent(String(feedbackId))}/status`,
+    `${API_BASE()}/admin/feedback/${encodeURIComponent(String(feedbackId))}/status`,
     {
       method: "POST",
       headers,
@@ -1146,7 +1151,7 @@ export function getSubscriptionStatus(userId: string) {
 
 export async function listAdminPlans(secret: string) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/plans`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/plans`, { headers });
   return readJson<{
     ok: boolean;
     plans: SubscriptionPlan[];
@@ -1159,7 +1164,7 @@ export async function updateAdminPlans(
   plans: { product_id: string; price_try?: number; label?: string }[],
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/plans`, {
+  const response = await fetch(`${API_BASE()}/admin/plans`, {
     method: "POST",
     headers,
     body: JSON.stringify({ plans }),
@@ -1181,7 +1186,7 @@ export type PrivacyDocument = {
 };
 
 export async function getPrivacyDocument() {
-  const response = await fetch(`${API_BASE}/legal/privacy`, {
+  const response = await fetch(`${API_BASE()}/legal/privacy`, {
     cache: "no-store",
   });
   return readJson<PrivacyDocument>(response);
@@ -1189,7 +1194,7 @@ export async function getPrivacyDocument() {
 
 export async function getAdminPrivacy(secret: string) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/legal/privacy`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/legal/privacy`, { headers });
   return readJson<PrivacyDocument>(response);
 }
 
@@ -1198,7 +1203,7 @@ export async function updateAdminPrivacy(
   payload: { title?: string; body?: string },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/legal/privacy`, {
+  const response = await fetch(`${API_BASE()}/admin/legal/privacy`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1280,7 +1285,7 @@ export type ExamScheduleList = {
 
 export async function listExamSchedules(secret: string) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/exams/list`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/exams/list`, { headers });
   return readJson<ExamScheduleList>(response);
 }
 
@@ -1289,7 +1294,7 @@ export async function updateExamToday(
   payload: { exam_date?: string; reset?: boolean },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/exams/today`, {
+  const response = await fetch(`${API_BASE()}/admin/exams/today`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1302,7 +1307,7 @@ export async function updateExamSchedule(
   payload: { exam_target: string; exam_date: string },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/exams/update`, {
+  const response = await fetch(`${API_BASE()}/admin/exams/update`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1315,7 +1320,7 @@ export async function getRagStatus(secret: string, examTarget = "") {
   const query = examTarget
     ? `?exam_target=${encodeURIComponent(examTarget)}`
     : "";
-  const response = await fetch(`${API_BASE}/admin/rag-status${query}`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/rag-status${query}`, { headers });
   return readJson<RagStatus>(response);
 }
 
@@ -1339,7 +1344,7 @@ export async function feedOsymArchives(
     form.append("scan_inbox", payload.scan_inbox ? "true" : "false");
     if (urls.length) form.append("urls", urls.join("\n"));
     for (const file of files) form.append("files", file);
-    const response = await fetch(`${API_BASE}/admin/feed-osym-archives`, {
+    const response = await fetch(`${API_BASE()}/admin/feed-osym-archives`, {
       method: "POST",
       headers,
       body: form,
@@ -1347,7 +1352,7 @@ export async function feedOsymArchives(
     return readJson<ArchiveFeedResult>(response);
   }
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/feed-osym-archives`, {
+  const response = await fetch(`${API_BASE()}/admin/feed-osym-archives`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -1434,7 +1439,7 @@ export async function createPromo(
   },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/promo/create`, {
+  const response = await fetch(`${API_BASE()}/admin/promo/create`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1444,7 +1449,7 @@ export async function createPromo(
 
 export async function listPromos(secret: string) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/promo/list`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/promo/list`, { headers });
   return readJson<{ coupons: PromoCoupon[]; count: number }>(response);
 }
 
@@ -1468,7 +1473,7 @@ export async function grantAdminCredits(
   },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/credits/grant`, {
+  const response = await fetch(`${API_BASE()}/admin/credits/grant`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1499,7 +1504,7 @@ export async function listProLogs(
   if (opts?.user_id) params.set("user_id", opts.user_id);
   if (opts?.limit) params.set("limit", String(opts.limit));
   const query = params.toString() ? `?${params}` : "";
-  const response = await fetch(`${API_BASE}/admin/pro-logs${query}`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/pro-logs${query}`, { headers });
   return readJson<{ events: ProEntitlementEvent[]; count: number }>(response);
 }
 
@@ -1522,7 +1527,7 @@ export type AdminUserRow = {
 export async function listAdminUsers(secret: string, q = "") {
   const headers = await adminHeaders(secret);
   const query = q.trim() ? `?q=${encodeURIComponent(q.trim())}&limit=150` : "?limit=150";
-  const response = await fetch(`${API_BASE}/admin/users${query}`, { headers });
+  const response = await fetch(`${API_BASE()}/admin/users${query}`, { headers });
   return readJson<{ users: AdminUserRow[]; count: number }>(response);
 }
 
@@ -1531,7 +1536,7 @@ export async function grantAdminPro(
   payload: { user_id: string; days?: number; revoke?: boolean },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/users/grant-pro`, {
+  const response = await fetch(`${API_BASE()}/admin/users/grant-pro`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1632,7 +1637,7 @@ export async function adminSetPassword(
   payload: { user_id: string; new_password: string },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/users/set-password`, {
+  const response = await fetch(`${API_BASE()}/admin/users/set-password`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1645,7 +1650,7 @@ export async function adminIssueResetCode(
   payload: { user_id: string },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/users/reset-code`, {
+  const response = await fetch(`${API_BASE()}/admin/users/reset-code`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1666,7 +1671,7 @@ export async function adminDeleteUser(
   payload: { user_id: string },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/users/delete`, {
+  const response = await fetch(`${API_BASE()}/admin/users/delete`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -1686,7 +1691,7 @@ export async function adminUpdateUser(
   },
 ) {
   const headers = await adminHeaders(secret);
-  const response = await fetch(`${API_BASE}/admin/users/update`, {
+  const response = await fetch(`${API_BASE()}/admin/users/update`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),

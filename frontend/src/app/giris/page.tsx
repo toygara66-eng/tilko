@@ -12,7 +12,9 @@ import { isSignedIn, logout, setAuthMode, setAuthSecret, setStoredRole, setToken
 import { setUserId } from "@/lib/user";
 import { EXAM_OPTIONS, type ExamTargetId } from "@/lib/exams";
 import { hardNavigate } from "@/lib/path";
+import { apiBaseLabel } from "@/lib/api-base";
 import { cn } from "@/lib/utils";
+import { APP_BUILD_LABEL } from "@/components/layout/build-label";
 
 type Mode = "student" | "teacher";
 type Screen = "login" | "register" | "forgot" | "reset";
@@ -204,6 +206,9 @@ export default function GirisPage() {
 
   return (
     <div className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-center px-4 py-8">
+      <p className="mb-3 text-center text-[10px] text-zinc-500">
+        TİLKO {APP_BUILD_LABEL} · {apiBaseLabel()}
+      </p>
       {alreadyIn ? (
         <div className="rounded-2xl border border-emerald-400/40 bg-emerald-50/80 p-6 text-center dark:bg-emerald-950/30">
           <TilkoLogo size={40} className="mx-auto" />

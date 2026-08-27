@@ -1,8 +1,8 @@
+import { resolveApiBase } from "@/lib/api-base";
+
 export type CaptionLine = { start: number; text: string };
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "https://tilko-api.onrender.com";
 const PLAYER =
   "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 const IOS_UA =
@@ -14,7 +14,7 @@ const BRACKET_STAMP = /^\[(\d+)\]\s*(.+)$/;
 const TRANSCRIPT_AI = "https://youtube-transcript.ai/transcript";
 
 function captionProxyUrls(id: string): string[] {
-  const urls = [`${API_BASE.replace(/\/$/, "")}/captions/${encodeURIComponent(id)}`];
+  const urls = [`${resolveApiBase()}/captions/${encodeURIComponent(id)}`];
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
     if (host === "tilko.site" || host.endsWith(".vercel.app")) {
