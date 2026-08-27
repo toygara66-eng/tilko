@@ -738,14 +738,18 @@ class GoogleAuthRequest(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    access_token: str
+    access_token: str = ""
     token_type: str = "bearer"
-    user_id: str
+    user_id: str = ""
     role: str = "student"
     display_name: str = ""
     dashboard: str = "/"
     email: str = ""
     phone: str = ""
+    needs_verification: bool = False
+    message: str = ""
+    destination_hint: str = ""
+    debug_code: str = ""
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -757,6 +761,24 @@ class ForgotPasswordResponse(BaseModel):
     ok: bool = True
     sent: bool = False
     channel: str = "email"
+    destination_hint: str = ""
+    message: str = ""
+    debug_code: str = ""
+
+
+class VerifyEmailRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=256)
+    code: str = Field(..., min_length=4, max_length=12)
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=256)
+
+
+class ResendVerificationResponse(BaseModel):
+    ok: bool = True
+    sent: bool = False
+    already_verified: bool = False
     destination_hint: str = ""
     message: str = ""
     debug_code: str = ""

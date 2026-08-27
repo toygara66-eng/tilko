@@ -23,6 +23,7 @@ from app.security.auth import (
 logger = logging.getLogger(__name__)
 CODE_TTL_MINUTES = 20
 CODE_LENGTH = 6
+PURPOSE = "reset"
 
 
 def _utcnow() -> datetime:
@@ -129,6 +130,7 @@ def request_password_reset(db: Session, *, email: str = "", phone: str = "") -> 
     db.execute(
         update(PasswordReset)
         .where(PasswordReset.user_id == user.user_id)
+        .where(PasswordReset.purpose == PURPOSE)
         .where(PasswordReset.used.is_(False))
         .values(used=True)
     )
@@ -136,6 +138,7 @@ def request_password_reset(db: Session, *, email: str = "", phone: str = "") -> 
         user_id=user.user_id,
         code_hash=_hash_code(code, user.user_id),
         channel=channel,
+        purpose=PURPOSE,
         destination=dest,
         expires_at=_utcnow() + timedelta(minutes=CODE_TTL_MINUTES),
         used=False,
@@ -220,6 +223,7 @@ def reset_password_with_code(
         db.scalars(
             select(PasswordReset)
             .where(PasswordReset.user_id == user.user_id)
+            .where(PasswordReset.purpose == PURPOSE)
             .where(PasswordReset.used.is_(False))
             .order_by(PasswordReset.created_at.desc())
             .limit(5)
@@ -245,6 +249,7 @@ def reset_password_with_code(
     db.execute(
         update(PasswordReset)
         .where(PasswordReset.user_id == user.user_id)
+        .where(PasswordReset.purpose == PURPOSE)
         .where(PasswordReset.used.is_(False))
         .values(used=True)
     )
@@ -273,6 +278,7 @@ def admin_issue_reset_code(db: Session, user_id: str) -> dict:
     db.execute(
         update(PasswordReset)
         .where(PasswordReset.user_id == user.user_id)
+        .where(PasswordReset.purpose == PURPOSE)
         .where(PasswordReset.used.is_(False))
         .values(used=True)
     )
@@ -280,6 +286,7 @@ def admin_issue_reset_code(db: Session, user_id: str) -> dict:
         user_id=user.user_id,
         code_hash=_hash_code(code, user.user_id),
         channel=channel,
+        purpose=PURPOSE,
         destination=dest,
         expires_at=_utcnow() + timedelta(minutes=CODE_TTL_MINUTES),
         used=False,

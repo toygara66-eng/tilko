@@ -74,6 +74,9 @@ from app.models.schemas import (
     GoogleAuthRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    VerifyEmailRequest,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
     AdminSetPasswordRequest,
@@ -389,6 +392,36 @@ def auth_reset_password(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ResetPasswordResponse.model_validate(data)
+
+
+@app.post("/auth/verify-email", response_model=AuthResponse)
+@limiter.limit("12/minute")
+def auth_verify_email(
+    request: Request, payload: VerifyEmailRequest, db: Session = Depends(get_db)
+) -> AuthResponse:
+    from app.services import email_verification as verify_service
+
+    try:
+        data = verify_service.verify_email_code(
+            db, email=payload.email, code=payload.code
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AuthResponse.model_validate(data)
+
+
+@app.post("/auth/resend-verification", response_model=ResendVerificationResponse)
+@limiter.limit("6/minute")
+def auth_resend_verification(
+    request: Request, payload: ResendVerificationRequest, db: Session = Depends(get_db)
+) -> ResendVerificationResponse:
+    from app.services import email_verification as verify_service
+
+    try:
+        data = verify_service.resend_verification(db, email=payload.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ResendVerificationResponse.model_validate(data)
 
 
 def _busy_http(exc: BaseException) -> HTTPException:

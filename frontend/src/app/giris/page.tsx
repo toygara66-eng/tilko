@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in";
-import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPassword } from "@/lib/api";
+import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPassword, verifyEmail, resendVerification } from "@/lib/api";
 import { isSignedIn, logout, setAuthMode, setAuthSecret, setStoredRole, setToken } from "@/lib/auth";
 import { setUserId } from "@/lib/user";
 import { EXAM_OPTIONS, type ExamTargetId } from "@/lib/exams";
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { APP_BUILD_LABEL } from "@/components/layout/build-label";
 
 type Mode = "student" | "teacher";
-type Screen = "login" | "register" | "forgot" | "reset";
+type Screen = "login" | "register" | "forgot" | "reset" | "verify";
 type Channel = "google" | "email" | "phone";
 
 const EXAM_FLAT: { id: ExamTargetId; label: string }[] = EXAM_OPTIONS.flatMap((group) =>
@@ -38,6 +38,7 @@ export default function GirisPage() {
   const [displayName, setDisplayName] = useState("");
   const [examTarget, setExamTarget] = useState<ExamTargetId | "">("kpss_lisans");
   const [resetCode, setResetCode] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,12 +48,16 @@ export default function GirisPage() {
   const isRegister = screen === "register";
   const isForgot = screen === "forgot";
   const isReset = screen === "reset";
+  const isVerify = screen === "verify";
 
   useEffect(() => {
     setAlreadyIn(isSignedIn());
   }, []);
 
   const canSubmit = useMemo(() => {
+    if (isVerify) {
+      return email.trim().includes("@") && verifyCode.trim().length >= 4;
+    }
     if (isForgot) {
       if (channel === "phone") return phone.replace(/\D/g, "").length >= 10;
       return email.trim().includes("@");
@@ -84,12 +89,14 @@ export default function GirisPage() {
     isRegister,
     isForgot,
     isReset,
+    isVerify,
     displayName,
     examTarget,
     channel,
     email,
     phone,
     resetCode,
+    verifyCode,
     newPassword,
   ]);
 
@@ -112,11 +119,28 @@ export default function GirisPage() {
     );
   }
 
+  function goVerify(message: string, debugCode?: string) {
+    setChannel("email");
+    setScreen("verify");
+    setVerifyCode("");
+    setInfo(
+      debugCode ? `${message} Kod: ${debugCode}` : message,
+    );
+  }
+
   async function submit() {
     setBusy(true);
     setError("");
     setInfo("");
     try {
+      if (isVerify) {
+        const data = await verifyEmail({
+          email: email.trim(),
+          code: verifyCode.trim(),
+        });
+        finishSession(data, password || undefined);
+        return;
+      }
       if (isForgot) {
         const data = await forgotPassword({
           email: channel === "phone" ? "" : email.trim(),
@@ -173,9 +197,40 @@ export default function GirisPage() {
       const data = isRegister
         ? await registerAccount(payload)
         : await loginAccount(payload);
+      if (data.needs_verification || !data.access_token) {
+        goVerify(
+          data.message || "E-postanı doğrula. Gelen kutuna 6 haneli kod gönderildi.",
+          data.debug_code,
+        );
+        return;
+      }
       finishSession(data, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "İşlem başarısız");
+      const msg = err instanceof Error ? err.message : "İşlem başarısız";
+      if (/doğrulanmadı|doğrulama/i.test(msg) && email.trim().includes("@")) {
+        goVerify(msg);
+        setError("");
+        return;
+      }
+      setError(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onResendVerify() {
+    if (busy || !email.trim().includes("@")) return;
+    setBusy(true);
+    setError("");
+    try {
+      const data = await resendVerification({ email: email.trim() });
+      setInfo(
+        data.debug_code
+          ? `${data.message} Kod: ${data.debug_code}`
+          : data.message,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kod gönderilemedi");
     } finally {
       setBusy(false);
     }
@@ -251,14 +306,16 @@ export default function GirisPage() {
               ? "Şifremi unuttum"
               : isReset
                 ? "Yeni şifre"
-                : isRegister
-                  ? "Kayıt ol"
-                  : "Giriş"}
+                : isVerify
+                  ? "E-posta doğrula"
+                  : isRegister
+                    ? "Kayıt ol"
+                    : "Giriş"}
           </h1>
         </div>
       </div>
 
-      {!isForgot && !isReset ? (
+      {!isForgot && !isReset && !isVerify ? (
       <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white/70 p-1 dark:border-zinc-800 dark:bg-zinc-950/50">
         {(
           [
@@ -284,7 +341,7 @@ export default function GirisPage() {
       </div>
       ) : null}
 
-      {!isForgot && !isReset ? (
+      {!isForgot && !isReset && !isVerify ? (
       <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white/50 p-1 dark:border-zinc-800">
         {(
           [
@@ -314,6 +371,7 @@ export default function GirisPage() {
       ) : null}
 
       {mode === "student" || isForgot || isReset ? (
+        !isVerify ? (
         <div className="mt-4 grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200 p-1 dark:border-zinc-800">
           {(
             [
@@ -343,22 +401,25 @@ export default function GirisPage() {
             </button>
           ))}
         </div>
+        ) : null
       ) : null}
 
       <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-        {isForgot
+        {isVerify
+          ? "Kayıt e-postana 6 haneli kod gönderildi. Spam klasörüne de bak."
+          : isForgot
           ? "Kayıtlı e-posta veya telefonuna 6 haneli kod gönderilir."
           : isReset
             ? "E-postadaki kodu ve yeni şifreni gir."
             : mode === "teacher"
               ? "Sınıfını gör, hata röntgenini oku, kuponla öğrencileri otomatik ekle."
               : isRegister
-                ? "Ad soyad, sınav hedefi ve e-posta / telefon / Google ile hesap aç."
+                ? "Ad soyad, sınav hedefi ve e-posta / telefon / Google ile hesap aç. E-posta ile kayıtta doğrulama gerekir."
                 : "E-posta, telefon veya Google ile gir."}
       </p>
 
       <div className="mt-5 grid gap-3">
-        {!isForgot && !isReset && (isRegister || mode === "teacher") && channel !== "google" ? (
+        {!isForgot && !isReset && !isVerify && (isRegister || mode === "teacher") && channel !== "google" ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Ad soyad
             <Input
@@ -382,7 +443,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "student" && isRegister ? (
+        {mode === "student" && isRegister && !isVerify ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Sınav hedefi
             <select
@@ -401,7 +462,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "teacher" && !isForgot && !isReset ? (
+        {mode === "teacher" && !isForgot && !isReset && !isVerify ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Kullanıcı adı
             <Input
@@ -413,7 +474,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {(mode === "student" || isForgot || isReset) && channel === "email" ? (
+        {(mode === "student" || isForgot || isReset || isVerify) && (channel === "email" || isVerify) ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             E-posta
             <Input
@@ -426,7 +487,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {(mode === "student" || isForgot || isReset) && channel === "phone" ? (
+        {(mode === "student" || isForgot || isReset) && channel === "phone" && !isVerify ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Telefon
             <Input
@@ -439,7 +500,7 @@ export default function GirisPage() {
           </label>
         ) : null}
 
-        {mode === "student" && channel === "google" && !isForgot && !isReset ? (
+        {mode === "student" && channel === "google" && !isForgot && !isReset && !isVerify ? (
           <div className="rounded-xl border border-dashed border-zinc-300 px-3 py-3 dark:border-zinc-700">
             <GoogleSignInButton onCredential={onGoogle} disabled={busy} />
             {isRegister ? (
@@ -448,6 +509,19 @@ export default function GirisPage() {
               </p>
             ) : null}
           </div>
+        ) : null}
+
+        {isVerify ? (
+          <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            6 haneli doğrulama kodu
+            <Input
+              value={verifyCode}
+              onChange={(event) => setVerifyCode(event.target.value)}
+              placeholder="123456"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+            />
+          </label>
         ) : null}
 
         {isReset ? (
@@ -475,7 +549,7 @@ export default function GirisPage() {
           </>
         ) : null}
 
-        {!isForgot && !isReset && (channel !== "google" || mode === "teacher") ? (
+        {!isForgot && !isReset && !isVerify && (channel !== "google" || mode === "teacher") ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Şifre
             <Input
@@ -492,7 +566,7 @@ export default function GirisPage() {
       {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
       {info ? <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-300">{info}</p> : null}
 
-      {(channel !== "google" || mode === "teacher" || isForgot || isReset) ? (
+      {(channel !== "google" || mode === "teacher" || isForgot || isReset || isVerify) ? (
         <Button
           type="button"
           className="mt-5 h-12 w-full"
@@ -500,7 +574,9 @@ export default function GirisPage() {
           onClick={() => void submit()}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {isForgot
+          {isVerify
+            ? "Doğrula ve giriş yap"
+            : isForgot
             ? "Kod gönder"
             : isReset
               ? "Şifreyi güncelle"
@@ -512,7 +588,18 @@ export default function GirisPage() {
         </Button>
       ) : null}
 
-      {!isForgot && !isReset && !isRegister ? (
+      {isVerify ? (
+        <button
+          type="button"
+          className="mt-3 w-full text-sm font-semibold text-orange-600 underline-offset-2 hover:underline disabled:opacity-50"
+          disabled={busy || !email.trim().includes("@")}
+          onClick={() => void onResendVerify()}
+        >
+          Kodu tekrar gönder
+        </button>
+      ) : null}
+
+      {!isForgot && !isReset && !isVerify && !isRegister ? (
         <button
           type="button"
           className="mt-4 w-full rounded-xl border border-orange-300/70 bg-orange-50 px-3 py-3 text-sm font-semibold text-orange-800 transition hover:bg-orange-100 dark:border-orange-500/40 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-950/70"
@@ -528,7 +615,7 @@ export default function GirisPage() {
       ) : null}
 
       <p className="mt-4 text-center text-xs text-zinc-500">
-        {isForgot || isReset ? (
+        {isForgot || isReset || isVerify ? (
           <button
             type="button"
             className="font-semibold text-orange-600 underline-offset-2 hover:underline"

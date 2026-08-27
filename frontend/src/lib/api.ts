@@ -1558,6 +1558,12 @@ export type AuthSession = {
   role: string;
   display_name: string;
   dashboard: string;
+  email?: string;
+  phone?: string;
+  needs_verification?: boolean;
+  message?: string;
+  destination_hint?: string;
+  debug_code?: string;
 };
 
 export function loginAccount(payload: {
@@ -1598,6 +1604,27 @@ export function registerAccount(payload: {
   exam_target?: string;
 }) {
   return request<AuthSession>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyEmail(payload: { email: string; code: string }) {
+  return request<AuthSession>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resendVerification(payload: { email: string }) {
+  return request<{
+    ok: boolean;
+    sent: boolean;
+    already_verified: boolean;
+    destination_hint: string;
+    message: string;
+    debug_code?: string;
+  }>("/auth/resend-verification", {
     method: "POST",
     body: JSON.stringify(payload),
   });

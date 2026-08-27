@@ -87,6 +87,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(256), default="")
     google_sub: Mapped[str] = mapped_column(String(64), default="", index=True)
     email: Mapped[str] = mapped_column(String(256), default="", index=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=True)
     phone: Mapped[str] = mapped_column(String(32), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     daily_ad_rewarded_credits: Mapped[int] = mapped_column(Integer, default=1)
@@ -375,7 +376,7 @@ class UserFeedback(Base):
 
 
 class PasswordReset(Base):
-    """Şifre sıfırlama kodu (e-posta / telefon)."""
+    """Şifre sıfırlama / e-posta doğrulama kodu."""
 
     __tablename__ = "password_resets"
 
@@ -383,6 +384,7 @@ class PasswordReset(Base):
     user_id: Mapped[str] = mapped_column(String(128), index=True)
     code_hash: Mapped[str] = mapped_column(String(128), default="")
     channel: Mapped[str] = mapped_column(String(16), default="email")
+    purpose: Mapped[str] = mapped_column(String(16), default="reset", index=True)
     destination: Mapped[str] = mapped_column(String(256), default="")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used: Mapped[bool] = mapped_column(Boolean, default=False)

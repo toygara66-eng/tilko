@@ -32,6 +32,8 @@ PUBLIC_PATHS = {
     "/auth/google",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/auth/verify-email",
+    "/auth/resend-verification",
     "/login",
     "/subscription/webhook",
     "/legal/privacy",
@@ -359,10 +361,17 @@ def register_user(
     user.password_hash = hashed
     if mail:
         user.email = mail
+        # E-posta ile kayıt: doğrulama zorunlu. Telefon / kullanıcı adı: doğrulanmış say.
+        user.email_verified = False
+    else:
+        user.email_verified = True
     if tel:
         user.phone = tel
     if intended == "teacher":
         _stamp_teacher(user, name)
+        # Hoca hesapları e-posta doğrulaması beklemez (user_id ile açılır).
+        if not mail:
+            user.email_verified = True
     else:
         user.role = "student"
         if name:
@@ -384,6 +393,26 @@ def register_user(
         db.refresh(user)
     if mail and (user.email or "").strip() != mail:
         raise ValueError("E-posta kaydı yazılamadı. Tekrar dene.")
+
+    # E-posta kayıt: oturum açmadan doğrulama kodu gönder.
+    if mail and not bool(getattr(user, "email_verified", False)):
+        from app.services import email_verification as verify_service
+
+        issued = verify_service.issue_verification_code(db, user)
+        return {
+            "access_token": "",
+            "token_type": "bearer",
+            "user_id": user.user_id,
+            "role": getattr(user, "role", None) or "student",
+            "display_name": (user.display_name or "").strip(),
+            "dashboard": "/",
+            "email": mail,
+            "phone": (user.phone or "").strip(),
+            "needs_verification": True,
+            "message": issued.get("message") or "E-postanı doğrula.",
+            "destination_hint": issued.get("destination_hint") or "",
+            "debug_code": issued.get("debug_code") or "",
+        }
     return _auth_view(db, user)
 
 
@@ -451,6 +480,13 @@ def login_user(
         db.add(user)
         db.commit()
         db.refresh(user)
+    # E-posta hesabı doğrulanmamışsa giriş yok.
+    has_mail = bool((user.email or "").strip())
+    if has_mail and not bool(getattr(user, "email_verified", True)):
+        raise ValueError(
+            "E-posta henüz doğrulanmadı. Gelen kutundaki 6 haneli kodu gir "
+            "veya ‘Kodu tekrar gönder’ ile yeni kod iste."
+        )
     return _auth_view(db, user)
 
 
@@ -538,6 +574,8 @@ def login_with_google(
     user.google_sub = sub
     if email:
         user.email = email
+        # Google e-postayı zaten doğrulamış sayılır.
+        user.email_verified = True
     if intended == "teacher":
         _stamp_teacher(user, name)
     elif not (getattr(user, "role", "") or "").strip() or user.role == "student":

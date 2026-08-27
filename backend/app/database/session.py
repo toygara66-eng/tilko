@@ -188,6 +188,7 @@ def _add_missing_columns() -> None:
             "password_hash": "VARCHAR(256) DEFAULT ''",
             "google_sub": "VARCHAR(64) DEFAULT ''",
             "email": "VARCHAR(256) DEFAULT ''",
+            "email_verified": "BOOLEAN DEFAULT 1",
             "phone": "VARCHAR(32) DEFAULT ''",
             "created_at": "DATETIME",
             "daily_ad_rewarded_credits": "INTEGER DEFAULT 1",
@@ -200,6 +201,9 @@ def _add_missing_columns() -> None:
             "role": "VARCHAR(16) DEFAULT 'student'",
             "teacher_id": "VARCHAR(128) DEFAULT ''",
             "display_name": "VARCHAR(64) DEFAULT ''",
+        },
+        "password_resets": {
+            "purpose": "VARCHAR(16) DEFAULT 'reset'",
         },
         "user_stats": {
             "last_pomodoro_session": "VARCHAR(64) DEFAULT ''",
