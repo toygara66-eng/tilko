@@ -19,8 +19,8 @@ android {
         applicationId "com.tilko.site"
         minSdk 24
         targetSdk 36
-        versionCode 11
-        versionName "1.0.10"
+        versionCode 12
+        versionName "1.0.11"
         buildConfigField "String", "TILKO_PLAY_CERT_SHA256", "\"${playCerts}\""
         buildConfigField "String", "TILKO_WEB_URL", "\"${webUrl}\""
         buildConfigField "String", "TILKO_PLAY_PACKAGE", "\"com.tilko.site\""

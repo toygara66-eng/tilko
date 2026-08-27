@@ -14,7 +14,8 @@ html,
 body {
   background: #f4f4f5;
   max-width: 100%;
-  overflow-x: hidden;
+  /* overflow-x:hidden/clip + fixed/sticky = Android WebView'de logo/nav kaybolur */
+  overflow-x: visible;
 }
 
 html.dark,
@@ -24,13 +25,14 @@ html.dark body {
 
 body {
   @apply min-h-screen bg-zinc-100 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  width: 100%;
+  overflow-y: auto;
 }
 
-/* Android WebView: yatay taşmayı kes */
+/* Yatay taşmayı kes — overflow verme (fixed içeren blokları kırar) */
 #__next,
 body > div {
   max-width: 100%;
-  overflow-x: clip;
 }
 
 img,
