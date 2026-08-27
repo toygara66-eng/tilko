@@ -86,7 +86,7 @@ export function TeacherDashboard() {
           variant="outline"
           onClick={() => {
             logout();
-            window.location.assign("/giris");
+            window.location.assign("/giris/");
           }}
         >
           <LogOut className="h-4 w-4" />

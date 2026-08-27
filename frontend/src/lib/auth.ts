@@ -88,14 +88,14 @@ export async function ensureAuth(
   const current = getToken();
   if (tokenValid(current)) return current;
   if (!userId || userId === "local" || userId.startsWith("aday-")) {
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
-      window.location.assign("/giris");
+    if (typeof window !== "undefined" && !window.location.pathname.includes("/giris")) {
+      window.location.assign("/giris/");
     }
     throw new Error("Devam etmek için kayıt ol veya giriş yap.");
   }
   if (getAuthMode() === "google") {
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
-      window.location.assign("/giris");
+    if (typeof window !== "undefined" && !window.location.pathname.includes("/giris")) {
+      window.location.assign("/giris/");
     }
     throw new Error("Google oturumu doldu. Tekrar giriş yap.");
   }
@@ -103,8 +103,8 @@ export async function ensureAuth(
   inflight = (async () => {
     const password = getAuthSecret();
     if (!password || password.length < 8) {
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
-        window.location.assign("/giris");
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/giris")) {
+        window.location.assign("/giris/");
       }
       throw new Error("Oturum süresi doldu. Tekrar giriş yap.");
     }
@@ -126,9 +126,9 @@ export async function ensureAuth(
         "Çok hızlı denendi. 20–30 saniye bekle, sonra tekrar giriş yap.",
       );
     }
-    // Otomatik misafir kaydı yok — kullanıcı /giris’e yönlendirilir.
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/giris")) {
-      window.location.assign("/giris");
+    // Otomatik misafir kaydı yok — kullanıcı /giris/’e yönlendirilir (Cap trailingSlash).
+    if (typeof window !== "undefined" && !window.location.pathname.includes("/giris")) {
+      window.location.assign("/giris/");
     }
     const err = (await login.json().catch(() => ({}))) as { detail?: unknown };
     const detail =

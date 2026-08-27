@@ -37,7 +37,7 @@ import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
 import { isSignedIn, logout } from "@/lib/auth";
 
 /** Play / APK sürüm damgası — telefonda hangi build olduğunu görmek için. */
-export const APP_BUILD_LABEL = "1.0.12";
+export const APP_BUILD_LABEL = "1.0.13";
 
 const NAV = [
   { href: "/", label: "Av", icon: LayoutDashboard },
