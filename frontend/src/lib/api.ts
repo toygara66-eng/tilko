@@ -47,7 +47,7 @@ export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatas�
     return "API'ye ulaşılamadı. İnterneti kontrol et veya biraz sonra dene.";
   }
   if (/cleartext|not permitted|127\.0\.0\.1|localhost:\d+/i.test(blob)) {
-    return "Eski uygulama sürümü (yerel API). Tilko'yu silip yeni APK'yı kur (1.0.17+).";
+    return "Eski uygulama sürümü (yerel API). Tilko'yu silip yeni APK'yı kur (1.0.18+).";
   }
   if (
     /\b429\b|rate\s*limit|too\s*many\s*requests|çok\s*fazla\s*istek/i.test(blob)
