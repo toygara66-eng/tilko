@@ -129,15 +129,20 @@ function HedefForm() {
             <>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-600 dark:text-orange-300">
-                  Sınav Hedefi Onboarding
+                  Hoş geldin
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">
-                  Hedef Sınavını Seç 🎯
+                  Hedef sınavını seç 🎯
                 </h1>
                 <p className="mt-2 text-sm text-zinc-500">
-                  Koç, Sazan Avı ve tuzak analizleri bu seçime göre şekillenir,{" "}
-                  {profile.title}.
+                  KPSS, YKS veya LGS — koç, Sazan Avı ve tuzak analizleri buna göre
+                  ayarlanır, {profile.title}.
                 </p>
+                <ul className="mt-3 space-y-1.5 text-xs text-zinc-500">
+                  <li>1 · Sınav ailesini seç</li>
+                  <li>2 · Alt türü işaretle (ör. KPSS Lisans)</li>
+                  <li>3 · Kısa seviye teşhisi → kişisel rota</li>
+                </ul>
               </div>
               <div className="grid gap-2">
                 {EXAM_OPTIONS.map((item) => {

@@ -648,10 +648,26 @@ def list_items(
     *,
     subject: str | None = None,
     exam_target: str | None = None,
+    summary: bool = False,
+    video_id: str | None = None,
 ) -> dict:
     uid = (user_id or "").strip()
     counts = subject_counts(db, uid)
     sessions = list_sessions(db, uid, subject=subject, exam_target=exam_target)
+    base = {
+        "user_id": uid,
+        "subject": (subject or "").strip() or None,
+        "subjects": counts,
+        "sessions": sessions,
+        "notes": [],
+        "questions": [],
+    }
+    vid = (video_id or "").strip()
+    if summary or not vid:
+        if not (subject or "").strip():
+            base["sessions"] = []
+        return base
+
     label_map = _label_map(db, uid)
     query = select(SavedNotebookItem).where(SavedNotebookItem.user_id == uid)
     if (subject or "").strip() and (subject or "").strip().casefold() not in {
@@ -662,11 +678,14 @@ def list_items(
         query = query.where(
             SavedNotebookItem.subject == canonical_subject(subject, exam_target)
         )
+    query = query.where(SavedNotebookItem.video_id == vid)
     query = query.order_by(
         SavedNotebookItem.created_at.desc(),
         SavedNotebookItem.timestamp.asc(),
         SavedNotebookItem.id.asc(),
     )
+    from app.services.question_safety import sanitize_options, scrub_premises_for_play
+
     notes: list[dict] = []
     questions: list[dict] = []
     for row in db.scalars(query).all():
@@ -674,17 +693,16 @@ def list_items(
         if not public:
             continue
         if row.kind == "question":
+            public["options"] = sanitize_options(public.get("options") or {})
+            public["premises"] = scrub_premises_for_play(
+                public.get("premises") or [], reveal=False
+            )
             questions.append(public)
         else:
             notes.append(public)
-    return {
-        "user_id": uid,
-        "subject": (subject or "").strip() or None,
-        "subjects": counts,
-        "sessions": sessions,
-        "notes": notes,
-        "questions": questions,
-    }
+    base["notes"] = notes
+    base["questions"] = questions
+    return base
 
 
 def _to_public(

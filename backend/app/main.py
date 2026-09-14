@@ -880,6 +880,8 @@ def list_notebook(
     request: Request,
     user_id: str,
     subject: str | None = None,
+    video_id: str | None = None,
+    summary: bool = False,
     db: Session = Depends(get_db),
 ) -> NotebookResponse:
     from app.services.exams import exam_of
@@ -889,6 +891,8 @@ def list_notebook(
         user_id,
         subject=subject,
         exam_target=exam_of(db, user_id),
+        summary=summary,
+        video_id=video_id,
     )
     from app.models.schemas import SavedNoteItem, SavedQuestionItem, NotebookSubjectCount
 
@@ -3007,6 +3011,7 @@ def _to_question(
     item: dict, index: int, video_id: str, time_offset: int = 0
 ) -> QuestionItem:
     from app.services.subjects import parse_premises, parse_steps
+    from app.services.question_safety import sanitize_options, scrub_premises_for_play
 
     if not isinstance(item, dict):
         raise TypeError("soru bir nesne değil")
@@ -3020,10 +3025,11 @@ def _to_question(
         }
     elif not isinstance(options, dict):
         options = {}
+    options = sanitize_options({str(k): str(v) for k, v in options.items()})
     return QuestionItem(
         id=f"q_{index}",
         text=str(item.get("text") or "").strip(),
-        options={str(k): str(v) for k, v in options.items()},
+        options=options,
         correct=str(item.get("correct") or "").strip().upper()[:1],
         explanation=str(item.get("explanation") or "").strip(),
         trap_explanation=str(
@@ -3040,5 +3046,5 @@ def _to_question(
         misconception_tag=str(item.get("misconception_tag") or ""),
         step_by_step_solution=parse_steps(item.get("step_by_step_solution")),
         shortcut_tactic=str(item.get("shortcut_tactic") or "").strip(),
-        premises=parse_premises(item.get("premises")),
+        premises=scrub_premises_for_play(parse_premises(item.get("premises")), reveal=False),
     )

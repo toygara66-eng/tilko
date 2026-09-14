@@ -15,6 +15,16 @@ import {
   type ProgressPoint,
 } from "@/lib/api";
 import { getUserId } from "@/lib/user";
+import { hardNavigate } from "@/lib/path";
+
+function replayAppTour() {
+  try {
+    localStorage.removeItem("tilko_app_tour_v2");
+  } catch {
+    /* ignore */
+  }
+  hardNavigate("/");
+}
 
 export default function ProfilePage() {
   const { profile } = useProfile();
@@ -142,6 +152,14 @@ export default function ProfilePage() {
       </section>
 
       <FeedbackCard />
+
+      <button
+        type="button"
+        onClick={replayAppTour}
+        className="w-full rounded-2xl border border-zinc-200 bg-white/50 px-4 py-3 text-left text-sm text-zinc-600 transition hover:border-orange-400/60 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-400"
+      >
+        Uygulama turunu tekrar göster
+      </button>
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <Link

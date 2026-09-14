@@ -457,7 +457,9 @@ function ExamRunner({
           </p>
           <ReportQuestionControl questionId={current.id} className="shrink-0" />
         </div>
-        <PremiseAnalyzer premises={current.premises} />
+        {chosen ? (
+          <PremiseAnalyzer premises={current.premises} reveal />
+        ) : null}
         <div className="mt-4 grid gap-2">
           {Object.entries(current.options).map(([letter, text]) => (
             <Button

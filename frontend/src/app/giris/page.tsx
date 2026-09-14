@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2, GraduationCap, School, Mail, Phone, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { TilkoLogo } from "@/components/brand/tilko-logo";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in";
 import { loginAccount, loginWithGoogle, registerAccount, forgotPassword, resetPassword, verifyEmail, resendVerification } from "@/lib/api";
@@ -538,8 +539,7 @@ export default function GirisPage() {
             </label>
             <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
               Yeni şifre
-              <Input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 placeholder="En az 8 karakter"
@@ -552,8 +552,7 @@ export default function GirisPage() {
         {!isForgot && !isReset && !isVerify && (channel !== "google" || mode === "teacher") ? (
           <label className="grid gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Şifre
-            <Input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="En az 8 karakter"

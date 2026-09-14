@@ -66,10 +66,24 @@ export function MyNotes() {
     let live = true;
     function load() {
       setBusy(true);
-      listNotebook(getUserId(), subject || undefined)
+      const uid = getUserId();
+      const summary = !videoId;
+      listNotebook(uid, {
+        subject: subject || undefined,
+        videoId: videoId || undefined,
+        summary,
+      })
         .then((payload) => {
           if (!live) return;
-          setData(payload);
+          setData((prev) => {
+            if (!prev || summary) return payload;
+            return {
+              ...prev,
+              ...payload,
+              subjects: payload.subjects?.length ? payload.subjects : prev.subjects,
+              sessions: payload.sessions?.length ? payload.sessions : prev.sessions,
+            };
+          });
           setError("");
         })
         .catch((err) => {
@@ -84,15 +98,12 @@ export function MyNotes() {
     const onBump = () => load();
     window.addEventListener("tilko-notebook-bump", onBump);
     window.addEventListener("storage", onBump);
-    const onFocus = () => load();
-    window.addEventListener("focus", onFocus);
     return () => {
       live = false;
       window.removeEventListener("tilko-notebook-bump", onBump);
       window.removeEventListener("storage", onBump);
-      window.removeEventListener("focus", onFocus);
     };
-  }, [subject]);
+  }, [subject, videoId]);
 
   const notes = useMemo(() => {
     const all = (subject ? data?.notes : []) || [];
@@ -143,8 +154,11 @@ export function MyNotes() {
         video_url: activeSession?.video_url || notes[0]?.video_url || "",
       });
       setRenameOpen(false);
-      const payload = await listNotebook(getUserId(), subject);
-      setData(payload);
+      const payload = await listNotebook(getUserId(), {
+        subject,
+        summary: true,
+      });
+      setData((prev) => (prev ? { ...prev, sessions: payload.sessions } : payload));
     } catch (err) {
       setError(err instanceof Error ? err.message : "İsim kaydedilemedi");
     } finally {

@@ -33,6 +33,7 @@ import { AuthGate, isAuthPublicPath } from "@/components/auth/auth-gate";
 import { IntegrityGate } from "@/components/security/integrity-gate";
 import { AnalyzeProvider } from "@/components/analyze/analyze-context";
 import { PlayBillingBoot } from "@/components/billing/play-billing-boot";
+import { AppWalkthrough } from "@/components/onboarding/app-walkthrough";
 import { isSignedIn, logout } from "@/lib/auth";
 import GirisPage from "@/app/giris/page";
 import { APP_BUILD_LABEL } from "@/components/layout/build-label";
@@ -68,6 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <ShellFrame>{children}</ShellFrame>
                   <ExamTargetGate />
                   <DiagnosticGate />
+                  <AppWalkthrough />
                   <AuthGate />
                   <RoleGate />
                   <PenaltyLock />

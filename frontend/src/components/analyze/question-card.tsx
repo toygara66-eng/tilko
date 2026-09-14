@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { HumanNoteCard } from "@/components/notes/human-note-card";
@@ -8,6 +8,7 @@ import { PremiseAnalyzer } from "@/components/questions/premise-analyzer";
 import { SolutionSteps } from "@/components/questions/solution-steps";
 import { ReportQuestionControl } from "@/components/questions/report-question";
 import { saveTrap, type QuestionItem, type TeacherPersona } from "@/lib/api";
+import { sanitizeOptions } from "@/lib/question-safety";
 import { getUserId } from "@/lib/user";
 
 export function QuestionCard({
@@ -19,8 +20,12 @@ export function QuestionCard({
 }) {
   const [picked, setPicked] = useState("");
   const [msg, setMsg] = useState("");
-  const [hocaNote, setHocaNote] = useState(question.trap_explanation || "");
+  const [hocaNote, setHocaNote] = useState("");
   const started = useState(() => Date.now())[0];
+  const options = useMemo(
+    () => sanitizeOptions(question.options || {}),
+    [question.options],
+  );
 
   async function pick(letter: string) {
     setPicked(letter);
@@ -86,12 +91,12 @@ export function QuestionCard({
           ) : null}
         </div>
         <p className="text-sm text-zinc-800 dark:text-zinc-100">{question.text}</p>
-        <PremiseAnalyzer premises={question.premises} reveal={Boolean(picked)} />
         <div className="mt-3 grid gap-2">
-          {Object.entries(question.options).map(([letter, text]) => (
+          {Object.entries(options).map(([letter, text]) => (
             <button
               key={letter}
               type="button"
+              disabled={Boolean(picked)}
               onClick={() => pick(letter)}
               className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-sm text-zinc-800 transition hover:border-cyan-500/50 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-300 dark:hover:border-cyan-400/40"
             >
@@ -101,6 +106,9 @@ export function QuestionCard({
           ))}
         </div>
       </Card>
+      {picked ? (
+        <PremiseAnalyzer premises={question.premises} reveal />
+      ) : null}
       {wrong ? (
         <HumanNoteCard
           variant="trap"
@@ -109,7 +117,7 @@ export function QuestionCard({
           highlights={[picked, question.correct]}
           lines={[
             `ben -> ${picked}    doğru => ${question.correct}`,
-            ...Object.entries(question.options).map(
+            ...Object.entries(options).map(
               ([letter, text]) => `${letter}) ${text}`,
             ),
           ]}

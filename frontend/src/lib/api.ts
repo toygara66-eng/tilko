@@ -47,7 +47,7 @@ export function humanizeNetworkError(err: unknown, fallback = "Bağlantı hatas�
     return "API'ye ulaşılamadı. İnterneti kontrol et veya biraz sonra dene.";
   }
   if (/cleartext|not permitted|127\.0\.0\.1|localhost:\d+/i.test(blob)) {
-    return "Eski uygulama sürümü (yerel API). Tilko'yu silip yeni APK'yı kur (1.0.18+).";
+    return "Eski uygulama sürümü (yerel API). Tilko'yu silip yeni APK'yı kur (1.0.19+).";
   }
   if (
     /\b429\b|rate\s*limit|too\s*many\s*requests|çok\s*fazla\s*istek/i.test(blob)
@@ -447,8 +447,15 @@ export type NotebookResponse = {
   questions: SavedQuestionItem[];
 };
 
-export function listNotebook(userId: string, subject?: string) {
-  const query = subject ? `?subject=${encodeURIComponent(subject)}` : "";
+export function listNotebook(
+  userId: string,
+  opts?: { subject?: string; videoId?: string; summary?: boolean },
+) {
+  const params = new URLSearchParams();
+  if (opts?.subject) params.set("subject", opts.subject);
+  if (opts?.videoId) params.set("video_id", opts.videoId);
+  if (opts?.summary) params.set("summary", "true");
+  const query = params.toString() ? `?${params.toString()}` : "";
   return request<NotebookResponse>(`/notebook/${userId}${query}`);
 }
 
