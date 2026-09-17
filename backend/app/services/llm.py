@@ -2318,7 +2318,7 @@ def _fallback_notes_from_transcript(chunk: str, subject: str | None) -> dict:
     empty = {
         "notes": [],
         "questions": [],
-        "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
+        "teacher_persona": {"name": "", "catchphrases": [], "tone": "öğretici, net"},
     }
     if len(raw) < 80:
         return empty
@@ -2363,7 +2363,7 @@ def _fallback_notes_from_transcript(chunk: str, subject: str | None) -> dict:
     return {
         "notes": _sanitize_note_tips(notes),
         "questions": [],
-        "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
+        "teacher_persona": {"name": "", "catchphrases": [], "tone": "öğretici, net"},
     }
 
 

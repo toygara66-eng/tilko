@@ -42,7 +42,7 @@ def create_job(
             "chunks_total": max(1, chunks_total),
             "notes": [],
             "questions": [],
-            "teacher_persona": {"catchphrases": [], "tone": "öğretici, net"},
+            "teacher_persona": {"name": "", "catchphrases": [], "tone": "öğretici, net"},
             "error": "",
             "overlay": overlay,
             "cancel_requested": False,

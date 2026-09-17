@@ -492,6 +492,7 @@ export default function AdminArchivePage() {
               <thead className="bg-zinc-50 text-[10px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
                 <tr>
                   <th className="px-3 py-2">Kişi</th>
+                  <th className="px-3 py-2">Favori hoca</th>
                   <th className="px-3 py-2">Giriş bilgileri</th>
                   <th className="px-3 py-2">Sınav</th>
                   <th className="px-3 py-2">Pro</th>
@@ -501,7 +502,7 @@ export default function AdminArchivePage() {
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
                       Liste boş. Anahtarı yazıp Yenile’ye bas.
                     </td>
                   </tr>
@@ -529,6 +530,22 @@ export default function AdminArchivePage() {
                             Eksik profil — e-posta/telefon ekle
                           </p>
                         ) : null}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        {row.favorite_teacher ? (
+                          <div>
+                            <p className="font-medium text-orange-700 dark:text-orange-300">
+                              {row.favorite_teacher}
+                            </p>
+                            {(row.favorite_teacher_notes || 0) > 0 ? (
+                              <p className="text-[10px] text-zinc-500">
+                                ~{row.favorite_teacher_notes} not ağırlığı
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 align-top text-zinc-700 dark:text-zinc-200">
                         <div className="space-y-1.5">

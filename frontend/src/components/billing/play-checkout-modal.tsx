@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
+import { ExternalLink, Loader2, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useProfile } from "@/components/profile/profile-context";
@@ -16,6 +16,7 @@ import {
 import { FALLBACK_PLANS, hasNativePlayBilling, launchPlayPurchase, restorePlayPurchase } from "@/lib/billing";
 import { getUserId } from "@/lib/user";
 import { cn } from "@/lib/utils";
+import { PLAY_STORE_URL } from "@/lib/integrity";
 
 function lira(amount: number) {
   const rounded = Math.round(amount * 100) / 100;
@@ -298,30 +299,66 @@ export function PlayCheckoutModal({
               ) : null}
               {error ? <p className="text-sm text-red-500">{error}</p> : null}
               <div className="flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    className="h-11 flex-1"
-                    disabled={busy}
-                    onClick={() => void pay()}
-                  >
-                    {busy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    {native ? "Play ile satın al" : "Test satın al"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11"
-                    disabled={busy}
-                    onClick={onClose}
-                  >
-                    Vazgeç
-                  </Button>
-                </div>
+                {native ? (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className="h-11 flex-1"
+                      disabled={busy}
+                      onClick={() => void pay()}
+                    >
+                      {busy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      Play ile satın al
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11"
+                      disabled={busy}
+                      onClick={onClose}
+                    >
+                      Vazgeç
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <Button asChild className="h-11 w-full">
+                      <a href={PLAY_STORE_URL} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                        Play Store’dan abone ol
+                      </a>
+                    </Button>
+                    {sandbox ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 w-full"
+                        disabled={busy}
+                        onClick={() => void pay()}
+                      >
+                        {busy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                        Test satın al (geliştirici)
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full"
+                      disabled={busy}
+                      onClick={onClose}
+                    >
+                      Vazgeç
+                    </Button>
+                  </div>
+                )}
                 {native ? (
                   <button
                     type="button"

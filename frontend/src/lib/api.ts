@@ -171,6 +171,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export type TeacherPersona = {
+  name?: string;
   catchphrases: string[];
   tone: string;
 };
@@ -458,6 +459,20 @@ export function listNotebook(
   if (opts?.q?.trim()) params.set("q", opts.q.trim());
   const query = params.toString() ? `?${params.toString()}` : "";
   return request<NotebookResponse>(`/notebook/${userId}${query}`);
+}
+
+export type TeacherVoiceResponse = {
+  name: string;
+  catchphrases: string[];
+  tone: string;
+  sessions: number;
+  notes: number;
+};
+
+export function getTeacherVoice(userId: string) {
+  return request<TeacherVoiceResponse>(
+    `/notebook/${encodeURIComponent(userId)}/teacher-voice`,
+  );
 }
 
 export function renameNotebookSession(input: {
@@ -1530,6 +1545,8 @@ export type AdminUserRow = {
   created_at: string | null;
   has_google: boolean;
   has_password?: boolean;
+  favorite_teacher?: string;
+  favorite_teacher_notes?: number;
 };
 
 export async function listAdminUsers(secret: string, q = "") {

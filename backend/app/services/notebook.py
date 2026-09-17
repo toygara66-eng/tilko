@@ -79,7 +79,14 @@ def ensure_session(
             row.video_url = video_url[:256]
         if label is not None:
             cleaned = (label or "").strip()[:160]
-            if cleaned:
+            current = (row.label or "").strip()
+            # Kullanıcı özel isim verdiyse üzerine yazma; generic/boş ise hoca adını işle
+            generic = (
+                not current
+                or "notlar" in current.casefold()
+                or bool(re.search(r"\d{1,2}\.\d{1,2}\.\d{2,4}", current))
+            )
+            if cleaned and generic:
                 row.label = cleaned
         db.add(row)
         return row
@@ -876,7 +883,7 @@ def _to_public(
         points = [points] if points else []
     persona = payload.get("teacher_persona") or {}
     if not isinstance(persona, dict):
-        persona = {"catchphrases": [], "tone": "öğretici, net"}
+        persona = {"name": "", "catchphrases": [], "tone": "öğretici, net"}
     stamp = int(row.timestamp or 0)
     watch = row.video_url or str(payload.get("video_url") or "")
     timed = str(payload.get("video_url_with_t") or "") or (
@@ -911,6 +918,7 @@ def _to_public(
         "topic": str(payload.get("topic") or ""),
         "difficulty": str(payload.get("difficulty") or ""),
         "teacher_persona": {
+            "name": str(persona.get("name") or ""),
             "catchphrases": list(persona.get("catchphrases") or []),
             "tone": str(persona.get("tone") or "öğretici, net"),
         },

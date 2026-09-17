@@ -499,7 +499,11 @@ def _deliver_shared_job(
     overlay = credit_service.overlay(reservation)
     notes = job.get("notes") or []
     questions = job.get("questions") or []
-    persona = job.get("teacher_persona") or {"catchphrases": [], "tone": "öğretici, net"}
+    persona = job.get("teacher_persona") or {
+        "name": "",
+        "catchphrases": [],
+        "tone": "öğretici, net",
+    }
     if notes or questions:
         _persist_notebook(
             user_id=user_id,
@@ -977,6 +981,23 @@ def list_notebook(
     )
 
 
+@app.get("/notebook/{user_id}/teacher-voice")
+@limiter.limit("30/minute")
+def notebook_teacher_voice(
+    request: Request,
+    user_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    """En çok izlenen hoca + catchphrase/tone — bildirim kişiselleştirme."""
+    from app.security.auth import actor
+    from app.services.teacher_voice import favorite_teacher
+
+    viewer = actor(request)
+    if viewer != (user_id or "").strip():
+        raise HTTPException(status_code=403, detail="Yetkisiz.")
+    return favorite_teacher(db, user_id)
+
+
 @app.patch("/notebook/session")
 @app.post("/notebook/session")
 @limiter.limit("30/minute")
@@ -1242,7 +1263,11 @@ def admin_users_list(
         db.commit()
     except Exception:  # noqa: BLE001
         db.rollback()
+    from app.services.teacher_voice import favorite_teachers_batch
+
+    voices = favorite_teachers_batch(db, [u.user_id for u in rows])
     for user in rows:
+        voice = voices.get(user.user_id) or {}
         users.append(
             AdminUserRow(
                 user_id=user.user_id,
@@ -1258,6 +1283,8 @@ def admin_users_list(
                 created_at=_iso_dt(user.created_at),
                 has_google=bool((user.google_sub or "").strip()),
                 has_password=bool((user.password_hash or "").strip()),
+                favorite_teacher=str(voice.get("name") or "").strip(),
+                favorite_teacher_notes=int(voice.get("notes") or 0),
             )
         )
     return AdminUserListResponse(users=users, count=len(users))
@@ -2314,6 +2341,19 @@ def penalty_next(
     )
 
 
+def _session_label_for_persona(subject: str | None, persona: object) -> str | None:
+    """Hoca adı biliniyorsa oturum etiketine yaz — favori hoca sayımı için."""
+    name = ""
+    if isinstance(persona, dict):
+        name = str(persona.get("name") or "").strip()
+    elif hasattr(persona, "name"):
+        name = str(getattr(persona, "name") or "").strip()
+    if len(name) < 3:
+        return None
+    subj = (subject or "").strip() or "Genel"
+    return f"{subj} · {name[:48]}"[:160]
+
+
 def _persist_notebook(
     *,
     user_id: str,
@@ -2349,6 +2389,7 @@ def _persist_notebook(
                     questions=questions,
                     persona=dumped if isinstance(dumped, dict) else None,
                     exam_target=exam_target,
+                    session_label=_session_label_for_persona(subject, dumped),
                 )
                 break
             except Exception as exc:
@@ -2470,7 +2511,7 @@ def _analyze_with_lines(
                     job_id,
                     notes=[item.model_dump() for item in early_notes],
                     questions=[],
-                    persona={"catchphrases": [], "tone": "öğretici, net"},
+                    persona={"name": "", "catchphrases": [], "tone": "öğretici, net"},
                     chunks_done=0,
                     status="running",
                     chunks_total=1,

@@ -18,6 +18,7 @@ import {
 } from "@/lib/captions";
 import { getUserId } from "@/lib/user";
 import { useProfile } from "@/components/profile/profile-context";
+import { learnTeacherVoice } from "@/lib/teacher-voice";
 
 const STORAGE_KEY = "tilko_last_analyze";
 const STORAGE_KEY_LEGACY = "tilko_last_analyze"; // eski anahtar da silinsin
@@ -186,6 +187,13 @@ export function AnalyzeProvider({ children }: { children: ReactNode }) {
         });
         return;
       }
+      // Favori hoca: en çok dönüştürülen üslup → bildirimler
+      learnTeacherVoice({
+        name: data.teacher_persona?.name,
+        catchphrases: data.teacher_persona?.catchphrases,
+        tone: data.teacher_persona?.tone,
+        weight: 2,
+      });
       writeStored({
         result: data,
         url: videoUrl,

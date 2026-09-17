@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class TeacherPersona(BaseModel):
+    name: str = ""
     catchphrases: list[str] = Field(default_factory=list)
     tone: str = "öğretici, net"
 
@@ -888,6 +889,8 @@ class AdminUserRow(BaseModel):
     created_at: str | None = None
     has_google: bool = False
     has_password: bool = False
+    favorite_teacher: str = ""
+    favorite_teacher_notes: int = 0
 
 
 class AdminUserListResponse(BaseModel):

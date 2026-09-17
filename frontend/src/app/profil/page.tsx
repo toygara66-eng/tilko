@@ -9,6 +9,7 @@ import { MistakeDoctorCard } from "@/components/analytics/mistake-doctor-card";
 import { FeedbackCard } from "@/components/feedback/feedback-form";
 import { TargetScoreForm } from "@/components/profile/target-score-form";
 import { ChangePasswordCard } from "@/components/profile/change-password-card";
+import { NotificationPrefsCard } from "@/components/notifications/notification-prefs-card";
 import {
   getMistakeDoctor,
   getProgressHistory,
@@ -95,24 +96,39 @@ export default function ProfilePage() {
 
       <ChangePasswordCard />
 
+      <NotificationPrefsCard />
+
       <section className="rounded-2xl border border-orange-400/40 bg-white/55 p-5 backdrop-blur-xl dark:bg-zinc-950/45">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-600 dark:text-orange-300">
           Abonelik
         </p>
         {profile.isPremium ? (
-          <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-            Tilko Pro açık. Analiz kotası yok.
-            {profile.subscriptionExpiresAt
-              ? ` Bitiş: ${new Date(profile.subscriptionExpiresAt).toLocaleDateString("tr-TR")}`
-              : ""}
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-zinc-500">
-            Ücretsiz katmandasın.{" "}
-            <Link href="/pro" className="text-orange-600 dark:text-orange-300">
-              Tilko Pro&apos;ya geç
+          <div className="mt-2 space-y-2">
+            <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              Tilko Pro açık. Analiz kotası yok.
+              {profile.subscriptionExpiresAt
+                ? ` Bitiş: ${new Date(profile.subscriptionExpiresAt).toLocaleDateString("tr-TR")}`
+                : ""}
+            </p>
+            <Link
+              href="/pro"
+              className="inline-block text-sm text-orange-600 hover:underline dark:text-orange-300"
+            >
+              Pro durumu / geri yükle →
             </Link>
-          </p>
+          </div>
+        ) : (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm text-zinc-500">
+              Ücretsiz katmandasın. Ödeme Google Play üzerinden.
+            </p>
+            <Link
+              href="/pro"
+              className="inline-block text-sm font-medium text-orange-600 hover:underline dark:text-orange-300"
+            >
+              Tilko Pro&apos;ya geç →
+            </Link>
+          </div>
         )}
       </section>
 

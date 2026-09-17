@@ -115,6 +115,7 @@ key_points = 5-7 bitmiş madde (her biri max ~130 karakter).
 Çıktı JSON şeması:
 {{
   "teacher_persona": {{
+    "name": "altyazıda/videoda geçen hoca adı (yoksa boş)",
     "catchphrases": ["hocanın sık tekrarladığı hitap"],
     "tone": "öğretici / otoriter / samimi-öğretici"
   }},
@@ -141,7 +142,7 @@ Kurallar:
 - key_points 5-7 madde; yarıda kesme / "..." yok.
 - mnemonic ve exam_tip dolu olsun; exam_tip gerçek çeldirici yazsın.
 - timestamp, kavramın anlatılmaya başladığı saniye.
-- teacher_persona: altyazıdaki hitaplardan 3-8 catchphrase; uydurma slogan yok.
+- teacher_persona: name varsa doldur; hitaplardan 3-8 catchphrase; uydurma slogan yok.
 """
 
 
@@ -188,6 +189,7 @@ Sorular: hangisi doğru/yanlış/değildir; yakın kavram çeldiricisi; açıkla
 Çıktı JSON şeması:
 {{
   "teacher_persona": {{
+    "name": "hoca adı (altyazıda geçiyorsa)",
     "catchphrases": ["altyazıdaki hitap"],
     "tone": "samimi-öğretici"
   }},

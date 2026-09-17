@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class TeacherPersona(BaseModel):
+    name: str = ""
     catchphrases: list[str] = Field(default_factory=list)
     tone: str = "öğretici, net"
 
@@ -33,13 +34,15 @@ def parse_persona(raw: object) -> TeacherPersona:
         if str(item).strip()
     ]
     tone = str(raw.get("tone") or "").strip() or "öğretici, net"
-    return TeacherPersona(catchphrases=phrases[:12], tone=tone[:120])
+    name = str(raw.get("name") or "").strip()[:48]
+    return TeacherPersona(name=name, catchphrases=phrases[:12], tone=tone[:120])
 
 
 def merge_personas(items: list[object]) -> TeacherPersona:
     phrases: list[str] = []
     seen: set[str] = set()
     tones: list[str] = []
+    names: list[str] = []
     for item in items:
         persona = parse_persona(item)
         for phrase in persona.catchphrases:
@@ -50,7 +53,10 @@ def merge_personas(items: list[object]) -> TeacherPersona:
             phrases.append(phrase)
         if persona.tone and persona.tone not in tones:
             tones.append(persona.tone)
+        if persona.name and persona.name not in names:
+            names.append(persona.name)
     return TeacherPersona(
+        name=names[0] if names else "",
         catchphrases=phrases[:12],
         tone=tones[0] if tones else "öğretici, net",
     )
