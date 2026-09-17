@@ -34,3 +34,8 @@ android/app/src/main/assets/public/
 frontend/out/
 node_modules/
 
+
+# Play / Google secrets — asla commit etme
+backend/secrets/
+*.iam.gserviceaccount.com.json
+

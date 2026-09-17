@@ -453,13 +453,19 @@ def _sandbox_payload(
 
 
 def _google_access_token() -> str:
-    raw_path = (settings.play_service_account_file or "").strip()
-    if not raw_path:
+    raw = (settings.play_service_account_file or "").strip()
+    if not raw:
         raise RuntimeError("PLAY_SERVICE_ACCOUNT_FILE yok.")
-    path = Path(raw_path)
-    if not path.is_file():
-        raise RuntimeError("Play servis hesabı dosyası bulunamadı.")
-    info = json.loads(path.read_text(encoding="utf-8"))
+    # Render: env'ye JSON yapıştırılabilir; lokal: dosya yolu.
+    if raw.startswith("{"):
+        info = json.loads(raw)
+    else:
+        path = Path(raw)
+        if not path.is_file():
+            raise RuntimeError("Play servis hesabı dosyası bulunamadı.")
+        info = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(info, dict) or not info.get("private_key"):
+        raise RuntimeError("Play servis hesabı JSON geçersiz.")
     now = int(time.time())
     header = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode()
     claim = {
