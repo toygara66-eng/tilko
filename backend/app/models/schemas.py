@@ -797,6 +797,18 @@ class ResetPasswordResponse(BaseModel):
     message: str = ""
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(default="", max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class ChangePasswordResponse(BaseModel):
+    ok: bool = True
+    user_id: str = ""
+    message: str = ""
+    had_password: bool = False
+
+
 class AdminSetPasswordRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)

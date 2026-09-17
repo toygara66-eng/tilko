@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -137,83 +138,105 @@ def list_sessions(
     subject: str | None = None,
     exam_target: str | None = None,
 ) -> list[dict]:
+    """Oturum listesi — tüm not satırlarını çekmeden GROUP BY ile sayar."""
     uid = (user_id or "").strip()
-    query = select(NotebookSession).where(NotebookSession.user_id == uid)
+    want = ""
     if (subject or "").strip():
-        query = query.where(
-            NotebookSession.subject == canonical_subject(subject, exam_target)
-        )
-    query = query.order_by(NotebookSession.updated_at.desc(), NotebookSession.id.desc())
-    rows = list(db.scalars(query).all())
+        want = canonical_subject(subject, exam_target)
 
-    # Eski kayıtlar için session yoksa video_id'lerden üret
-    items_q = select(SavedNotebookItem).where(SavedNotebookItem.user_id == uid)
-    if (subject or "").strip():
-        items_q = items_q.where(
-            SavedNotebookItem.subject == canonical_subject(subject, exam_target)
+    count_q = (
+        select(
+            SavedNotebookItem.subject,
+            SavedNotebookItem.video_id,
+            SavedNotebookItem.kind,
+            func.count(SavedNotebookItem.id),
+            func.max(SavedNotebookItem.video_url),
         )
-    existing = {(r.subject, r.video_id) for r in rows}
-    for item in db.scalars(items_q).all():
-        key = (item.subject or "Genel", item.video_id or "")
-        if not key[1] or key in existing:
+        .where(SavedNotebookItem.user_id == uid)
+        .where(SavedNotebookItem.video_id != "")
+        .group_by(
+            SavedNotebookItem.subject,
+            SavedNotebookItem.video_id,
+            SavedNotebookItem.kind,
+        )
+    )
+    if want:
+        count_q = count_q.where(SavedNotebookItem.subject == want)
+
+    tallies: dict[tuple[str, str], dict[str, int]] = {}
+    urls: dict[tuple[str, str], str] = {}
+    for subj, vid, kind, count, url in db.execute(count_q).all():
+        key = (subj or "Genel", vid or "")
+        if not key[1]:
+            continue
+        slot = tallies.setdefault(key, {"note_count": 0, "question_count": 0})
+        if kind == "question":
+            slot["question_count"] = int(count)
+        else:
+            slot["note_count"] = int(count)
+        if url and key not in urls:
+            urls[key] = str(url)
+
+    if not tallies:
+        return []
+
+    session_q = select(NotebookSession).where(NotebookSession.user_id == uid)
+    if want:
+        session_q = session_q.where(NotebookSession.subject == want)
+    session_map = {
+        (r.subject or "Genel", r.video_id or ""): r
+        for r in db.scalars(session_q).all()
+        if r.video_id
+    }
+
+    dirty = False
+    for key in tallies:
+        if key in session_map:
             continue
         created = ensure_session(
             db,
             user_id=uid,
             subject=key[0],
             video_id=key[1],
-            video_url=item.video_url or "",
+            video_url=urls.get(key, ""),
         )
         if created:
-            existing.add(key)
-            rows.append(created)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-
-    # Sayım
-    count_rows = db.execute(
-        select(
-            SavedNotebookItem.subject,
-            SavedNotebookItem.video_id,
-            SavedNotebookItem.kind,
-            func.count(SavedNotebookItem.id),
-        )
-        .where(SavedNotebookItem.user_id == uid)
-        .group_by(
-            SavedNotebookItem.subject,
-            SavedNotebookItem.video_id,
-            SavedNotebookItem.kind,
-        )
-    ).all()
-    tallies: dict[tuple[str, str], dict[str, int]] = {}
-    for subj, vid, kind, count in count_rows:
-        slot = tallies.setdefault(
-            (subj or "Genel", vid or ""),
-            {"note_count": 0, "question_count": 0},
-        )
-        if kind == "question":
-            slot["question_count"] = int(count)
-        else:
-            slot["note_count"] = int(count)
+            session_map[key] = created
+            dirty = True
+    if dirty:
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
 
     out: list[dict] = []
-    seen: set[tuple[str, str]] = set()
-    for row in sorted(
-        rows,
-        key=lambda r: (r.updated_at or r.created_at or _epoch(), r.id),
-        reverse=True,
-    ):
-        key = (row.subject or "Genel", row.video_id or "")
-        if key in seen or not key[1]:
+    for key, counts in tallies.items():
+        if not (counts["note_count"] or counts["question_count"]):
             continue
-        seen.add(key)
-        pub = _session_public(row)
-        counts = tallies.get(key) or {"note_count": 0, "question_count": 0}
+        row = session_map.get(key)
+        pub = (
+            _session_public(row)
+            if row
+            else {
+                "id": 0,
+                "subject": key[0],
+                "video_id": key[1],
+                "video_url": urls.get(key, ""),
+                "label": f"{key[0]} notları",
+                "created_at": None,
+                "updated_at": None,
+            }
+        )
         pub.update(counts)
-        if pub["note_count"] or pub["question_count"]:
-            out.append(pub)
+        out.append(pub)
+
+    out.sort(
+        key=lambda item: (
+            item.get("updated_at") or item.get("created_at") or "",
+            item.get("id") or 0,
+        ),
+        reverse=True,
+    )
     return out
 
 
@@ -650,8 +673,19 @@ def list_items(
     exam_target: str | None = None,
     summary: bool = False,
     video_id: str | None = None,
+    search: str | None = None,
 ) -> dict:
     uid = (user_id or "").strip()
+    needle = (search or "").strip()
+    if needle:
+        return search_items(
+            db,
+            uid,
+            query=needle,
+            subject=subject,
+            exam_target=exam_target,
+        )
+
     counts = subject_counts(db, uid)
     sessions = list_sessions(db, uid, subject=subject, exam_target=exam_target)
     base = {
@@ -669,26 +703,38 @@ def list_items(
         return base
 
     label_map = _label_map(db, uid)
-    query = select(SavedNotebookItem).where(SavedNotebookItem.user_id == uid)
+    from app.services.question_safety import sanitize_options, scrub_premises_for_play
+
+    def _fetch(subj_filter: str | None) -> list:
+        query = (
+            select(SavedNotebookItem)
+            .where(SavedNotebookItem.user_id == uid)
+            .where(SavedNotebookItem.video_id == vid)
+        )
+        if subj_filter:
+            query = query.where(SavedNotebookItem.subject == subj_filter)
+        query = query.order_by(
+            SavedNotebookItem.timestamp.asc(),
+            SavedNotebookItem.id.asc(),
+        )
+        return list(db.scalars(query).all())
+
+    subj = ""
     if (subject or "").strip() and (subject or "").strip().casefold() not in {
         "tümü",
         "tumu",
         "all",
     }:
-        query = query.where(
-            SavedNotebookItem.subject == canonical_subject(subject, exam_target)
-        )
-    query = query.where(SavedNotebookItem.video_id == vid)
-    query = query.order_by(
-        SavedNotebookItem.created_at.desc(),
-        SavedNotebookItem.timestamp.asc(),
-        SavedNotebookItem.id.asc(),
-    )
-    from app.services.question_safety import sanitize_options, scrub_premises_for_play
+        subj = canonical_subject(subject, exam_target)
+
+    # Önce subject+video; boşsa aynı video_id ile tüm dersler (eski kayıt uyumu).
+    rows = _fetch(subj) if subj else _fetch(None)
+    if not rows and subj:
+        rows = _fetch(None)
 
     notes: list[dict] = []
     questions: list[dict] = []
-    for row in db.scalars(query).all():
+    for row in rows:
         public = _to_public(row, label_map)
         if not public:
             continue
@@ -702,6 +748,104 @@ def list_items(
             notes.append(public)
     base["notes"] = notes
     base["questions"] = questions
+    return base
+
+
+def _search_tokens(query: str) -> list[str]:
+    raw = (query or "").strip().casefold()
+    if not raw:
+        return []
+    parts = []
+    for p in re.split(r"\s+", raw):
+        if not p:
+            continue
+        # "7", "I", "II" gibi kısa ama anlamlı tokenlar
+        if len(p) >= 2 or p.isdigit() or re.fullmatch(r"[ivxlcdm]+", p):
+            parts.append(p)
+    if not parts and len(raw) >= 2:
+        return [raw]
+    return parts[:8]
+
+
+def _note_search_blob(public: dict) -> str:
+    bits = [
+        str(public.get("title") or ""),
+        str(public.get("text") or ""),
+        str(public.get("detail") or ""),
+        str(public.get("mnemonic") or ""),
+        str(public.get("exam_tip") or ""),
+        str(public.get("subject") or ""),
+        str(public.get("session_label") or ""),
+        " ".join(str(p) for p in (public.get("key_points") or [])),
+    ]
+    return " ".join(bits).casefold()
+
+
+def search_items(
+    db: Session,
+    user_id: str,
+    *,
+    query: str,
+    subject: str | None = None,
+    exam_target: str | None = None,
+    limit: int = 60,
+) -> dict:
+    """Başlık / metin / maddelerde kelime veya cümle arar."""
+    uid = (user_id or "").strip()
+    tokens = _search_tokens(query)
+    counts = subject_counts(db, uid)
+    base = {
+        "user_id": uid,
+        "subject": (subject or "").strip() or None,
+        "subjects": counts,
+        "sessions": [],
+        "notes": [],
+        "questions": [],
+    }
+    if not uid or not tokens:
+        return base
+
+    q = (
+        select(SavedNotebookItem)
+        .where(SavedNotebookItem.user_id == uid)
+        .where(SavedNotebookItem.kind == "note")
+        .order_by(SavedNotebookItem.id.desc())
+        .limit(500)
+    )
+    want = ""
+    if (subject or "").strip():
+        want = canonical_subject(subject, exam_target)
+        q = q.where(SavedNotebookItem.subject == want)
+
+    # SQL ön süzgeç: ilk token title veya payload içinde
+    first = tokens[0]
+    like = f"%{first}%"
+    q = q.where(
+        or_(
+            SavedNotebookItem.title.ilike(like),
+            SavedNotebookItem.payload_json.ilike(like),
+        )
+    )
+
+    label_map = _label_map(db, uid)
+    scored: list[tuple[int, dict]] = []
+    for row in db.scalars(q).all():
+        public = _to_public(row, label_map)
+        if not public:
+            continue
+        blob = _note_search_blob(public)
+        if not all(tok in blob for tok in tokens):
+            continue
+        # Daha fazla eşleşen token / başlıkta geçen = üstte
+        score = sum(
+            3 if tok in (public.get("title") or "").casefold() else 1 for tok in tokens
+        )
+        if first in (public.get("title") or "").casefold():
+            score += 5
+        scored.append((score, public))
+
+    scored.sort(key=lambda pair: (-pair[0], -(pair[1].get("saved_id") or 0)))
+    base["notes"] = [item for _, item in scored[: max(1, min(limit, 80))]]
     return base
 
 

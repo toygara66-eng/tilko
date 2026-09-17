@@ -527,7 +527,34 @@ _FILLER_TRANSCRIPT_RE = re.compile(
     r"("
     r"gitti\s+geliyor|geldi\s+gitti|ne\s+yapsak|ne\s+etsek|"
     r"bakalım\s+görelim|olsa\s+olsa|yapsak\s+etsek|"
-    r"şöyle\s+böyle|ee+\s|ıı+\s|hmm+"
+    r"[sş]öyle\s+böyle|ee+\s|ıı+\s|hmm+|"
+    r"merhaba\s+(arkada[sş]lar|dostlar|canlar)|herkese\s+merhaba|"
+    r"bugün\s+(ne\s+yapacağız|neler\s+yapacağız)|videoya\s+ho[sş]\s+geld|"
+    r"kanalıma\s+ho[sş]|iyi\s+dersler|haydi\s+ba[sş]layalım|"
+    r"bir\s+dakika\s+(bekleyin|durun)|mikrofonu?\s+(ayar|aç|kapat)|"
+    r"sesim\s+geliyor\s+mu|ekranı\s+payla[sş]|pdf'?i?\s+(aç|göster)|"
+    r"yorumlara\s+yaz|be[gğ]enmeyi\s+unutm|abone\s+olmayı|"
+    r"telegram\s+(grub|kanal)|whatsapp\s+(grub|kanal)|"
+    r"[sş]imdi\s+ne\s+diyecektim|neyse\s+neydi|[sş]ey\s+yani|"
+    r"anladınız\s+mı\s+anladınız|tamam\s+mı\s+tamam|"
+    r"gülüyoruz|[sş]aka\s+bir\s+yana|lafı\s+uzatmadan"
+    r")",
+    re.IGNORECASE,
+)
+
+# Satır bazlı sohbet ayıklama — LLM'e gitmeden önce
+_CHATTER_LINE_RE = re.compile(
+    r"("
+    r"^\s*\[?\d+\]?\s*(ee+|ıı+|aa+|hmm+|şey+|yani+)\s*$|"
+    r"gitti\s+geliyor|geldi\s+gitti|"
+    r"merhaba\s+(arkada[sş]lar|dostlar|canlar)|herkese\s+merhaba|"
+    r"videoya\s+ho[sş]\s+geld|kanalıma\s+ho[sş]|"
+    r"abone\s+ol|be[gğ]enmeyi\s+unutm|yorumlara\s+yaz|"
+    r"telegram|whatsapp\s+grup|ücretsiz\s*pdf|pdf'?i?\s*indir|"
+    r"mikrofon|sesim\s+geliyor|ekranı\s+payla[sş]|"
+    r"bir\s+dakika\s+(bekleyin|durun)|[sş]aka\s+bir\s+yana|"
+    r"[sş]imdi\s+ne\s+diyecektim|neyse\s+neydi|"
+    r"lafı\s+uzatmadan|haydi\s+ba[sş]layalım\s*$"
     r")",
     re.IGNORECASE,
 )
@@ -547,6 +574,57 @@ _EDU_SIGNAL_RE = re.compile(
 )
 
 
+def _scrub_transcript_chatter(text: str) -> str:
+    """Selam/espri/CTA satırlarını LLM öncesi düşür; eğitim sinyali varsa satırı tut."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    lines = raw.splitlines()
+    if len(lines) < 2:
+        # Tek blok: satır yoksa cümle bazlı ayıkla
+        parts = re.split(r"(?<=[.!?…])\s+", raw)
+        kept = []
+        for part in parts:
+            piece = part.strip()
+            if len(piece) < 12:
+                continue
+            if _CHATTER_LINE_RE.search(piece) and not _EDU_SIGNAL_RE.search(piece):
+                continue
+            if _FILLER_TRANSCRIPT_RE.search(piece) and not _EDU_SIGNAL_RE.search(piece):
+                continue
+            kept.append(piece)
+        return " ".join(kept) if kept else raw
+
+    kept_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Zaman damgasını koru: [123] metin
+        body = re.sub(r"^\[\d+\]\s*", "", stripped)
+        if len(body) < 8:
+            # Çok kısa filler satır
+            if _CHATTER_LINE_RE.search(body) or _FILLER_TRANSCRIPT_RE.search(body):
+                continue
+            kept_lines.append(stripped)
+            continue
+        if (
+            (_CHATTER_LINE_RE.search(body) or _FILLER_TRANSCRIPT_RE.search(body))
+            and not _EDU_SIGNAL_RE.search(body)
+        ):
+            continue
+        if _PROMO_NOTE_RE.search(body) and not _EDU_SIGNAL_RE.search(body):
+            continue
+        kept_lines.append(stripped)
+    nonempty = [ln for ln in lines if ln.strip()]
+    if not kept_lines:
+        return raw
+    # Çok kısa dilimde tek eğitim satırı kalması normal; ham sohbeti geri verme
+    if len(nonempty) >= 12 and len(kept_lines) < max(2, len(nonempty) // 10):
+        return raw
+    return "\n".join(kept_lines)
+
+
 def _note_blob(note: dict) -> str:
     return " ".join(
         [
@@ -562,21 +640,21 @@ def _note_blob(note: dict) -> str:
 
 
 def _is_thin_note(note: dict) -> bool:
-    """İskelet / boş not — banko sınav notu sayılmaz (kısa ama dolu not OK)."""
+    """İskelet / boş not — öğretici sınav notu sayılmaz."""
     detail = str(note.get("detail") or note.get("text") or "").strip()
     points = [str(p).strip() for p in (note.get("key_points") or []) if str(p).strip()]
     tip = str(note.get("exam_tip") or "").strip()
     title = str(note.get("title") or "").strip()
     substance = len(detail) + sum(len(p) for p in points) + len(tip)
-    if len(points) >= 3 and substance >= 90:
+    if len(points) >= 4 and len(detail) >= 120 and substance >= 220:
         return False
-    if len(detail) >= 40 and len(points) >= 2:
+    if len(detail) >= 180 and len(points) >= 3:
         return False
-    if substance < 90 and len(points) < 3:
+    if substance < 140 and len(points) < 4:
         return True
-    if len(detail) < 24 and len(points) < 2:
+    if len(detail) < 80 and len(points) < 3:
         return True
-    if detail and title and detail.casefold() == title.casefold() and len(points) < 2:
+    if detail and title and detail.casefold() == title.casefold() and len(points) < 3:
         return True
     return False
 
@@ -598,8 +676,14 @@ def _is_junk_note(note: dict) -> bool:
     # Ham altyazı tekrarı / boş sohbet
     if _FILLER_TRANSCRIPT_RE.search(title) and not _EDU_SIGNAL_RE.search(blob):
         return True
+    if _CHATTER_LINE_RE.search(title) and not _EDU_SIGNAL_RE.search(blob):
+        return True
+    # Detail tamamen sohbetse çöp
+    if detail and _FILLER_TRANSCRIPT_RE.search(detail) and not _EDU_SIGNAL_RE.search(detail):
+        if len(detail) < 160:
+            return True
     points = [str(p).strip() for p in (note.get("key_points") or []) if str(p).strip()]
-    if len(detail) < 40 and len(points) < 2 and not _EDU_SIGNAL_RE.search(blob):
+    if len(detail) < 60 and len(points) < 3 and not _EDU_SIGNAL_RE.search(blob):
         return True
     # Aynı kelimeyi 4+ kez tekrarlayan çöp
     words = re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]{3,}", blob.lower())
@@ -648,7 +732,7 @@ def _clip_at_word(text: str, max_len: int) -> str:
 
 
 def _compact_exam_notes(notes: list[dict]) -> list[dict]:
-    """Uzun kompozisyonu 100'lük öğrenci defteri formatına sıkıştır."""
+    """Aşırı uzun notları öğretici sınav formatına indir; detayı öldürme."""
     out: list[dict] = []
     for raw in notes:
         if not isinstance(raw, dict):
@@ -656,32 +740,32 @@ def _compact_exam_notes(notes: list[dict]) -> list[dict]:
         note = dict(raw)
         detail = str(note.get("detail") or note.get("text") or "").strip()
         points = [str(p).strip() for p in (note.get("key_points") or []) if str(p).strip()]
-        if len(points) < 3 and detail:
+        if len(points) < 4 and detail:
             sents = [
                 s.strip()
                 for s in re.split(r"(?<=[.!?…])\s+", detail)
                 if len(s.strip()) >= 12
             ]
             for sent in sents:
-                if len(points) >= 6:
+                if len(points) >= 7:
                     break
-                chunk = _clip_at_word(sent, 90)
+                chunk = _clip_at_word(sent, 130)
                 if chunk and chunk not in points:
                     points.append(chunk)
-        if len(detail) > 180:
+        if len(detail) > 520:
             sents = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", detail) if s.strip()]
-            detail = " ".join(sents[:3])
-            detail = _clip_at_word(detail, 180)
+            detail = " ".join(sents[:6])
+            detail = _clip_at_word(detail, 520)
         note["detail"] = detail
         note["text"] = detail
-        note["key_points"] = [_clip_at_word(p, 90) for p in points[:6]]
+        note["key_points"] = [_clip_at_word(p, 130) for p in points[:7]]
         tip = str(note.get("exam_tip") or "").strip()
         if tip:
             tip_sents = re.split(r"(?<=[.!?…])\s+", tip)
-            note["exam_tip"] = _clip_at_word(tip_sents[0].strip(), 120)
+            note["exam_tip"] = _clip_at_word(" ".join(tip_sents[:2]).strip(), 180)
         mnemonic = str(note.get("mnemonic") or "").strip()
         if mnemonic:
-            note["mnemonic"] = _clip_at_word(mnemonic, 120)
+            note["mnemonic"] = _clip_at_word(mnemonic, 140)
         out.append(note)
     return out
 
@@ -709,15 +793,16 @@ def _expand_thin_notes(
     try:
         result = _as_dict(
             _chat(
-                "Türkçe KPSS sınav notu yazarısın. İskelet notları 100'lük öğrenci "
-                "defteri formatına ÇEVİR: kısa detail + 4-6 banko madde. "
-                "Uzun kompozisyon YASAK. Altyazıda olmayanı uydurma. Sadece JSON.",
+                "Türkçe KPSS sınav notu yazarısın. İskelet notları ÖĞRETİCİ "
+                "sınav defterine çevir: detail 3-6 cümle + 5-7 banko madde. "
+                "Sohbet/espri yazma. Altyazıda olmayanı uydurma. Sadece JSON.",
                 (
                     f"Ders: {subject or 'KPSS'}\n"
-                    f"Altyazı:\n{(transcript or '')[:4500]}\n\n"
-                    f"İskelet notlar (bankola):\n{json.dumps(compact, ensure_ascii=False)}\n\n"
-                    "Her not: detail 1-3 kısa cümle (~40-180 karakter); "
-                    "key_points 4-6 bitmiş madde (her biri max ~90 karakter). "
+                    f"Altyazı:\n{_scrub_transcript_chatter(transcript or '')[:4500]}\n\n"
+                    f"İskelet notlar (öğretici hale getir):\n"
+                    f"{json.dumps(compact, ensure_ascii=False)}\n\n"
+                    "Her not: detail 3-6 cümle (~220-520 karakter); "
+                    "key_points 5-7 bitmiş madde (her biri max ~130 karakter). "
                     "Cümleyi '...' ile kesme. Şema: "
                     '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                     '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
@@ -1925,20 +2010,21 @@ def generate_notes(
     from app.services.exams import prompt_block
 
     system = NOTES_SYSTEM_PROMPT + "\n\n" + prompt_block(exam_target)
-    total = len(chunks)
+    cleaned = [_scrub_transcript_chatter(block) for block in chunks]
+    total = len(cleaned)
     jobs = [
         (lambda block=block, i=i: _chat(
             system,
             build_notes_prompt(block, subject, i, total, exam_target),
             task="notes",
         ))
-        for i, block in enumerate(chunks, start=1)
+        for i, block in enumerate(cleaned, start=1)
     ]
     logger.info("Not üretimi: %s parça", total)
     results = _run_parallel(jobs)
     notes: list[dict] = []
     empty = 0
-    for result, block in zip(results, chunks):
+    for result, block in zip(results, cleaned):
         chunk_notes = _ground_notes(
             _coerce_notes(result if isinstance(result, dict) else {}),
             block,
@@ -2298,13 +2384,14 @@ def _analyze_combined(
     notes_wanted = max(4, min(int(note_count or 6), 7))
     # Ücretli Gemini: daha zengin bağlam.
     hard_cap = max(7000, min(int(settings.analyze_prompt_chars), 12000))
-    work = (chunk or "")[:hard_cap]
+    work = _scrub_transcript_chatter(chunk or "")[:hard_cap]
     system = (
         NOTES_SYSTEM_PROMPT
         + "\n\nNot ve soruyu AYNI JSON içinde ver. Altyazıda olmayan bilgiyi "
-        "not, şık veya açıklamaya yazma. 100'lük öğrenci defteri: her not "
-        "1-3 kısa cümle detail + 4-6 banko madde; uzun kompozisyon YASAK; "
-        "cümleyi '...' ile kesme. Sadece JSON; markdown yok.\n\n"
+        "not, şık veya açıklamaya yazma. Her not ÖĞRETİCİ olsun: detail 3-6 "
+        "cümle (~220-520 karakter) + 5-7 banko madde; sohbet/espri YASAK; "
+        "cümleyi '...' ile kesme. Sorular ÖSYM üslubunda (hangisi doğru/"
+        "yanlış/değildir + yakın kavram çeldiricisi). Sadece JSON; markdown yok.\n\n"
         + prompt_block(exam_target)
         + questions_system_for(
             subject_type=subject_type,
@@ -2342,12 +2429,12 @@ def _analyze_combined(
             short = work[:4500]
             result = _as_dict(
                 _chat(
-                    "Türkçe KPSS banko sınav notu yaz. Sadece JSON. notes boş olamaz. "
-                    "Altyazıda yoksa uydurma. Her not: 1-3 kısa cümle + 4-6 madde. "
-                    "Uzun paragraf YASAK. Tanıtım YASAK. İngilizce uyarı / kota / 'I cannot' YASAK.",
+                    "Türkçe KPSS öğretici sınav notu yaz. Sadece JSON. notes boş olamaz. "
+                    "Altyazıda yoksa uydurma. Her not: 3-6 cümle detail + 5-7 madde. "
+                    "Sohbet/espri/abone-PDF YASAK. İngilizce uyarı / kota / 'I cannot' YASAK.",
                     (
                         f"Ders: {subject or 'KPSS'}\nAltyazı:\n{short}\n\n"
-                        "5-7 banko not yaz. Şema: "
+                        "5-7 öğretici not yaz. Şema: "
                         '{"notes":[{"title":"...","quote":"...","detail":"...","key_points":["..."],'
                         '"mnemonic":"...","exam_tip":"...","timestamp":0}]}'
                     ),

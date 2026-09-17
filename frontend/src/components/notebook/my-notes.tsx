@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Download, Pencil } from "lucide-react";
+import { ChevronLeft, Download, Pencil, Search, X } from "lucide-react";
 import { HumanNoteCard } from "@/components/notes/human-note-card";
 import { NoteModeToggle } from "@/components/notes/note-mode";
 import { QuestionCard } from "@/components/analyze/question-card";
@@ -35,6 +35,48 @@ export function MyNotes() {
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<SavedNoteItem[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+
+  const searching = searchQuery.trim().length >= 2;
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 280);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (!searching) {
+      setSearchHits([]);
+      setSearchBusy(false);
+      return;
+    }
+    let live = true;
+    setSearchBusy(true);
+    listNotebook(getUserId(), {
+      q: searchQuery,
+    })
+      .then((payload) => {
+        if (!live) return;
+        setSearchHits(payload.notes || []);
+        setError("");
+      })
+      .catch((err) => {
+        if (!live) return;
+        setError(err instanceof Error ? err.message : "Arama başarısız");
+        setSearchHits([]);
+      })
+      .finally(() => {
+        if (live) setSearchBusy(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [searchQuery, searching]);
 
   const chips = useMemo(() => {
     const counts = new Map(
@@ -54,7 +96,10 @@ export function MyNotes() {
   const sessions = useMemo(() => {
     const list = data?.sessions || [];
     if (!subject) return list;
-    return list.filter((s) => s.subject === subject);
+    const needle = subject.trim().toLocaleLowerCase("tr-TR");
+    return list.filter(
+      (s) => (s.subject || "").trim().toLocaleLowerCase("tr-TR") === needle,
+    );
   }, [data, subject]);
 
   const activeSession = useMemo(
@@ -64,8 +109,17 @@ export function MyNotes() {
 
   useEffect(() => {
     let live = true;
+    let seq = 0;
     function load() {
+      const my = ++seq;
       setBusy(true);
+      if (videoId) {
+        setData((prev) =>
+          prev
+            ? { ...prev, notes: [], questions: [] }
+            : prev,
+        );
+      }
       const uid = getUserId();
       const summary = !videoId;
       listNotebook(uid, {
@@ -74,24 +128,26 @@ export function MyNotes() {
         summary,
       })
         .then((payload) => {
-          if (!live) return;
+          if (!live || my !== seq) return;
           setData((prev) => {
             if (!prev || summary) return payload;
             return {
               ...prev,
-              ...payload,
+              notes: payload.notes || [],
+              questions: payload.questions || [],
               subjects: payload.subjects?.length ? payload.subjects : prev.subjects,
               sessions: payload.sessions?.length ? payload.sessions : prev.sessions,
+              subject: payload.subject ?? prev.subject,
             };
           });
           setError("");
         })
         .catch((err) => {
-          if (!live) return;
+          if (!live || my !== seq) return;
           setError(err instanceof Error ? err.message : "Notlar yüklenemedi");
         })
         .finally(() => {
-          if (live) setBusy(false);
+          if (live && my === seq) setBusy(false);
         });
     }
     load();
@@ -106,15 +162,13 @@ export function MyNotes() {
   }, [subject, videoId]);
 
   const notes = useMemo(() => {
-    const all = (subject ? data?.notes : []) || [];
-    if (!videoId) return all;
-    return all.filter((n) => (n.video_id || "") === videoId);
+    if (!subject || !videoId) return [];
+    return data?.notes || [];
   }, [data, subject, videoId]);
 
   const questions = useMemo(() => {
-    const all = (subject ? data?.questions : []) || [];
-    if (!videoId) return all;
-    return all.filter((q) => (q.video_id || "") === videoId);
+    if (!subject || !videoId) return [];
+    return data?.questions || [];
   }, [data, subject, videoId]);
 
   const pickSubject = (name: string) => {
@@ -129,13 +183,20 @@ export function MyNotes() {
 
   const backToSessions = () => setVideoId(null);
 
+  const clearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+  };
+
   const emptyArchive =
     !busy &&
+    !searching &&
     !subject &&
     chips.every((s) => s.note_count === 0 && s.question_count === 0);
 
   const emptySubject =
     !busy &&
+    !searching &&
     !!subject &&
     !videoId &&
     sessions.length === 0 &&
@@ -191,14 +252,70 @@ export function MyNotes() {
             Notlarım
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">
-            Ders seç → not setine isim ver → PDF indir. Örn: “Türkçe · Aker Kartal
-            ekler konu anlatımı”.
+            Kelime veya cümle ara; geçen notlar listelenir. Ders seç → sete isim ver → PDF.
           </p>
         </div>
         <NoteModeToggle className="self-start" />
       </div>
 
-      {subject ? (
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+        <Input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Notlarda ara… örn. anayasa madde 7"
+          className="h-12 pl-10 pr-10"
+          aria-label="Notlarda ara"
+        />
+        {searchInput ? (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            aria-label="Aramayı temizle"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
+      {searching ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {searchBusy
+                ? "Aranıyor…"
+                : `${searchHits.length} not · “${searchQuery}”`}
+            </p>
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="text-xs font-medium text-orange-600 hover:underline dark:text-orange-300"
+            >
+              Aramayı kapat
+            </button>
+          </div>
+          {!searchBusy && searchHits.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              Bu kelimeleri içeren not bulunamadı.
+            </p>
+          ) : null}
+          <div className="space-y-4">
+            {searchHits.map((note, index) => (
+              <div key={note.saved_id || note.id} className="space-y-2">
+                <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                  {[note.subject, note.session_label].filter(Boolean).join(" · ")}
+                </p>
+                <HumanNoteCard
+                  {...fromNoteItem(note, index % 2 === 0 ? -1.1 : 0.9)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!searching && subject ? (
         <nav className="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           <button
             type="button"
@@ -231,7 +348,7 @@ export function MyNotes() {
         </nav>
       ) : null}
 
-      {!subject ? (
+      {!searching && !subject ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {chips.map((chip) => {
             const total = chip.note_count + chip.question_count;
@@ -258,7 +375,7 @@ export function MyNotes() {
         </div>
       ) : null}
 
-      {subject && !videoId ? (
+      {!searching && subject && !videoId ? (
         <div className="space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Not setleri
@@ -284,7 +401,7 @@ export function MyNotes() {
         </div>
       ) : null}
 
-      {subject && videoId ? (
+      {!searching && subject && videoId ? (
         <div className="space-y-4">
           <div className="flex flex-col gap-3 rounded-2xl border border-orange-300/50 bg-orange-50/60 p-4 dark:border-orange-500/30 dark:bg-orange-950/20 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -398,7 +515,9 @@ export function MyNotes() {
       ) : null}
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
-      {busy ? <p className="text-sm text-zinc-500">Notlar yükleniyor…</p> : null}
+      {busy && !searching ? (
+        <p className="text-sm text-zinc-500">Notlar yükleniyor…</p>
+      ) : null}
 
       {emptyArchive ? (
         <HumanNoteCard

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useSecretAdminTap } from "@/components/brand/secret-admin-tap";
+import foxLogo from "./tilko-fox.png";
 
-const LOGO_FILES = ["/logo.png", "/logo.svg", "/logo.webp"];
+const foxSrc = typeof foxLogo === "string" ? foxLogo : foxLogo.src;
 
 function Mark({ size }: { size: number }) {
   return (
@@ -31,32 +32,31 @@ export function TilkoLogo({
   className?: string;
   size?: number;
 }) {
-  const [fileIndex, setFileIndex] = useState(0);
-  const src = LOGO_FILES[fileIndex];
+  const [broken, setBroken] = useState(false);
   const openAdmin = useSecretAdminTap();
 
   return (
     <span
       className={cn(
         "inline-flex select-none items-center justify-center overflow-hidden rounded-xl bg-zinc-950",
-        src ? null : "bg-cyan-400 text-zinc-950 shadow-neon",
+        broken ? "bg-cyan-400 text-zinc-950 shadow-neon" : null,
         className,
       )}
       style={{ width: size, height: size }}
       onClick={openAdmin}
     >
-      {src ? (
+      {broken ? (
+        <Mark size={size} />
+      ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
+          src={foxSrc}
           alt="TİLKO"
           width={size}
           height={size}
           className="h-full w-full object-contain"
-          onError={() => setFileIndex((i) => i + 1)}
+          onError={() => setBroken(true)}
         />
-      ) : (
-        <Mark size={size} />
       )}
     </span>
   );

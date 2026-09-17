@@ -18,6 +18,7 @@ from app.security.auth import (
     hash_password,
     normalize_email,
     normalize_phone,
+    verify_password,
 )
 
 logger = logging.getLogger(__name__)
@@ -308,6 +309,47 @@ def admin_issue_reset_code(db: Session, user_id: str) -> dict:
         "message": (
             f"Kod hazır ({CODE_TTL_MINUTES} dk). "
             + ("E-posta da gönderildi." if mailed else "E-posta gitmedi — kodu kullanıcıya elle ilet.")
+        ),
+    }
+
+
+def change_password(
+    db: Session,
+    user_id: str,
+    *,
+    current_password: str = "",
+    new_password: str = "",
+) -> dict:
+    """Oturum açık kullanıcı şifresini değiştirir (veya ilk kez belirler)."""
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("Oturum gerekli.")
+    if len(new_password or "") < 8:
+        raise ValueError("Yeni şifre en az 8 karakter olmalı.")
+    user = db.get(User, uid)
+    if user is None:
+        raise ValueError("Kullanıcı bulunamadı.")
+
+    had = bool((user.password_hash or "").strip())
+    if had:
+        if not (current_password or "").strip():
+            raise ValueError("Mevcut şifreni gir.")
+        if not verify_password(current_password, user.password_hash or ""):
+            raise ValueError("Mevcut şifre hatalı.")
+        if verify_password(new_password, user.password_hash or ""):
+            raise ValueError("Yeni şifre eskisiyle aynı olamaz.")
+
+    user.password_hash = hash_password(new_password)
+    db.add(user)
+    db.commit()
+    return {
+        "ok": True,
+        "user_id": uid,
+        "had_password": had,
+        "message": (
+            "Şifren güncellendi."
+            if had
+            else "Şifre belirlendi. Bundan sonra e-posta/telefon + şifre ile de giriş yapabilirsin."
         ),
     }
 

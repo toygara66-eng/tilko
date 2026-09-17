@@ -83,8 +83,8 @@ def running_count() -> int:
 def find_running(
     video_id: str, subject: str | None, focus_bucket: int = 0
 ) -> dict[str, Any] | None:
+    """Aynı video+ders için çalışan iş — URL t= farkı önemli değil."""
     wanted = (subject or "").strip()
-    bucket = int(focus_bucket or 0)
     with _lock:
         for job in _JOBS.values():
             if job.get("status") != "running":
@@ -92,8 +92,6 @@ def find_running(
             if job.get("video_id") != video_id:
                 continue
             if (job.get("subject") or "").strip() != wanted:
-                continue
-            if int(job.get("focus_bucket") or 0) != bucket:
                 continue
             return dict(job)
     return None

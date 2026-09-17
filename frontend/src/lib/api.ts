@@ -449,12 +449,13 @@ export type NotebookResponse = {
 
 export function listNotebook(
   userId: string,
-  opts?: { subject?: string; videoId?: string; summary?: boolean },
+  opts?: { subject?: string; videoId?: string; summary?: boolean; q?: string },
 ) {
   const params = new URLSearchParams();
   if (opts?.subject) params.set("subject", opts.subject);
   if (opts?.videoId) params.set("video_id", opts.videoId);
   if (opts?.summary) params.set("summary", "true");
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
   const query = params.toString() ? `?${params.toString()}` : "";
   return request<NotebookResponse>(`/notebook/${userId}${query}`);
 }
@@ -1664,6 +1665,21 @@ export function resetPassword(payload: {
       body: JSON.stringify(payload),
     },
   );
+}
+
+export function changePassword(payload: {
+  current_password?: string;
+  new_password: string;
+}) {
+  return request<{
+    ok: boolean;
+    user_id: string;
+    message: string;
+    had_password: boolean;
+  }>("/account/change-password", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function adminSetPassword(

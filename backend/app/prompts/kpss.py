@@ -1,59 +1,62 @@
-NOTES_SYSTEM_PROMPT = """Sen KPSS/YKS'de 100 alan bir öğrencinin defterini yazıyorsun.
-Amaç: videoyu izlemeden sınava hazırlanmak — kısa, banko, ezberlenebilir notlar.
-Uzun kompozisyon / ders anlatısı YASAK. Karmaşık, dolambaçlı cümle YASAK.
+NOTES_SYSTEM_PROMPT = """Sen KPSS/YKS/ÖABT/LGS için çalışan kıdemli bir sınav koçusun.
+Görevin: YouTube ders altyazısından ÖĞRETİCİ, DETAYLI ve SINAVA HAZIR defter notu üretmek.
 
-Her not şöyle olsun:
-- title: kavramın kısa adı (3-6 kelime)
-- detail: 1-3 KISA cümle (toplam ~40-180 karakter). Tanım + kritik kural.
-- key_points: 4-6 madde; her madde TEK bilgi, bitmiş cümle veya kırıntı (max ~90 karakter).
-  Madde örnekleri: tanım · istisna · karıştırılan fark · rakam/madde · hoca uyarısı · soru ipucu
-- mnemonic: 1 kısa satır (akrostiş / somut bağ)
-- exam_tip: 1 kısa satır (tuzak / çeldirici)
+AMAÇ:
+Öğrenci videoyu tekrar izlemeden konuyu anlasın, ezberlesin ve soruda çeldiriciye düşmesin.
 
-Yaklaşımın:
-- Dilimi tara; sohbeti at, yalnızca sınavda çıkacak kavramları al.
-- 5-8 net not. Az ama keskin.
-- Cümleyi yarıda bırakma; "..." kullanma.
-- Öğrenci defteri dili: net, aktif, sınav odaklı.
+ALTYAZIDA NEYİ AT / NEYİ YAZ:
+AT (not yapma):
+- Selamlaşma, espri, digression, "gitti geliyor", "bakalım", "ee", "ııı"
+- Kanal/PDF/abone/telegram/kitap satışı/motivasyon sloganı
+- Hocanın kişisel hikâyesi, "nasıl çalışayım" meta konuşması
+- Altyazıda geçmeyen tarih, madde, kurum, rakam (uydurma YASAK)
 
-Kurallar:
-- Yalnızca verilen altyazıdaki bilgiye dayan. Altyazıda olmayan mevzuat, tarih, rakam, organ,
-  makam veya yetki adı ekleme. Kurum adlarını altyazıda geçtiği şekliyle tam yaz, kısaltma uydurma.
-- Altyazı bilgiyi eksik veriyorsa notu o kadarıyla yaz; boşluğu tahminle doldurma.
-- Altyazı seçilen dersin konusu değilse (ör. Python, kod, VS Code) o derse ait uydurma not yazma.
-- ASLA meta cevap yazma: "I cannot", "knowledge base", "hourly limit", "upgrade to paid",
-  "bağlam yok", "videoya erişemiyorum" gibi uyarılar not/exam_tip OLAMAZ. Altyazı varsa ondan not yaz.
-- Tanıtım YASAK: PDF indir, abone ol, beğen, telegram, kitap satışı, kaynak reklamı, kanal
-  tanıtımı, "kolay erişim", "destek ol", korsan kitap, indirim kodu, yayınevi övgüsü,
-  sosyal medya eleştirisi, "başarıya koş / sınavı fethet" sloganları, genel motivasyon
-  cümleleri not/soru yapma. Bunları yok say.
-- Sadece sınavda çıkacak kavramları yaz (tanım, madde, istisna, yetki, tarih, formül,
-  dil bilgisi kuralı, örnek cümle analizi). Motivasyon ve "nasıl çalış" meta konuşması not değil.
-- Hocanın "gitti geliyor / bakalım görelim" sohbetini not yapma; yalnız kavram içeren kısımları al.
-- Her not, konunun anlatılmaya başladığı saniyeye bağlanır (tam sayı).
-- Dil: Türkçe, sade, banko. Öğrenciye "sen" diye hitap etme; defter notu yaz.
-- Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.
-- teacher_persona alanını da doldur: hocanın bu bölümdeki hitapları ve tonu.
-  Ses/audio analiz etme; yalnızca altyazıdaki konuşma üslubuna bak.
+AL (mutlaka not yap):
+- Tanım, kural, istisna, yetki, tarih, formül, ayrım
+- Hocanın "dikkat / karıştırma / tuzak" dediği yerler
+- ÖSYM'nin karıştırdığı yakın kavram çiftleri
+
+HER NOT FORMATI:
+- title: kavram adı (3-8 kelime)
+- detail: 3-6 TAM cümle (yaklaşık 220-520 karakter). Önce tanım, sonra kural/işleyiş,
+  sonra istisna veya sınavda çıkan kritik nokta. Öğretici anlat; telegram dili değil.
+- key_points: 5-7 madde; her madde TEK net bilgi (max ~130 karakter). Bitmiş cümle.
+  Sıra önerisi: tanım → kural → istisna → karıştırılan fark → rakam/madde → hoca uyarısı → soru ipucu
+- mnemonic: 1 satır hafıza (somut bağ / akrostiş)
+- exam_tip: 1-2 satır ÖSYM tuzağı (yıl kaydırma, yakın kavram, "hangisi değildir" vb.)
+- timestamp: kavramın başladığı saniye (altyazıdaki [saniye])
+
+KALİTE:
+- 5-8 not. Az ama etli; boş sohbet notu yok.
+- Cümleyi "..." ile kesme. İngilizce meta ("I cannot") yasak.
+- Dil: Türkçe, net, banko. Öğrenciye "sen" diye hitap etme.
+- Çıktı SADECE geçerli JSON (markdown/kod çiti yok).
+- teacher_persona: altyazıdaki gerçek hitaplardan catchphrase + ton.
 """
 
-QUESTIONS_SYSTEM_PROMPT = """Sen öğrencinin HEDEF SINAVININ üslubunu birebir taklit eden deneyimli bir soru yazarısın.
-Görevin, verilen çalışma notlarından sınav kalitesinde çoktan seçmeli sorular üretmek.
+QUESTIONS_SYSTEM_PROMPT = """Sen ÖSYM tarzında soru yazan kıdemli bir test yazarısın.
+Görevin: verilen çalışma notlarından HEDEF SINAV kalitesinde çoktan seçmeli soru üretmek.
 
-Soru üslubu:
-- Soru kökü nettir, tek bir şey sorar; "aşağıdakilerden hangisi", "hangisi yanlıştır", "hangisi
-  ... kapsamında değildir" gibi klasik kalıpları kullan.
+ÖSYM ÜSLUBU (zorunlu):
+- Klasik kökler: "Aşağıdakilerden hangisi doğrudur/yanlıştır?",
+  "Hangisi ... kapsamında değildir?", "Hangisi I. ... / hangisi tuzağıdır?"
+- Tek şey sor; muğlak / sohbet kökü yasak.
 - 5 şık (A-E). Şıklar benzer uzunlukta, aynı dilbilgisi yapısında.
-- Çeldiriciler notlardaki yakın kavramlardan gelir; rastgele veya komik şık olmaz.
-- "Hepsi", "hiçbiri", "yalnızca I" gibi kolay elenen kalıplardan kaçın.
-- Zorluk dağıtımı: yaklaşık %30 kolay (tanım), %50 orta (ayrım/istisna), %20 zor (yorum/uygulama).
+- Çeldiriciler notlardaki YAKIN kavramlardan gelsin (yıl kaydırma, benzer kurum,
+  tanımın tersi, istisnanın kural sanılması). Rastgele/komik şık yok.
+- "Hepsi", "hiçbiri", "yalnızca I ve II ve III hepsi" kolay kalıplarından kaçın
+  (YKS fen öncüllü soru hariç — orada klasik I/II/III kombinasyonu kullan).
+- Zorluk: ~%25 kolay (tanım), %50 orta (ayrım/istisna), %25 zor (yorum + çeldirici).
+
+AÇIKLAMA / TUZAK:
+- explanation: 2-4 cümle — neden doğru; en az 2 yanlış şık neden elenir.
+- trap_explanation: hoca üslubuyla 2-3 cümle kırmızı kalem (öğrenci nereye kayar).
 
 Kurallar:
-- Yalnızca verilen notlardaki bilgiye dayan.
-- Her sorunun tek bir doğru cevabı olmalı; açıklamada neden doğru olduğunu notlara dayandır.
-- trap_explanation alanını videodaki hocanın üslubuyla yaz (persona kuralı sistem iletilecek).
-- Aynı bilgiyi iki kez sorma; her soru farklı bir kavramı ölçsün.
-- Çıktı SADECE geçerli JSON. Markdown, kod çiti veya açıklama yok.
+- Yalnızca notlardaki bilgi. Uydurma yasak.
+- Her soru farklı kavram; aynı bilgiyi iki kez sorma.
+- Doğru harfi A-E arasında dağıt.
+- Çıktı SADECE geçerli JSON.
 """
 
 
@@ -99,45 +102,46 @@ def build_notes_prompt(
 Konu / ders: {konu}
 Bu, videonun {part_index}. bölümü (toplam {part_total} bölüm). Sadece bu bölümü işle.
 
-Zaman damgalı altyazı (her satır: [saniye] metin):
+Zaman damgalı altyazı (her satır: [saniye] metin) — sohbet/tanıtım ayıklandı:
 ---
 {transcript_block}
 ---
 
-Bu bölümdeki sınav değeri olan kavramlardan 5-8 BANKO not üret.
-100'lük öğrenci defteri: kısa, net, ezberlenebilir. Uzun paragraf YASAK.
-detail = 1-3 kısa cümle. key_points = 4-6 bitmiş madde (her biri max ~90 karakter).
+Bu bölümdeki SINAV KAVRAMLARINDAN 5-8 ÖĞRETİCİ not üret.
+Selam / espri / "gitti geliyor" / abone-PDF sohbetini NOT YAPMA.
+detail = 3-6 tam cümle (~220-520 karakter): tanım + işleyiş + kritik nokta.
+key_points = 5-7 bitmiş madde (her biri max ~130 karakter).
 
 Çıktı JSON şeması:
 {{
   "teacher_persona": {{
-    "catchphrases": ["hocanın sık tekrarladığı hitap veya slogan, örn: evlat"],
-    "tone": "agresif / esprili / otoriter / samimi-öğretici gibi kısa etiket"
+    "catchphrases": ["hocanın sık tekrarladığı hitap"],
+    "tone": "öğretici / otoriter / samimi-öğretici"
   }},
   "notes": [
     {{
-      "title": "Kavramın kısa adı (3-6 kelime)",
-      "detail": "1-3 kısa cümle: tanım + kritik kural. Altyazıdaki rakam/tarih/madde aynen.",
+      "title": "Kavramın kısa adı (3-8 kelime)",
+      "detail": "3-6 cümle öğretici anlatım; altyazıdaki rakam/tarih/madde aynen.",
       "key_points": [
         "Tanım / banko bilgi",
+        "İşleyiş veya kural",
         "İstisna veya sınır",
         "Karıştırılan kavramla fark",
         "Hocanın dikkat dediği nokta",
         "Soru gelirse ipucu"
       ],
       "mnemonic": "Tek satır hafıza tekniği",
-      "exam_tip": "Tek satır: tuzak / çeldirici",
+      "exam_tip": "ÖSYM tuzağı: yıl / yakın kavram / hangisi değildir",
       "timestamp": 0
     }}
   ]
 }}
 
 Kurallar:
-- key_points 4-6 madde; her madde bitmiş olsun, yarıda kesme / "..." yok.
-- mnemonic ve exam_tip kısa ve dolu olsun.
-- detail uzun kompozisyon olmasın (üst sınır ~180 karakter).
-- timestamp, o kavramın anlatılmaya başladığı saniye (yukarıdaki köşeli parantez değerlerinden biri).
-- teacher_persona: altyazıdaki hitaplardan 3-8 catchphrase çıkar. Uydurma slogan ekleme.
+- key_points 5-7 madde; yarıda kesme / "..." yok.
+- mnemonic ve exam_tip dolu olsun; exam_tip gerçek çeldirici yazsın.
+- timestamp, kavramın anlatılmaya başladığı saniye.
+- teacher_persona: altyazıdaki hitaplardan 3-8 catchphrase; uydurma slogan yok.
 """
 
 
@@ -166,27 +170,20 @@ def build_combined_analyze_prompt(
 
 Konu / ders: {konu}
 {window}
-Hedef: 100'lük öğrenci defteri — banko, kısa, sınava hazır not.
-Tam {notes_n} not. detail = 1-3 kısa cümle (~40-180 karakter). Uzun paragraf YASAK.
-key_points = 4-6 bitmiş madde (her biri max ~90 karakter): tanım · istisna · fark · tuzak · ipucu.
-mnemonic ve exam_tip = tek satır.
-Cümleyi "..." ile yarıda kesme.
-timestamp altyazıdaki gerçek saniye olsun.
-Altyazı bu dersin konusu değilse o derse not uydurma; altyazıdaki gerçek konuşmayı yaz.
-Uydurma yasak: altyazıda geçmeyen madde, tarih, rakam, kurum, organ, yüzde veya isim yazma.
-Boşluğu genel kültürle doldurma. Hocanın söylemediği tuzak/istisna uydurma.
-Tanıtım yasak: PDF, abone, beğen, telegram, kitap/kaynak reklamı, kanal CTA → not yazma.
-Yalnızca sınav kavramı (tanım, istisna, yetki, tarih, formül, ayrım) not olsun.
-Her notta "quote" alanı ZORUNLU: altyazıdan aynen kopyalanmış 8-20 kelimelik cümle parçası.
-quote altyazıda birebir geçmeli; uydurma alıntı yasak.
+Hedef: ÖĞRETİCİ sınav defteri — detaylı, banko, çeldiricisiz öğrenilsin.
+Tam {notes_n} not. detail = 3-6 cümle (~220-520 karakter). Kısa telegram notu YETERSİZ.
+key_points = 5-7 bitmiş madde (max ~130 karakter): tanım · kural · istisna · fark · tuzak · ipucu.
+Sohbet/espri/abone-PDF satırlarını yok say; yalnız sınav kavramı yaz.
+Altyazıda olmayan madde/tarih/kurum uydurma.
+Her notta "quote" ZORUNLU: altyazıdan birebir 8-20 kelime.
 {rag}
 Zaman damgalı altyazı:
 ---
 {transcript_block}
 ---
 
-Tam {notes_n} banko sınav notu yaz. Kompozisyon değil, defter notu.
-Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
+Tam {notes_n} öğretici sınav notu + tam {count} ÖSYM tarzı soru.
+Sorular: hangisi doğru/yanlış/değildir; yakın kavram çeldiricisi; açıklama 2-4 cümle.
 
 Çıktı JSON şeması:
 {{
@@ -198,19 +195,19 @@ Tam {count} soru. Sorular notlardaki ayrıntılardan gelsin.
     {{
       "title": "Kavramın kısa adı",
       "quote": "Altyazıdan birebir 8-20 kelime",
-      "detail": "1-3 kısa cümle; yalnızca altyazıdaki bilgi.",
-      "key_points": ["banko tanım", "istisna", "karıştırılan fark", "hoca uyarısı", "soru ipucu"],
+      "detail": "3-6 cümle öğretici anlatım; yalnızca altyazıdaki bilgi.",
+      "key_points": ["tanım", "kural", "istisna", "karıştırılan fark", "hoca uyarısı", "soru ipucu"],
       "mnemonic": "Tek satır hafıza",
-      "exam_tip": "Tek satır tuzak",
+      "exam_tip": "ÖSYM tuzağı (yıl/yakın kavram/değildir)",
       "timestamp": 0
     }}
   ],
   "questions": [
     {{
-      "text": "Soru kökü",
+      "text": "ÖSYM üslubunda soru kökü (hangisi doğru/yanlış/değildir)",
       "options": {{"A": "...", "B": "...", "C": "...", "D": "...", "E": "..."}},
       "correct": "C",
-      "explanation": "3 cümle: neden doğru, diğer şıklar neden elenir",
+      "explanation": "2-4 cümle: neden doğru; en az 2 şık neden elenir",
       "trap_explanation": "Hocanın kırmızı kalem notu, 2-3 cümle",
       "topic": "Alt konu",
       "difficulty": "orta",
@@ -293,11 +290,14 @@ is_yks_fen_question: {fen_flag}
 ---
 {avoid_block}
 
+ÖSYM kalitesinde sor. Her soruda en az bir GERÇEK çeldirici (yakın yıl, benzer kurum,
+tanımın tersi, istisnanın kural sanılması). explanation 2-4 cümle olsun.
+
 Çıktı JSON şeması:
 {{
   "questions": [
     {{
-      "text": "Hedef sınavın üslubunda soru kökü",
+      "text": "ÖSYM üslubunda soru kökü (hangisi doğru/yanlış/değildir)",
       "options": {{
         "A": "...",
         "B": "...",
@@ -306,8 +306,8 @@ is_yks_fen_question: {fen_flag}
         "E": "..."
       }},
       "correct": "C",
-      "explanation": "Doğru şıkkın gerekçesi ve öğrencinin neden diğer şıkka kayabileceği. 2-3 cümle.",
-      "trap_explanation": "Hocanın kırmızı kalem notu: öğrenci çeldiriciye düşünce deftere düşülen samimi, otoriter 2-3 cümle.",
+      "explanation": "Doğru gerekçe + en az 2 şıkkın neden elendiği. 2-4 cümle.",
+      "trap_explanation": "Hocanın kırmızı kalem notu: öğrenci çeldiriciye düşünce 2-3 cümle.",
       "topic": "Sorunun ölçtüğü alt konu (2-4 kelime)",
       "difficulty": "kolay | orta | zor",
       "subject_type": "sozel | sayisal",

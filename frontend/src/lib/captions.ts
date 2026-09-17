@@ -51,6 +51,13 @@ export function extractYoutubeId(raw: string): string {
   return "";
 }
 
+/** t=/start=/si= vb. süre parametrelerini at — aynı video aynı link. */
+export function normalizeYoutubeUrl(raw: string): string {
+  const id = extractYoutubeId(raw);
+  if (!id) return (raw || "").trim();
+  return `https://www.youtube.com/watch?v=${id}`;
+}
+
 function cleanText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }

@@ -8,6 +8,7 @@ import { ProgressChart } from "@/components/diagnostic/progress-chart";
 import { MistakeDoctorCard } from "@/components/analytics/mistake-doctor-card";
 import { FeedbackCard } from "@/components/feedback/feedback-form";
 import { TargetScoreForm } from "@/components/profile/target-score-form";
+import { ChangePasswordCard } from "@/components/profile/change-password-card";
 import {
   getMistakeDoctor,
   getProgressHistory,
@@ -19,11 +20,15 @@ import { hardNavigate } from "@/lib/path";
 
 function replayAppTour() {
   try {
+    localStorage.removeItem("tilko_app_tour_v3");
     localStorage.removeItem("tilko_app_tour_v2");
   } catch {
     /* ignore */
   }
   hardNavigate("/");
+  window.setTimeout(() => {
+    window.dispatchEvent(new Event("tilko-replay-tour"));
+  }, 500);
 }
 
 export default function ProfilePage() {
@@ -87,6 +92,8 @@ export default function ProfilePage() {
       ) : null}
 
       <TargetScoreForm />
+
+      <ChangePasswordCard />
 
       <section className="rounded-2xl border border-orange-400/40 bg-white/55 p-5 backdrop-blur-xl dark:bg-zinc-950/45">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-600 dark:text-orange-300">

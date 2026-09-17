@@ -1,0 +1,50 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Web + Capacitor
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE: https://tilko-api.onrender.com
+        run: |
+          npm ci
+          npm run android:prep
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Point Gradle at the SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tilko-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

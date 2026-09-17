@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getUserId } from "@/lib/user";
-import { extractYoutubeId } from "@/lib/captions";
+import { extractYoutubeId, normalizeYoutubeUrl } from "@/lib/captions";
 import { isNumericalSubject, subjectsFor } from "@/lib/exams";
 import { useProfile } from "@/components/profile/profile-context";
 import { VideoRecs } from "@/components/diagnostic/video-recs";
@@ -62,8 +62,10 @@ export function Dashboard() {
   }, [profile.weakTopics, profile.examTarget]);
 
   function runAnalyze(adWatched: boolean) {
+    const cleanUrl = normalizeYoutubeUrl(url);
+    if (cleanUrl !== url.trim()) setUrl(cleanUrl);
     void startAnalyze({
-      video_url: url.trim(),
+      video_url: cleanUrl,
       subject: subject.trim() || undefined,
       question_count: count,
       ad_watched: adWatched,

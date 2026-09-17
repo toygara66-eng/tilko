@@ -191,6 +191,7 @@ export function FeedbackHeaderButton() {
     <>
       <button
         type="button"
+        data-tour="header-feedback"
         onClick={() => setOpen(true)}
         aria-label="Geliştirmemize yardım et"
         title="Geliştirmemize yardım et"

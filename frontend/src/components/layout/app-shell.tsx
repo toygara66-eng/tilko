@@ -380,12 +380,27 @@ function ShellFrame({ children }: { children: ReactNode }) {
           >
             {NAV.map((item) => {
               const active = path === item.href;
+              const tourId =
+                item.href === "/"
+                  ? "nav-av"
+                  : item.href === "/tuzak-defteri"
+                    ? "nav-defter"
+                    : item.href === "/gunluk-gorevler"
+                      ? "nav-gorev"
+                      : item.href === "/analiz"
+                        ? "nav-analiz"
+                        : item.href === "/notlarim"
+                          ? "nav-notlar"
+                          : item.href === "/profil"
+                            ? "nav-profil"
+                            : undefined;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   aria-label={item.label}
                   title={item.label}
+                  data-tour={tourId}
                   style={{
                     flexShrink: 0,
                     borderRadius: 9999,

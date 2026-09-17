@@ -79,6 +79,8 @@ from app.models.schemas import (
     ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     AdminSetPasswordRequest,
     AdminSetPasswordResponse,
     AdminResetCodeRequest,
@@ -169,10 +171,8 @@ from app.security.rate_limit import limiter
 from app.services.youtube import (
     YOUTUBE_ID_RE,
     build_watch_url,
-    extract_start_seconds,
     extract_video_id,
     fetch_transcript_lines,
-    focus_bucket as youtube_focus_bucket,
     format_timestamp_label,
     normalize_transcript_lines,
     pick_content_slice,
@@ -394,6 +394,28 @@ def auth_reset_password(
     return ResetPasswordResponse.model_validate(data)
 
 
+@app.post("/account/change-password", response_model=ChangePasswordResponse)
+@limiter.limit("8/minute")
+def account_change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+) -> ChangePasswordResponse:
+    from app.security.auth import actor
+    from app.services import password_reset as reset_service
+
+    try:
+        data = reset_service.change_password(
+            db,
+            actor(request),
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ChangePasswordResponse.model_validate(data)
+
+
 @app.post("/auth/verify-email", response_model=AuthResponse)
 @limiter.limit("12/minute")
 def auth_verify_email(
@@ -522,8 +544,9 @@ def analyze_video(
         video_id = extract_video_id(video_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    focus_start = extract_start_seconds(video_url)
-    focus_bkt = youtube_focus_bucket(focus_start, SLICE_SECONDS)
+    # t=/start=/si= yok say: aynı video her zaman aynı analiz + önbellek.
+    focus_start = 0
+    focus_bkt = 0
     try:
         require_analyze_llm()
     except ConfigurationError as exc:
@@ -619,9 +642,7 @@ def analyze_video(
             exam_target=exam_target,
         )
 
-    canonical_url = build_watch_url(
-        video_id, focus_start if focus_start > 0 else None
-    )
+    canonical_url = build_watch_url(video_id)
     overlay = credit_service.overlay(reservation)
     from app.services import analyze_jobs as jobs
 
@@ -882,6 +903,7 @@ def list_notebook(
     subject: str | None = None,
     video_id: str | None = None,
     summary: bool = False,
+    q: str | None = None,
     db: Session = Depends(get_db),
 ) -> NotebookResponse:
     from app.services.exams import exam_of
@@ -893,6 +915,7 @@ def list_notebook(
         exam_target=exam_of(db, user_id),
         summary=summary,
         video_id=video_id,
+        search=q,
     )
     from app.models.schemas import SavedNoteItem, SavedQuestionItem, NotebookSubjectCount
 
@@ -901,7 +924,29 @@ def list_notebook(
         try:
             notes_out.append(SavedNoteItem.model_validate(item))
         except Exception as exc:
-            logger.warning("Not satırı atlandı: %s", exc)
+            logger.warning("Not satırı atlandı, gevşek yedek: %s", exc)
+            try:
+                notes_out.append(
+                    SavedNoteItem(
+                        id=str(item.get("id") or f"note_{item.get('saved_id') or 0}"),
+                        title=str(item.get("title") or "Not"),
+                        text=str(item.get("text") or item.get("title") or "Not"),
+                        key_points=list(item.get("key_points") or []),
+                        mnemonic=str(item.get("mnemonic") or ""),
+                        exam_tip=str(item.get("exam_tip") or ""),
+                        timestamp=int(item.get("timestamp") or 0),
+                        timestamp_label=str(item.get("timestamp_label") or "0:00"),
+                        video_url_with_t=str(item.get("video_url_with_t") or item.get("video_url") or ""),
+                        saved_id=int(item.get("saved_id") or 0),
+                        subject=str(item.get("subject") or ""),
+                        video_id=str(item.get("video_id") or ""),
+                        session_label=str(item.get("session_label") or ""),
+                        video_url=str(item.get("video_url") or ""),
+                        created_at=item.get("created_at"),
+                    )
+                )
+            except Exception as exc2:
+                logger.warning("Not yedek de başarısız: %s", exc2)
     questions_out = []
     for item in data.get("questions") or []:
         try:
