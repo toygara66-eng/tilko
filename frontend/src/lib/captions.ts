@@ -14,14 +14,9 @@ const BRACKET_STAMP = /^\[(\d+)\]\s*(.+)$/;
 const TRANSCRIPT_AI = "https://youtube-transcript.ai/transcript";
 
 function captionProxyUrls(id: string): string[] {
-  const urls = [`${resolveApiBase()}/captions/${encodeURIComponent(id)}`];
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host === "tilko.site" || host.endsWith(".vercel.app")) {
-      urls.push(`/api/captions/?v=${encodeURIComponent(id)}`);
-    }
-  }
-  return urls;
+  // Vercel sunucu fonksiyonu (/api/captions) kaldırıldı: ücretsiz kullanım sınırını
+  // dolduruyordu. Site artık tamamen statik; altyazı için yalnızca Tilko API kullanılır.
+  return [`${resolveApiBase()}/captions/${encodeURIComponent(id)}`];
 }
 
 export function extractYoutubeId(raw: string): string {

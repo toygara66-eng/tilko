@@ -869,14 +869,59 @@ def _span_in_transcript(span: str, folded_norm: str) -> bool:
     return False
 
 
+def _stems(tokens: set[str]) -> set[str]:
+    """Türkçe ekleri tolere etmek için 5 harflik kök (anayasası ~ anayasa)."""
+    return {t[:5] for t in tokens if len(t) >= 5}
+
+
+def _support_ratio(text: str, source_stems: set[str]) -> tuple[int, float]:
+    """Metnin içerik köklerinin ne kadarı altyazıda geçiyor: (ortak sayı, oran)."""
+    stems = _stems(_content_tokens(text))
+    if not stems or not source_stems:
+        return 0, 0.0
+    common = len(stems & source_stems)
+    return common, common / len(stems)
+
+
+# Not için altyazı desteği eşikleri. Eskiden "2 ortak kelime" yeterliydi (konu aynıysa
+# uydurma not da geçiyordu); şimdi notun köklerinin en az %45'i altyazıda olmalı.
+NOTE_SOFT_MIN_COMMON = 4
+NOTE_SOFT_MIN_RATIO = 0.45
+NOTE_RESCUE_MIN_RATIO = 0.30
+
+
+def _note_support(note: dict, source_stems: set[str]) -> float:
+    blob = " ".join(
+        [
+            str(note.get("title") or ""),
+            str(note.get("detail") or note.get("text") or ""),
+            " ".join(str(p) for p in (note.get("key_points") or [])),
+        ]
+    )
+    return _support_ratio(blob, source_stems)[1]
+
+
+def _rescue_supported_notes(notes: list[dict], transcript: str, limit: int = 8) -> list[dict]:
+    """Sıkı doğrulama 0 not bırakınca: yalnızca altyazıyla makul örtüşenleri kurtar."""
+    source_stems = _stems(_content_tokens(transcript))
+    out = []
+    for note in notes:
+        if _is_junk_note(note):
+            continue
+        if _note_support(note, source_stems) >= NOTE_RESCUE_MIN_RATIO:
+            out.append(note)
+    return out[:limit]
+
+
 def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
-    """Tanıtım notlarını at; altyazıyla bağını gevşek doğrula (sıkı quote modeli öldürmesin)."""
+    """Tanıtım notlarını at; notu altyazıyla doğrula (alıntı, ilk cümle veya kök örtüşmesi)."""
     source = _content_tokens(transcript)
     folded_norm = _normalize_for_match(transcript)
     if not notes:
         return []
     if not source and not folded_norm:
         return []
+    source_stems = _stems(source)
     kept: list[dict] = []
     for note in notes:
         if _is_junk_note(note):
@@ -892,50 +937,70 @@ def _ground_notes(notes: list[dict], transcript: str) -> list[dict]:
         if not title and not detail:
             continue
         blob = f"{title} {detail} {' '.join(str(p) for p in (note.get('key_points') or []))}"
-        tokens = _content_tokens(blob)
-        overlap = tokens & source if source else set()
+        common, ratio = _support_ratio(blob, source_stems)
         quote_ok = bool(quote) and _span_in_transcript(quote, folded_norm)
         detail_ok = len(detail) >= 36 and _span_in_transcript(detail[:100], folded_norm)
-        soft_ok = len(overlap) >= 2 and len(detail) >= 24
+        soft_ok = (
+            common >= NOTE_SOFT_MIN_COMMON
+            and ratio >= NOTE_SOFT_MIN_RATIO
+            and len(detail) >= 24
+        )
         if quote_ok or detail_ok or soft_ok:
             kept.append(note)
     if kept:
         return _filter_quality_notes(kept)
-    # Model quote'u bozsa bile ders notunu tamamen düşürme.
-    soft = [
-        note
-        for note in notes
-        if not _is_junk_note(note)
-        and len(str(note.get("detail") or note.get("title") or "").strip()) >= 48
-    ]
-    if soft:
+    # Eskiden burada uzunluğu yeten her not "yumuşak" kabul ediliyordu; bu, altyazıda
+    # olmayan notları sızdırıyordu. Artık yalnızca altyazıyla makul örtüşenler kurtarılır.
+    rescued = _rescue_supported_notes(notes, transcript)
+    if rescued:
         logger.warning(
-            "Sıkı grounding 0 not bıraktı; %s not yumuşak kabul edildi.",
-            len(soft),
+            "Sıkı grounding 0 not bıraktı; altyazıyla örtüşen %s not kurtarıldı.",
+            len(rescued),
         )
-        return soft[:8]
+        return rescued
+    if notes:
+        logger.warning("Grounding: %s notun hiçbiri altyazıyla örtüşmedi; atıldı.", len(notes))
     return []
+
+
+# Soru için eşikler: seçenekler hariç (çeldiriciler altyazıda olmaz) soru kökü + açıklama
+# altyazıyla örtüşmeli.
+QUESTION_MIN_COMMON = 3
+QUESTION_MIN_RATIO = 0.25
+
+
+def _question_is_grounded(item: dict, source_stems: set[str]) -> bool:
+    stem_text = " ".join(
+        [str(item.get("text") or ""), str(item.get("explanation") or "")]
+    )
+    common, ratio = _support_ratio(stem_text, source_stems)
+    if not _stems(_content_tokens(stem_text)):
+        return True  # içerik kelimesi yok (ör. sayısal fen sorusu): doğrulanamaz, bırak
+    return common >= QUESTION_MIN_COMMON and ratio >= QUESTION_MIN_RATIO
 
 
 def _ground_questions(questions: list[dict], transcript: str) -> list[dict]:
     source = _content_tokens(transcript)
     if not questions or not source:
         return questions
+    source_stems = _stems(source)
     kept: list[dict] = []
     for item in questions:
-        options = item.get("options") or {}
-        blob = " ".join(
-            [
-                str(item.get("text") or ""),
-                str(item.get("explanation") or ""),
-                " ".join(str(v) for v in options.values()),
-            ]
-        )
-        tokens = _content_tokens(blob)
-        overlap = tokens & source
-        if not tokens or len(overlap) >= 2 or len(overlap) / max(len(tokens), 1) >= 0.12:
+        # Hesaplamalı fen/matematik soruları altyazıdan kelime kelime gelmez.
+        if item.get("is_yks_fen_question") or str(item.get("subject_type") or "") not in (
+            "",
+            "sozel",
+        ):
             kept.append(item)
-    return kept if kept else questions
+            continue
+        if _question_is_grounded(item, source_stems):
+            kept.append(item)
+    dropped = len(questions) - len(kept)
+    if dropped:
+        logger.warning("Soru grounding: %s/%s soru altyazıyla örtüşmediği için atıldı.", dropped, len(questions))
+    # Eskiden hiçbiri geçmezse TÜM sorular döndürülüyordu. Artık boş döner; çağıran
+    # taraf notlardan yeniden soru üretir (generate_questions).
+    return kept
 
 
 def _extract_json(raw: str) -> dict:
@@ -2446,34 +2511,15 @@ def _analyze_combined(
             _collect([result], questions, seen, count)
             questions = _ground_questions(questions, short)
         if not notes:
-            raw_notes = _filter_quality_notes(
-                [
-                    note
-                    for note in _coerce_notes(result)
-                    if note.get("detail") or note.get("title")
-                ]
-            )
-            if raw_notes:
-                logger.warning("Grounding boş; ham %s kaliteli not kullanılıyor.", len(raw_notes))
-                notes = raw_notes[:8]
-        if not notes:
-            # Son yumuşak kabul: sistem çöpü değilse sınav değeri olan notları tut.
-            soft = []
-            for note in _coerce_notes(result):
-                detail = str(note.get("detail") or note.get("text") or "").strip()
-                points = [
-                    str(p).strip()
-                    for p in (note.get("key_points") or [])
-                    if str(p).strip()
-                ]
-                if len(detail) < 36 and len(points) < 2:
-                    continue
-                if _JUNK_NOTE_RE.search(_note_blob(note)):
-                    continue
-                soft.append(note)
-            if soft:
-                logger.warning("Yumuşak kabul: %s not.", len(soft))
-                notes = soft[:8]
+            # Son çare: yalnızca altyazıyla makul örtüşen ham notları tut (uydurmayı sızdırma).
+            raw = [
+                note
+                for note in _coerce_notes(result)
+                if note.get("detail") or note.get("title")
+            ]
+            notes = _filter_quality_notes(_rescue_supported_notes(raw, work))[:8]
+            if notes:
+                logger.warning("Grounding boş; altyazıyla örtüşen %s ham not kullanılıyor.", len(notes))
         notes = _sanitize_note_tips(_filter_quality_notes(notes) or notes)
         notes = _compact_exam_notes(notes)
         # İskelet kalanları bankola; silinirse önceki notları koru.
