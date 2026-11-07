@@ -1,0 +1,26 @@
+name: keep-alive
+
+# Render ücretsiz planı 15 dk boşta kalınca uykuya dalar; ilk istek ~30-60 sn sürer.
+# Bu iş /health'i düzenli çağırarak servisi uyanık tutar. GitHub cron "en iyi çaba"
+# olduğundan aralıklar bazen kayabilir; ücretsizdir.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://tilko-api.onrender.com/health || true)
+            echo "attempt $i -> HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Servis yanıt vermedi"; exit 1

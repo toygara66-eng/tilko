@@ -1202,6 +1202,18 @@ def admin_credits_grant(
     )
 
 
+@app.get("/admin/token-usage")
+def admin_token_usage(
+    request: Request,
+    days: int = 7,
+    db: Session = Depends(get_db),
+) -> dict:
+    """LLM jeton kullanımı özeti (X-Admin-Secret ile; jwt_guard /admin/* için admin_ok ister)."""
+    from app.services.token_usage import summarize_usage
+
+    return summarize_usage(db, days=days)
+
+
 @app.get("/admin/pro-logs")
 def admin_pro_logs(
     request: Request,
